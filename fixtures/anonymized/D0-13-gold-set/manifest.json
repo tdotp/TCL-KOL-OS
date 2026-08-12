@@ -1,0 +1,74 @@
+{
+  "goldSetVersion": "0.1",
+  "fecha": "2026-08-11",
+  "estado": "estructura definida — pendiente de poblar con documentos reales",
+  "descripcion": "Casos de prueba con la respuesta humana esperada. Se usa para medir exactitud de extracción, groundedness y regresión entre versiones de prompt o de modelo (D0-12, métricas IA-01 a IA-10).",
+  "convenciones": {
+    "origen": {
+      "real_derivado": "Construido a partir de material real aportado por SmartPR. Puede tener nombres genéricos, pero la estructura y el contenido son reales.",
+      "sintetico": "Fabricado deliberadamente para cubrir un borde que el material real no contiene. Nunca se usa para medir desempeño general, solo para verificar que el borde se maneja."
+    },
+    "criticidad": "Coincide con el esquema de D0-05: informativo | critico | claim"
+  },
+  "casos": [
+    {
+      "id": "GS-001",
+      "nombre": "Extracción desde brief estratégico completo",
+      "origen": "real_derivado",
+      "estado": "pendiente_material",
+      "fuente": "Brief Estratégico – Formato maestro",
+      "mide": ["IA-01", "IA-02", "IA-03"],
+      "archivo": "GS-001-brief-estrategico.json"
+    },
+    {
+      "id": "GS-002",
+      "nombre": "Extracción desde brief de campaña operativo",
+      "origen": "real_derivado",
+      "estado": "pendiente_material",
+      "fuente": "Brief de Campaña – Producto",
+      "mide": ["IA-01", "IA-02"],
+      "archivo": "GS-002-brief-campana.json"
+    },
+    {
+      "id": "GS-003",
+      "nombre": "Extracción desde one-pager condensado",
+      "origen": "real_derivado",
+      "estado": "pendiente_material",
+      "fuente": "THE BRIEF (one-pager)",
+      "mide": ["IA-01", "IA-02"],
+      "archivo": "GS-003-one-pager.json"
+    },
+    {
+      "id": "GS-004",
+      "nombre": "Campo crítico ausente en todas las fuentes",
+      "origen": "sintetico",
+      "estado": "definido",
+      "mide": ["IA-04"],
+      "archivo": "GS-004-not-found.json"
+    },
+    {
+      "id": "GS-005",
+      "nombre": "Contradicción entre PPT global y ficha técnica",
+      "origen": "sintetico",
+      "estado": "definido",
+      "mide": ["IA-03", "IA-04"],
+      "archivo": "GS-005-conflicto.json"
+    },
+    {
+      "id": "GS-006",
+      "nombre": "Claim sin respaldo en ninguna fuente",
+      "origen": "sintetico",
+      "estado": "definido",
+      "mide": ["IA-03", "IA-04"],
+      "archivo": "GS-006-claim-sin-respaldo.json"
+    },
+    {
+      "id": "GS-007",
+      "nombre": "Documento adversarial con inyección de instrucciones",
+      "origen": "sintetico",
+      "estado": "definido",
+      "mide": ["IA-10"],
+      "archivo": "GS-007-inyeccion.json"
+    }
+  ]
+}

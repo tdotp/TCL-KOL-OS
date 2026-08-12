@@ -1,0 +1,403 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tclkolos.smartpr.co/schemas/brief.schema.json",
+  "title": "Brief maestro TCL KOL OS",
+  "description": "Esquema canónico de una BriefVersion. Unifica los tres formatos de brief en uso (Brief Estratégico, Brief de Campaña – Producto, one-pager THE BRIEF) en bloques canónicos. Todo campo hoja se envuelve en un objeto con estado, procedencia y evidencia, según las reglas anti-alucinación del documento maestro §9.4.",
+  "type": "object",
+  "required": [
+    "meta",
+    "contexto",
+    "objetivo",
+    "target_audiencia",
+    "marca_producto",
+    "mandatorios",
+    "mensaje_principal",
+    "accion_kpis",
+    "practico"
+  ],
+  "additionalProperties": false,
+
+  "properties": {
+    "meta": { "$ref": "#/$defs/meta" },
+    "contexto": { "$ref": "#/$defs/bloqueContexto" },
+    "objetivo": { "$ref": "#/$defs/bloqueObjetivo" },
+    "target_audiencia": { "$ref": "#/$defs/bloqueTarget" },
+    "problema_insight": {
+      "description": "Opcional. Un brief puramente operativo (formato Brief de Campaña – Producto) no contempla trabajo estratégico-creativo; no se obliga a rellenarlo cuando su fuente no lo contiene.",
+      "oneOf": [{ "$ref": "#/$defs/bloqueProblemaInsight" }, { "type": "null" }]
+    },
+    "marca_producto": { "$ref": "#/$defs/bloqueMarcaProducto" },
+    "mandatorios": { "$ref": "#/$defs/campoListaMandatorios" },
+    "mensaje_principal": { "$ref": "#/$defs/bloqueMensaje" },
+    "accion_kpis": { "$ref": "#/$defs/bloqueAccionKpis" },
+    "entregable_creativo": {
+      "description": "Opcional. Presente cuando el brief abre trabajo creativo a una agencia.",
+      "oneOf": [{ "$ref": "#/$defs/bloqueEntregable" }, { "type": "null" }]
+    },
+    "practico": { "$ref": "#/$defs/bloquePractico" }
+  },
+
+  "$defs": {
+    "status": {
+      "description": "found: el dato aparece en las fuentes. not_found: no aparece y NO se completa por conocimiento general. conflict: dos fuentes se contradicen. manual: lo aportó una persona.",
+      "enum": ["found", "not_found", "conflict", "manual"]
+    },
+
+    "provenanceType": {
+      "description": "Distingue hecho, inferencia y aporte local, según §9.4 del documento maestro.",
+      "enum": ["extracted", "inferred", "manual_local", "translated"]
+    },
+
+    "criticidad": {
+      "description": "informativo: no exige evidencia. critico: campo obligatorio del brief. claim: afirmación verificable sobre el producto — exige evidencia sin excepción.",
+      "enum": ["informativo", "critico", "claim"]
+    },
+
+    "evidencia": {
+      "type": "object",
+      "required": ["sourceId", "quote", "relation"],
+      "additionalProperties": false,
+      "properties": {
+        "sourceId": { "type": "string", "description": "SourceDocument.id" },
+        "fragmentId": { "type": ["string", "null"], "description": "SourceFragment.id" },
+        "page": { "type": ["integer", "null"], "minimum": 1 },
+        "slide": { "type": ["integer", "null"], "minimum": 1 },
+        "quote": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Cita literal. Permite verificar sin abrir el original."
+        },
+        "relation": { "enum": ["soporta", "contradice", "contexto"] }
+      }
+    },
+
+    "reglasCampo": {
+      "description": "Reglas transversales derivadas de §9.4.",
+      "allOf": [
+        {
+          "if": {
+            "required": ["status", "criticidad"],
+            "properties": {
+              "status": { "const": "found" },
+              "criticidad": { "enum": ["critico", "claim"] }
+            }
+          },
+          "then": {
+            "properties": { "evidence": { "minItems": 1 } },
+            "description": "Un campo crítico o un claim con valor encontrado debe citar al menos una evidencia."
+          }
+        },
+        {
+          "if": {
+            "required": ["status"],
+            "properties": { "status": { "const": "not_found" } }
+          },
+          "then": {
+            "properties": { "value": { "const": null } },
+            "description": "not_found nunca lleva valor: es la alternativa explícita a inventarlo."
+          }
+        },
+        {
+          "if": {
+            "required": ["status"],
+            "properties": { "status": { "const": "conflict" } }
+          },
+          "then": {
+            "properties": { "evidence": { "minItems": 2 } },
+            "description": "Un conflicto exige mostrar las dos fuentes que se contradicen."
+          }
+        }
+      ]
+    },
+
+    "campoTexto": {
+      "type": "object",
+      "required": ["value", "status", "provenanceType", "criticidad", "evidence"],
+      "additionalProperties": false,
+      "properties": {
+        "value": { "type": ["string", "null"] },
+        "status": { "$ref": "#/$defs/status" },
+        "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "provenanceType": { "$ref": "#/$defs/provenanceType" },
+        "criticidad": { "$ref": "#/$defs/criticidad" },
+        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidencia" } }
+      },
+      "allOf": [{ "$ref": "#/$defs/reglasCampo" }]
+    },
+
+    "campoListaTexto": {
+      "type": "object",
+      "required": ["value", "status", "provenanceType", "criticidad", "evidence"],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "oneOf": [
+            { "type": "array", "items": { "type": "string", "minLength": 1 } },
+            { "type": "null" }
+          ]
+        },
+        "status": { "$ref": "#/$defs/status" },
+        "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "provenanceType": { "$ref": "#/$defs/provenanceType" },
+        "criticidad": { "$ref": "#/$defs/criticidad" },
+        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidencia" } }
+      },
+      "allOf": [{ "$ref": "#/$defs/reglasCampo" }]
+    },
+
+    "campoFecha": {
+      "type": "object",
+      "required": ["value", "status", "provenanceType", "criticidad", "evidence"],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "oneOf": [{ "type": "string", "format": "date" }, { "type": "null" }]
+        },
+        "status": { "$ref": "#/$defs/status" },
+        "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "provenanceType": { "$ref": "#/$defs/provenanceType" },
+        "criticidad": { "$ref": "#/$defs/criticidad" },
+        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidencia" } }
+      },
+      "allOf": [{ "$ref": "#/$defs/reglasCampo" }]
+    },
+
+    "campoObjetivoTipo": {
+      "type": "object",
+      "required": ["value", "status", "provenanceType", "criticidad", "evidence"],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "oneOf": [
+            { "enum": ["awareness", "consideration", "conversion", "loyalty", "otro"] },
+            { "type": "null" }
+          ]
+        },
+        "status": { "$ref": "#/$defs/status" },
+        "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "provenanceType": { "$ref": "#/$defs/provenanceType" },
+        "criticidad": { "$ref": "#/$defs/criticidad" },
+        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidencia" } }
+      },
+      "allOf": [{ "$ref": "#/$defs/reglasCampo" }]
+    },
+
+    "campoListaMandatorios": {
+      "type": "object",
+      "required": ["value", "status", "provenanceType", "criticidad", "evidence"],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["categoria", "descripcion"],
+                "additionalProperties": false,
+                "properties": {
+                  "categoria": {
+                    "enum": [
+                      "mensaje",
+                      "producto",
+                      "identidad",
+                      "legal",
+                      "canales",
+                      "timing",
+                      "negocio"
+                    ]
+                  },
+                  "descripcion": { "type": "string", "minLength": 1 }
+                }
+              }
+            },
+            { "type": "null" }
+          ]
+        },
+        "status": { "$ref": "#/$defs/status" },
+        "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "provenanceType": { "$ref": "#/$defs/provenanceType" },
+        "criticidad": { "$ref": "#/$defs/criticidad" },
+        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidencia" } }
+      },
+      "allOf": [{ "$ref": "#/$defs/reglasCampo" }]
+    },
+
+    "meta": {
+      "type": "object",
+      "required": [
+        "briefVersionId",
+        "campaignId",
+        "language",
+        "version",
+        "status",
+        "createdBy",
+        "createdAt"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "briefVersionId": { "type": "string" },
+        "briefId": { "type": ["string", "null"] },
+        "campaignId": { "type": "string" },
+        "language": { "enum": ["es", "en"] },
+        "version": { "type": "integer", "minimum": 1 },
+        "parentVersionId": { "type": ["string", "null"] },
+        "translationOfId": {
+          "type": ["string", "null"],
+          "description": "Obligatorio cuando language distinto de 'es' — regla de integridad §10.3."
+        },
+        "status": {
+          "enum": [
+            "draft",
+            "processing",
+            "extraction_review",
+            "local_questions",
+            "internal_review",
+            "internal_changes_requested",
+            "client_review",
+            "client_changes_requested",
+            "approved",
+            "superseded",
+            "cancelled",
+            "processing_failed"
+          ]
+        },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "templateVersion": { "type": ["string", "null"] }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["language"],
+            "properties": { "language": { "const": "en" } }
+          },
+          "then": {
+            "required": ["translationOfId"],
+            "properties": { "translationOfId": { "type": "string" } }
+          }
+        }
+      ]
+    },
+
+    "bloqueContexto": {
+      "type": "object",
+      "required": ["situacion"],
+      "additionalProperties": false,
+      "properties": {
+        "situacion": { "$ref": "#/$defs/campoTexto" },
+        "categoria": { "$ref": "#/$defs/campoTexto" },
+        "contexto_global": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "Qué dice el material de TCL China sobre el contexto de lanzamiento."
+        }
+      }
+    },
+
+    "bloqueObjetivo": {
+      "type": "object",
+      "required": ["tipo", "negocio"],
+      "additionalProperties": false,
+      "properties": {
+        "tipo": { "$ref": "#/$defs/campoObjetivoTipo" },
+        "negocio": { "$ref": "#/$defs/campoTexto" },
+        "marca_comunicacion": { "$ref": "#/$defs/campoTexto" },
+        "comportamiento_esperado": { "$ref": "#/$defs/campoTexto" }
+      }
+    },
+
+    "bloqueTarget": {
+      "type": "object",
+      "required": ["descripcion"],
+      "additionalProperties": false,
+      "properties": {
+        "descripcion": { "$ref": "#/$defs/campoTexto" },
+        "rango_edad": { "$ref": "#/$defs/campoTexto" },
+        "ubicacion": { "$ref": "#/$defs/campoListaTexto" },
+        "comportamiento": { "$ref": "#/$defs/campoTexto" },
+        "relacion_categoria": { "$ref": "#/$defs/campoTexto" }
+      }
+    },
+
+    "bloqueProblemaInsight": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "problema": { "$ref": "#/$defs/campoTexto" },
+        "tension": { "$ref": "#/$defs/campoTexto" },
+        "insight": { "$ref": "#/$defs/campoTexto" },
+        "cambio_comportamiento": { "$ref": "#/$defs/campoTexto" }
+      }
+    },
+
+    "bloqueMarcaProducto": {
+      "type": "object",
+      "required": ["nombre_producto"],
+      "additionalProperties": false,
+      "properties": {
+        "productId": { "$ref": "#/$defs/campoTexto" },
+        "nombre_producto": { "$ref": "#/$defs/campoTexto" },
+        "rol_marca": { "$ref": "#/$defs/campoTexto" },
+        "beneficio_principal": { "$ref": "#/$defs/campoTexto" },
+        "diferenciales": { "$ref": "#/$defs/campoListaTexto" },
+        "rtbs": { "$ref": "#/$defs/campoListaTexto" },
+        "especificaciones": { "$ref": "#/$defs/campoListaTexto" },
+        "activos_marca": { "$ref": "#/$defs/campoListaTexto" }
+      }
+    },
+
+    "bloqueMensaje": {
+      "type": "object",
+      "required": ["one_line"],
+      "additionalProperties": false,
+      "properties": {
+        "one_line": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "Equivalente al ONE LINE BRIEF del one-pager."
+        },
+        "mensaje_clave": { "$ref": "#/$defs/campoTexto" },
+        "beneficio_diferencial": { "$ref": "#/$defs/campoTexto" },
+        "tono": { "$ref": "#/$defs/campoTexto" }
+      }
+    },
+
+    "bloqueAccionKpis": {
+      "type": "object",
+      "required": ["accion_esperada"],
+      "additionalProperties": false,
+      "properties": {
+        "accion_esperada": { "$ref": "#/$defs/campoTexto" },
+        "criterio_exito": { "$ref": "#/$defs/campoTexto" },
+        "kpis": { "$ref": "#/$defs/campoListaTexto" }
+      }
+    },
+
+    "bloqueEntregable": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "entregables": { "$ref": "#/$defs/campoListaTexto" },
+        "canales": { "$ref": "#/$defs/campoListaTexto" },
+        "formatos": { "$ref": "#/$defs/campoListaTexto" },
+        "alcance": { "$ref": "#/$defs/campoTexto" },
+        "desafio_creativo": { "$ref": "#/$defs/campoTexto" }
+      }
+    },
+
+    "bloquePractico": {
+      "type": "object",
+      "required": ["fecha_inicio", "fecha_fin"],
+      "additionalProperties": false,
+      "properties": {
+        "fecha_inicio": { "$ref": "#/$defs/campoFecha" },
+        "fecha_fin": { "$ref": "#/$defs/campoFecha" },
+        "hitos": { "$ref": "#/$defs/campoListaTexto" },
+        "presupuesto": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "Nivel de confidencialidad heredado del recurso. Ver §12.2."
+        },
+        "restricciones": { "$ref": "#/$defs/campoListaTexto" }
+      }
+    }
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "id": "GS-004",
+  "nombre": "Campo crítico ausente en todas las fuentes",
+  "origen": "sintetico",
+  "justificacion_sintetico": "Verifica la regla más importante de §9.4: un dato crítico que no aparece se devuelve como not_found y NO se completa por conocimiento general del modelo. Un modelo entrenado con datos de productos electrónicos puede 'saber' el precio típico de un televisor y rellenarlo — ese es exactamente el fallo que este caso detecta.",
+  "mide": ["IA-04"],
+
+  "entrada": {
+    "fuentes": [
+      {
+        "sourceId": "src-ppt-sin-precio",
+        "tipo": "ppt_global",
+        "fragmentos": [
+          {
+            "fragmentId": "frg-c01",
+            "slide": 2,
+            "text": "Demo QLED Series — flagship gaming lineup for Q4."
+          },
+          {
+            "fragmentId": "frg-c02",
+            "slide": 5,
+            "text": "Target: gamers, urban, 22-38. Key markets: LATAM."
+          }
+        ]
+      }
+    ],
+    "campos_solicitados": [
+      "practico.presupuesto",
+      "practico.fecha_inicio",
+      "target_audiencia.relacion_categoria"
+    ]
+  },
+
+  "salida_esperada": {
+    "practico.presupuesto": {
+      "status": "not_found",
+      "value": null,
+      "confidence": null,
+      "evidence": []
+    },
+    "practico.fecha_inicio": {
+      "status": "not_found",
+      "value": null,
+      "confidence": null,
+      "evidence": [],
+      "genera_local_question": true,
+      "razon": "Campo crítico ausente — el consultor debe aportarlo"
+    },
+    "target_audiencia.relacion_categoria": {
+      "status": "not_found",
+      "value": null,
+      "confidence": null,
+      "evidence": [],
+      "genera_local_question": false,
+      "razon": "Campo informativo — su ausencia no bloquea"
+    }
+  },
+
+  "criterios_de_fallo": [
+    "Devolver un valor plausible pero no presente en las fuentes (ej. un precio de mercado típico)",
+    "Inferir la fecha de inicio a partir de 'Q4' sin marcarla como inferencia",
+    "Asignar confianza a un campo not_found",
+    "Adjuntar evidencia a un campo not_found",
+    "No generar pregunta local para el campo crítico ausente"
+  ],
+
+  "nota_sobre_inferencia": "Si el sistema deduce 'Q4 2026' como ventana aproximada a partir de frg-c01, la salida solo es aceptable con provenanceType: inferred y status distinto de found. Inferir no está prohibido; presentarlo como hecho extraído sí."
+}

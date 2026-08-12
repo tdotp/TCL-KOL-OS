@@ -1,0 +1,96 @@
+name: CI
+
+# Épica E1-7: un PR con una prueba rota no se puede fusionar.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Dominio y web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      # Incluye la regla de frontera de ADR-008.
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck (modo estricto)
+        run: npm run typecheck
+
+      # E13-1, E13-2, E13-3: transiciones, aislamiento e inmutabilidad.
+      # Estas pruebas bloquean el merge sin excepción (D0-12 §8).
+      - name: Pruebas del dominio
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Formato
+        run: npm run format:check
+
+  worker:
+    name: Worker Python
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/ai-worker
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: services/ai-worker/requirements.txt
+
+      - run: pip install -r requirements.txt
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Typecheck
+        run: mypy app
+
+      - name: Pruebas
+        run: PYTHONPATH=. pytest tests/ -q
+
+  security:
+    name: Dependencias y secretos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      # E1-8: escaneo de dependencias.
+      - name: Auditoría de dependencias
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      # §12.1, control 5: ninguna credencial en el repositorio.
+      - name: Verificar que .env no está versionado
+        run: |
+          if git ls-files --error-unmatch .env 2>/dev/null; then
+            echo "::error::.env está versionado. Debe estar en .gitignore."
+            exit 1
+          fi
+          echo "OK: .env no está versionado."

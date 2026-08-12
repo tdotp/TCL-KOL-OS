@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TCL KOL OS — Prototipo MVP 1 (UI-03 a UI-15)</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#fff; --ink:#16191d; --muted:#5c6570; --line:#dfe3e8;
+    --brand:#1f6feb; --brand-soft:#e8f0fe;
+    --ok:#1a7f37; --ok-soft:#e6f4ea; --warn:#9a6700; --warn-soft:#fff8e1;
+    --bad:#cf222e; --bad-soft:#ffebe9; --chip:#eef1f4;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0d1117; --panel:#161b22; --ink:#e6edf3; --muted:#8b949e; --line:#30363d;
+      --brand:#4493f8; --brand-soft:#0d2d6b;
+      --ok:#3fb950; --ok-soft:#0f2f17; --warn:#d29922; --warn-soft:#3a2d06;
+      --bad:#f85149; --bad-soft:#3d1518; --chip:#21262d;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+  .app{display:grid;grid-template-columns:250px 1fr;min-height:100vh}
+  nav{background:var(--panel);border-right:1px solid var(--line);padding:16px 0;position:sticky;top:0;height:100vh;overflow-y:auto}
+  nav h1{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 16px 4px}
+  nav .sub{font-size:11px;color:var(--muted);margin:0 16px 16px;line-height:1.4}
+  nav a{display:block;padding:7px 16px;color:var(--ink);text-decoration:none;font-size:13.5px;border-left:3px solid transparent}
+  nav a:hover{background:var(--chip)}
+  nav a.on{background:var(--brand-soft);border-left-color:var(--brand);font-weight:600}
+  nav a small{display:block;color:var(--muted);font-size:11px;font-weight:400}
+  nav .grp{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:16px 16px 6px}
+  main{padding:28px 34px;max-width:1080px}
+  .scr{display:none} .scr.on{display:block}
+  .hd{border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:22px}
+  .hd .id{font-size:11px;letter-spacing:.08em;color:var(--brand);font-weight:700}
+  .hd h2{margin:4px 0 6px;font-size:23px}
+  .hd p{margin:0;color:var(--muted);font-size:13.5px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:18px;margin-bottom:16px}
+  .card h3{margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line)}
+  td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11.5px;font-weight:600;white-space:nowrap}
+  .p-ok{background:var(--ok-soft);color:var(--ok)} .p-warn{background:var(--warn-soft);color:var(--warn)}
+  .p-bad{background:var(--bad-soft);color:var(--bad)} .p-info{background:var(--brand-soft);color:var(--brand)}
+  .p-mut{background:var(--chip);color:var(--muted)}
+  .btn{display:inline-block;padding:8px 15px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-size:13.5px;cursor:pointer;text-decoration:none;font-weight:500}
+  .btn.pri{background:var(--brand);border-color:var(--brand);color:#fff}
+  .btn.dis{opacity:.45;cursor:not-allowed}
+  .row{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+  .fld{margin-bottom:14px}
+  .fld label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px}
+  .fld input,.fld select,.fld textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit;font-size:13.5px}
+  .fld textarea{min-height:80px;resize:vertical}
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .split{display:grid;grid-template-columns:1fr 300px;gap:16px}
+  .note{background:var(--warn-soft);border-left:3px solid var(--warn);padding:11px 14px;border-radius:0 6px 6px 0;font-size:13px;margin-bottom:16px}
+  .note.info{background:var(--brand-soft);border-color:var(--brand)}
+  .note.bad{background:var(--bad-soft);border-color:var(--bad)}
+  .note strong{display:block;margin-bottom:2px}
+  .ev{font-size:12px;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:9px 11px;margin-top:7px}
+  .ev cite{display:block;color:var(--ink);font-style:italic;margin:3px 0}
+  .ev .src{color:var(--muted);font-size:11px}
+  .bar{height:6px;background:var(--chip);border-radius:99px;overflow:hidden;margin-top:6px}
+  .bar span{display:block;height:100%;background:var(--brand)}
+  .del{background:var(--bad-soft);text-decoration:line-through;padding:1px 3px;border-radius:3px}
+  .ins{background:var(--ok-soft);padding:1px 3px;border-radius:3px}
+  .steps{display:flex;gap:0;margin-bottom:20px;font-size:11.5px;flex-wrap:wrap}
+  .steps div{padding:5px 12px 5px 20px;background:var(--chip);color:var(--muted);clip-path:polygon(0 0,calc(100% - 9px) 0,100% 50%,calc(100% - 9px) 100%,0 100%,9px 50%);margin-right:-7px}
+  .steps div.on{background:var(--brand);color:#fff;font-weight:600}
+  .steps div.done{background:var(--ok-soft);color:var(--ok)}
+  .kv{display:grid;grid-template-columns:150px 1fr;gap:7px 14px;font-size:13.5px}
+  .kv dt{color:var(--muted);font-size:12px}
+  .kv dd{margin:0}
+  code{background:var(--chip);padding:1px 5px;border-radius:4px;font-size:12.5px}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}
+  @media(max-width:900px){.app{grid-template-columns:1fr}nav{position:static;height:auto}.split,.g2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="app">
+<nav>
+  <h1>TCL KOL OS</h1>
+  <p class="sub">Prototipo navegable de MVP 1<br>D0-10 · v1 · 11 ago 2026</p>
+
+  <div class="grp">Campañas</div>
+  <a href="#ui03" data-s="ui03">UI-03 <small>Lista de campañas</small></a>
+  <a href="#ui04" data-s="ui04">UI-04 <small>Nueva campaña</small></a>
+  <a href="#ui05" data-s="ui05">UI-05 <small>Detalle de campaña</small></a>
+
+  <div class="grp">Fuentes</div>
+  <a href="#ui06" data-s="ui06">UI-06 <small>Carga de fuentes</small></a>
+  <a href="#ui07" data-s="ui07">UI-07 <small>Estado de procesamiento</small></a>
+
+  <div class="grp">Brief</div>
+  <a href="#ui08" data-s="ui08">UI-08 <small>Revisión de extracción</small></a>
+  <a href="#ui09" data-s="ui09">UI-09 <small>Preguntas de vacíos</small></a>
+  <a href="#ui10" data-s="ui10">UI-10 <small>Editor de brief</small></a>
+  <a href="#ui11" data-s="ui11">UI-11 <small>Evidencias</small></a>
+
+  <div class="grp">Versiones</div>
+  <a href="#ui12" data-s="ui12">UI-12 <small>Comparador</small></a>
+  <a href="#ui13" data-s="ui13">UI-13 <small>Traducción ES/EN</small></a>
+  <a href="#ui14" data-s="ui14">UI-14 <small>Aprobación</small></a>
+  <a href="#ui15" data-s="ui15">UI-15 <small>Exportación</small></a>
+</nav>
+
+<main>
+
+<!-- ══ UI-03 ══ -->
+<section class="scr" id="ui03">
+  <div class="hd"><div class="id">UI-03</div><h2>Lista de campañas</h2><p>Buscar, filtrar y crear campañas. Solo muestra campañas de la organización del usuario (E2-4).</p></div>
+  <div class="card">
+    <div class="row" style="margin-bottom:14px">
+      <input placeholder="Buscar por nombre o producto…" style="flex:1;min-width:200px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit">
+      <select style="padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit"><option>Todos los estados</option><option>En revisión interna</option><option>Aprobado</option></select>
+      <a href="#ui04" class="btn pri">+ Nueva campaña</a>
+    </div>
+    <table>
+      <thead><tr><th>Campaña</th><th>Producto</th><th>Estado del brief</th><th>Responsable</th><th>Fechas</th></tr></thead>
+      <tbody>
+        <tr><td><a href="#ui05" style="color:var(--brand);font-weight:600;text-decoration:none">Q4 Gaming — C755</a></td><td>TCL QLED C755 55"</td><td><span class="pill p-info">internal_review</span></td><td>G. Calambás</td><td>15 oct – 24 dic</td></tr>
+        <tr><td>Lanzamiento Soundbar S64</td><td>TCL S64</td><td><span class="pill p-warn">local_questions</span></td><td>G. Calambás</td><td>1 nov – 31 dic</td></tr>
+        <tr><td>Nevera Free-Built P7</td><td>TCL P7</td><td><span class="pill p-ok">approved</span></td><td>G. Calambás</td><td>1 sep – 30 nov</td></tr>
+        <tr><td>Mini LED C845 — Mundial</td><td>TCL C845</td><td><span class="pill p-mut">draft</span></td><td>G. Calambás</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note info"><strong>Aislamiento entre organizaciones</strong>Un usuario de TCL vería solo campañas con brief enviado (<code>client_review</code> o posterior) y sin acceso a borradores. Intentar abrir una campaña ajena por URL devuelve 404, no 403 — no revela que exista (caso S-01).</div>
+</section>
+
+<!-- ══ UI-04 ══ -->
+<section class="scr" id="ui04">
+  <div class="hd"><div class="id">UI-04</div><h2>Nueva campaña</h2><p>Capturar producto, mercado, responsables, fechas e idioma (E3-1).</p></div>
+  <div class="card">
+    <div class="g2">
+      <div class="fld"><label>Nombre de la campaña *</label><input value="Q4 Gaming — C755"></div>
+      <div class="fld"><label>Producto *</label><select><option>TCL QLED C755 55"</option><option>+ Crear producto nuevo…</option></select></div>
+      <div class="fld"><label>Mercado *</label><select><option>Colombia (CO)</option></select></div>
+      <div class="fld"><label>Categoría</label><input value="TV — gaming premium"></div>
+      <div class="fld"><label>Fecha de inicio</label><input type="date" value="2026-10-15"></div>
+      <div class="fld"><label>Fecha de fin</label><input type="date" value="2026-12-24"></div>
+      <div class="fld"><label>Responsable *</label><select><option>Gerardo Calambás (admin)</option></select></div>
+      <div class="fld"><label>Idiomas del brief</label><select><option>Español + Inglés</option><option>Solo español</option></select></div>
+    </div>
+    <div class="row"><button class="btn pri">Crear campaña</button><a href="#ui03" class="btn">Cancelar</a></div>
+  </div>
+  <div class="note"><strong>Campo pendiente de decisión</strong>Hoy el modelo asume <strong>un producto por campaña</strong>. Está registrado como pendiente en D0-08 §7 y D0-11 §18 — afecta a la historia E3-5.</div>
+</section>
+
+<!-- ══ UI-05 ══ -->
+<section class="scr" id="ui05">
+  <div class="hd"><div class="id">UI-05</div><h2>Detalle de campaña</h2><p>Reunir fuentes, brief, versiones, actividad y estado en un solo lugar (E3-3).</p></div>
+  <div class="steps"><div class="done">Crear</div><div class="on">Aterrizar</div><div>Asignar</div><div>Gestionar</div><div>Revisar</div><div>Publicar</div><div>Medir</div><div>Cerrar</div></div>
+  <div class="note info"><strong>Solo la etapa "Aterrizar" se construye en MVP 1</strong>Las seis etapas restantes se muestran como referencia del flujo completo (D0-03 §1), no son navegables.</div>
+  <div class="split">
+    <div>
+      <div class="card">
+        <h3>Fuentes · 3</h3>
+        <table><tbody>
+          <tr><td>PPT global C755 <span class="pill p-mut">PPTX</span></td><td><span class="pill p-ok">procesado</span></td><td class="mono" style="color:var(--muted)">42 frag.</td></tr>
+          <tr><td>Ficha técnica C755 <span class="pill p-mut">PDF</span></td><td><span class="pill p-ok">procesado</span></td><td class="mono" style="color:var(--muted)">18 frag.</td></tr>
+          <tr><td>Brief cliente TCL CO <span class="pill p-mut">DOCX</span></td><td><span class="pill p-ok">procesado</span></td><td class="mono" style="color:var(--muted)">27 frag.</td></tr>
+        </tbody></table>
+        <div class="row" style="margin-top:12px"><a href="#ui06" class="btn">+ Añadir fuente</a><a href="#ui07" class="btn">Ver procesamiento</a></div>
+      </div>
+      <div class="card">
+        <h3>Brief · versiones</h3>
+        <table>
+          <thead><tr><th>Versión</th><th>Idioma</th><th>Estado</th><th>Autor</th></tr></thead>
+          <tbody>
+            <tr><td><strong>v3</strong></td><td>ES</td><td><span class="pill p-info">internal_review</span></td><td>G. Calambás</td></tr>
+            <tr><td>v1 <span style="color:var(--muted);font-size:11px">← trad. de v3</span></td><td>EN</td><td><span class="pill p-info">internal_review</span></td><td>G. Calambás</td></tr>
+            <tr><td>v2</td><td>ES</td><td><span class="pill p-mut">superseded</span></td><td>G. Calambás</td></tr>
+            <tr><td>v1</td><td>ES</td><td><span class="pill p-mut">superseded</span></td><td>G. Calambás</td></tr>
+          </tbody>
+        </table>
+        <div class="row" style="margin-top:12px"><a href="#ui10" class="btn pri">Abrir editor</a><a href="#ui12" class="btn">Comparar</a><a href="#ui13" class="btn">Traducción</a></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <h3>Estado</h3>
+        <dl class="kv">
+          <dt>Brief</dt><dd><span class="pill p-info">internal_review</span></dd>
+          <dt>Producto</dt><dd>QLED C755 55"</dd>
+          <dt>Fechas</dt><dd>15 oct – 24 dic</dd>
+          <dt>Responsable</dt><dd>G. Calambás</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <h3>Pendientes</h3>
+        <p style="font-size:13px;margin:0 0 10px"><span class="pill p-warn">2 preguntas</span> sin responder</p>
+        <p style="font-size:13px;margin:0 0 10px"><span class="pill p-bad">1 conflicto</span> entre fuentes</p>
+        <a href="#ui09" class="btn" style="width:100%;text-align:center">Resolver</a>
+      </div>
+      <div class="card">
+        <h3>Actividad</h3>
+        <div style="font-size:12.5px;color:var(--muted);line-height:1.7">
+          <div><strong style="color:var(--ink)">v3 creada</strong><br>G. Calambás · hoy 14:22</div>
+          <div style="margin-top:8px"><strong style="color:var(--ink)">Pregunta respondida</strong><br>G. Calambás · hoy 13:58</div>
+          <div style="margin-top:8px"><strong style="color:var(--ink)">Extracción completa</strong><br>Sistema · hoy 13:40</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ UI-06 ══ -->
+<section class="scr" id="ui06">
+  <div class="hd"><div class="id">UI-06</div><h2>Carga de fuentes</h2><p>Cargar o vincular PPT, PDF, DOCX e imágenes (E4-1, E4-2).</p></div>
+  <div class="card">
+    <div style="border:2px dashed var(--line);border-radius:8px;padding:36px;text-align:center;color:var(--muted)">
+      <div style="font-size:15px;color:var(--ink);font-weight:600;margin-bottom:5px">Arrastra archivos aquí</div>
+      <div style="font-size:12.5px">PDF · PPTX · DOCX · PNG · JPG — máximo 50 MB</div>
+      <div class="row" style="justify-content:center;margin-top:14px"><button class="btn">Seleccionar archivo</button><button class="btn">Vincular desde Drive</button></div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Tipo de fuente</h3>
+    <div class="g2">
+      <div class="fld"><label>Tipo *</label><select><option>PPT global (TCL China)</option><option>Ficha técnica</option><option>Brief del cliente</option><option>Imagen de referencia</option><option>Otro</option></select></div>
+      <div class="fld"><label>Idioma del documento</label><select><option>Inglés</option><option>Español</option></select></div>
+    </div>
+  </div>
+  <div class="note bad"><strong>Validación antes de aceptar</strong>Se verifica el contenido real del archivo, no solo su extensión: un ejecutable renombrado como <code>.pdf</code> se rechaza (caso S-05). Vincular una URL interna se rechaza como SSRF (caso S-08).</div>
+</section>
+
+<!-- ══ UI-07 ══ -->
+<section class="scr" id="ui07">
+  <div class="hd"><div class="id">UI-07</div><h2>Estado de procesamiento</h2><p>Cola, avance, fallas y reintento. La interfaz nunca se bloquea (E4-8, E4-9).</p></div>
+  <div class="card">
+    <table>
+      <thead><tr><th>Documento</th><th>Etapa</th><th>Avance</th><th></th></tr></thead>
+      <tbody>
+        <tr><td>Ficha técnica C755.pdf</td><td><span class="pill p-ok">completado</span></td><td><div class="bar"><span style="width:100%"></span></div></td><td><a href="#ui08" class="btn" style="padding:4px 10px;font-size:12px">Ver extracción</a></td></tr>
+        <tr><td>PPT global C755.pptx</td><td><span class="pill p-info">generando embeddings</span></td><td><div class="bar"><span style="width:72%"></span></div><span style="font-size:11.5px;color:var(--muted)">31 de 42 fragmentos</span></td><td></td></tr>
+        <tr><td>Brief cliente TCL CO.docx</td><td><span class="pill p-mut">en cola</span></td><td><div class="bar"><span style="width:0"></span></div></td><td></td></tr>
+        <tr><td>Anexo campaña.pptx</td><td><span class="pill p-bad">fallido</span></td><td colspan="2"><div style="font-size:12.5px;color:var(--bad)">Archivo corrupto: no se pudo abrir la diapositiva 7.<br><span class="mono" style="color:var(--muted)">requestId: req_8f3a21c9</span></div></td></tr>
+      </tbody>
+    </table>
+    <div class="row" style="margin-top:14px"><button class="btn">Reintentar fallidos</button><a href="#ui10" class="btn pri">Continuar sin esperar</a></div>
+  </div>
+  <div class="note info"><strong>El procesamiento no bloquea el trabajo</strong>Se puede abrir el editor y completar el brief manualmente mientras la cola avanza, o incluso si falla por completo (E7-4, casos R-09 a R-11).</div>
+</section>
+
+<!-- ══ UI-08 ══ -->
+<section class="scr" id="ui08">
+  <div class="hd"><div class="id">UI-08</div><h2>Revisión de extracción</h2><p>Confirmar campo, fuente y confianza antes de avanzar (E5-7).</p></div>
+  <div class="card">
+    <table>
+      <thead><tr><th style="width:190px">Campo</th><th>Valor extraído</th><th style="width:95px">Confianza</th><th style="width:120px">Estado</th><th style="width:130px"></th></tr></thead>
+      <tbody>
+        <tr><td class="mono">marca_producto.<br>nombre_producto</td><td>TCL QLED C755 — 55"</td><td>0.97</td><td><span class="pill p-ok">found</span></td><td><button class="btn" style="padding:4px 10px;font-size:12px">Confirmar</button></td></tr>
+        <tr><td class="mono">objetivo.tipo</td><td>consideration</td><td>0.84</td><td><span class="pill p-ok">found</span></td><td><button class="btn" style="padding:4px 10px;font-size:12px">Confirmar</button></td></tr>
+        <tr><td class="mono">marca_producto.<br>beneficio_principal</td><td>Panel QLED de 144Hz con Game Master, pensado para consolas de nueva generación.<div class="ev"><span class="src">Ficha técnica C755 · pág. 2</span><cite>"Native 144Hz VRR panel with Game Master 3.0"</cite></div></td><td>0.94</td><td><span class="pill p-ok">found</span> <span class="pill p-info">claim</span></td><td><button class="btn" style="padding:4px 10px;font-size:12px">Confirmar</button></td></tr>
+        <tr style="background:var(--bad-soft)"><td class="mono">marca_producto.<br>especificaciones</td><td><strong style="color:var(--bad)">Contradicción entre fuentes</strong><div class="ev"><span class="src">PPT global · diap. 11</span><cite>"Peak brightness: 1500 nits"</cite></div><div class="ev"><span class="src">Ficha técnica · pág. 3</span><cite>"Peak brightness: 1300 nits (HDR)"</cite></div></td><td>0.41</td><td><span class="pill p-bad">conflict</span></td><td><a href="#ui09" class="btn" style="padding:4px 10px;font-size:12px">Resolver</a></td></tr>
+        <tr style="background:var(--warn-soft)"><td class="mono">practico.<br>presupuesto</td><td style="color:var(--muted);font-style:italic">No aparece en ninguna fuente</td><td>—</td><td><span class="pill p-warn">not_found</span></td><td><a href="#ui09" class="btn" style="padding:4px 10px;font-size:12px">Aportar</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note bad"><strong>Un campo <code>not_found</code> nunca lleva valor</strong>El sistema no completa datos ausentes con conocimiento general, aunque pudiera estimarlos. Es la regla más importante del §9.4 y está impuesta por el esquema, no por convención (caso GS-004).</div>
+</section>
+
+<!-- ══ UI-09 ══ -->
+<section class="scr" id="ui09">
+  <div class="hd"><div class="id">UI-09</div><h2>Preguntas de vacíos</h2><p>Completar información local faltante o contradictoria (E6-2, E6-3, E6-4).</p></div>
+  <div class="card" style="border-left:3px solid var(--bad)">
+    <div class="row" style="justify-content:space-between;margin-bottom:10px"><strong style="font-size:14px">¿Cuál es el brillo máximo correcto del C755?</strong><span class="pill p-bad">conflicto</span></div>
+    <p style="font-size:13px;color:var(--muted);margin:0 0 12px"><strong>Por qué se pregunta:</strong> el PPT global indica 1500 nits y la ficha técnica indica 1300 nits (HDR). El sistema no elige entre fuentes contradictorias.</p>
+    <div class="row" style="margin-bottom:12px">
+      <label style="font-size:13px"><input type="radio" name="q1"> 1500 nits — PPT global</label>
+      <label style="font-size:13px"><input type="radio" name="q1" checked> 1300 nits — ficha técnica</label>
+      <label style="font-size:13px"><input type="radio" name="q1"> Otro valor</label>
+    </div>
+    <div class="fld"><label>Justificación</label><textarea style="min-height:56px">La ficha técnica es la fuente oficial para especificaciones citables. El PPT global usa cifra de laboratorio no verificable en el mercado local.</textarea></div>
+    <div class="row"><button class="btn pri">Responder</button><button class="btn">Descartar</button></div>
+  </div>
+  <div class="card" style="border-left:3px solid var(--warn)">
+    <div class="row" style="justify-content:space-between;margin-bottom:10px"><strong style="font-size:14px">¿Cuál es el presupuesto de la campaña?</strong><span class="pill p-warn">vacío</span></div>
+    <p style="font-size:13px;color:var(--muted);margin:0 0 12px"><strong>Por qué se pregunta:</strong> el campo <code>practico.presupuesto</code> no aparece en ninguna fuente cargada.</p>
+    <div class="fld"><textarea placeholder="Escribe la respuesta…" style="min-height:56px"></textarea></div>
+    <div class="row"><button class="btn pri">Responder</button><button class="btn">Descartar</button></div>
+  </div>
+  <div class="note"><strong>Descartar exige justificación</strong>No se puede descartar una pregunta sin escribir el motivo (E6-4, caso F-19). Un descarte sin explicación deja un vacío invisible en el brief.</div>
+</section>
+
+<!-- ══ UI-10 ══ -->
+<section class="scr" id="ui10">
+  <div class="hd"><div class="id">UI-10</div><h2>Editor de brief</h2><p>Editar secciones estructuradas sin depender de IA (E7-1, E7-4).</p></div>
+  <div class="row" style="justify-content:space-between;margin-bottom:14px">
+    <div class="row"><span class="pill p-info">v3 · ES</span><span class="pill p-mut">internal_review</span></div>
+    <div class="row"><span style="font-size:12.5px;color:var(--ok)">✓ Guardado hace 4 s</span><button class="btn">Solicitar revisión</button></div>
+  </div>
+  <div class="note info"><strong>IA desactivada — modo manual</strong>El editor funciona completo con el proveedor de IA apagado. Esta pantalla es la prueba del principio de fallback (§5, principio 9): una falla de IA degrada la asistencia, nunca bloquea el trabajo.</div>
+  <div class="split">
+    <div>
+      <div class="card">
+        <h3>01 · Contexto</h3>
+        <div class="fld"><label>Situación <span class="pill p-ok" style="font-size:10px">extraído</span></label><textarea>TCL entra a la temporada de fin de año en Colombia con el QLED C755 como referencia insignia de gaming. La categoría de TV premium está dominada por Samsung y LG en participación de mente.</textarea></div>
+      </div>
+      <div class="card">
+        <h3>02 · Objetivo</h3>
+        <div class="fld"><label>Tipo</label><select><option>consideration</option><option>awareness</option><option>conversion</option><option>loyalty</option></select></div>
+        <div class="fld"><label>Negocio <span class="pill p-ok" style="font-size:10px">extraído</span></label><textarea style="min-height:56px">Incrementar la participación de TCL en la categoría de TV premium en Colombia durante el cuarto trimestre.</textarea></div>
+        <div class="fld"><label>Comportamiento esperado <span class="pill p-mut" style="font-size:10px">manual</span></label><textarea style="min-height:56px">Que el gamer incluya al C755 en su comparación antes de decidir la compra.</textarea></div>
+      </div>
+      <div class="card">
+        <h3>06 · Marca y producto</h3>
+        <div class="fld"><label>Beneficio principal <span class="pill p-info" style="font-size:10px">claim</span></label><textarea style="min-height:56px">Panel QLED de 144Hz con Game Master, pensado para consolas de nueva generación.</textarea></div>
+        <div class="fld"><label>Especificaciones <span class="pill p-bad" style="font-size:10px">conflicto sin resolver</span></label><textarea style="min-height:44px;border-color:var(--bad)" placeholder="Bloqueado hasta resolver el conflicto entre fuentes"></textarea></div>
+      </div>
+      <div class="card">
+        <h3>07 · Mensaje principal</h3>
+        <div class="fld"><label>One line brief <span class="pill p-mut" style="font-size:10px">manual · aporte de agencia</span></label><input value="Compara las specs, no los logos."></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <h3>Evidencia del campo</h3>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 8px">Beneficio principal</p>
+        <div class="ev"><span class="src">Ficha técnica C755 · pág. 2</span><cite>"Native 144Hz VRR panel with Game Master 3.0"</cite><a href="#ui11" style="color:var(--brand);font-size:11.5px;text-decoration:none">Abrir fuente →</a></div>
+      </div>
+      <div class="card">
+        <h3>Completitud</h3>
+        <div class="bar"><span style="width:78%"></span></div>
+        <p style="font-size:12.5px;color:var(--muted);margin:8px 0 0">31 de 40 campos · <strong style="color:var(--bad)">1 conflicto bloquea la aprobación</strong></p>
+      </div>
+      <div class="card">
+        <h3>Secciones</h3>
+        <div style="font-size:12.5px;line-height:2">
+          <div>✅ 01 Contexto</div><div>✅ 02 Objetivo</div><div>✅ 03 Target</div>
+          <div>⚪ 04 Problema / insight</div><div>⚠️ 06 Marca y producto</div><div>✅ 07 Mandatorios</div>
+          <div>✅ 08 Mensaje</div><div>✅ 09 Acción y KPIs</div><div>⚪ 10 Entregable creativo</div><div>⚠️ 11 Práctico</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ UI-11 ══ -->
+<section class="scr" id="ui11">
+  <div class="hd"><div class="id">UI-11</div><h2>Evidencias</h2><p>Abrir la fuente, página o diapositiva asociada a un campo (E5-8).</p></div>
+  <div class="split">
+    <div>
+      <div class="card">
+        <h3>Ficha técnica C755 · página 2</h3>
+        <div style="background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:22px;font-size:13px;line-height:1.9">
+          <div style="color:var(--muted)">TCL C755 QLED Gaming TV Series — Technical Specifications</div><br>
+          <div>Screen size: 55" (139 cm)</div>
+          <div>Resolution: 3840 × 2160 (4K UHD)</div>
+          <div style="background:var(--warn-soft);padding:3px 6px;border-radius:4px;font-weight:600">Native 144Hz VRR panel with Game Master 3.0</div>
+          <div>Mini LED backlight, ALLM supported</div>
+          <div>HDMI 2.1 × 2, HDMI 2.0 × 2</div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <h3>Campo respaldado</h3>
+        <dl class="kv">
+          <dt>Campo</dt><dd class="mono" style="font-size:12px">marca_producto.beneficio_principal</dd>
+          <dt>Criticidad</dt><dd><span class="pill p-info">claim</span></dd>
+          <dt>Estado</dt><dd><span class="pill p-ok">found</span></dd>
+          <dt>Confianza</dt><dd>0.94</dd>
+          <dt>Procedencia</dt><dd>extracted</dd>
+          <dt>Relación</dt><dd>soporta</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <h3>Otras evidencias</h3>
+        <div class="ev"><span class="src">Ficha técnica · pág. 2</span><cite>"Mini LED backlight, ALLM supported"</cite></div>
+        <div class="ev"><span class="src">PPT global · diap. 2</span><cite>"Global campaign narrative: Play Beyond Limits"</cite></div>
+      </div>
+    </div>
+  </div>
+  <div class="note info"><strong>La cita literal se conserva sin traducir</strong>Una evidencia mantiene el texto exacto de su fuente. Traducirla la invalidaría como respaldo verificable — por eso la versión en inglés del brief cita fragmentos en su idioma original (E9-7, caso F-36).</div>
+</section>
+
+<!-- ══ UI-12 ══ -->
+<section class="scr" id="ui12">
+  <div class="hd"><div class="id">UI-12</div><h2>Comparador de versiones</h2><p>Ver diferencias entre versiones campo por campo (E8-3).</p></div>
+  <div class="card">
+    <div class="row" style="margin-bottom:14px">
+      <select style="padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit"><option>v2 · ES · superseded</option></select>
+      <span style="color:var(--muted)">→</span>
+      <select style="padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit"><option>v3 · ES · internal_review</option></select>
+    </div>
+    <table>
+      <thead><tr><th style="width:200px">Campo</th><th>Cambio</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">mensaje_principal.<br>one_line</td><td><span class="del">Más specs, menos marketing.</span> <span class="ins">Compara las specs, no los logos.</span></td></tr>
+        <tr><td class="mono">marca_producto.<br>especificaciones</td><td><span class="del">1500 nits de brillo máximo</span> → <span class="pill p-bad">conflict</span> <span style="font-size:12.5px;color:var(--muted)">(se detectó contradicción con la ficha técnica)</span></td></tr>
+        <tr><td class="mono">practico.<br>restricciones</td><td><span class="ins">+ No usar la fecha de lanzamiento global sin confirmación de TCL Colombia</span></td></tr>
+        <tr><td class="mono">target_audiencia.<br>ubicacion</td><td><span class="ins">+ Barranquilla</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note"><strong>Las versiones anteriores no se borran</strong>Una versión reemplazada queda como <code>superseded</code> y sigue siendo consultable (E8-8, caso F-30).</div>
+</section>
+
+<!-- ══ UI-13 ══ -->
+<section class="scr" id="ui13">
+  <div class="hd"><div class="id">UI-13</div><h2>Traducción ES / EN</h2><p>Revisar versiones relacionadas y glosario (E9-2, E9-4).</p></div>
+  <div class="card">
+    <div class="row" style="justify-content:space-between;margin-bottom:12px">
+      <div class="row"><span class="pill p-info">v3 ES</span><span style="color:var(--muted)">→</span><span class="pill p-info">v1 EN</span></div>
+      <span style="font-size:12.5px;color:var(--muted)" class="mono">translationOfId: bv-0f2a91c4-es-3</span>
+    </div>
+    <table>
+      <thead><tr><th style="width:150px">Campo</th><th>Español (origen)</th><th>Inglés</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">one_line</td><td>Compara las specs, no los logos.</td><td>Compare the specs, not the logos.</td></tr>
+        <tr><td class="mono">beneficio_principal</td><td>Panel QLED de <strong style="background:var(--brand-soft);padding:1px 4px;border-radius:3px">144Hz</strong> con <strong style="background:var(--brand-soft);padding:1px 4px;border-radius:3px">Game Master</strong>, pensado para consolas de nueva generación.</td><td>144Hz QLED panel with Game Master, built for next-gen consoles.</td></tr>
+        <tr><td class="mono">rol_marca</td><td>Retador informado: la marca que gana cuando el consumidor compara con datos.</td><td>Informed challenger: the brand that wins when the consumer compares with data.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="card">
+    <h3>Glosario — términos bloqueados</h3>
+    <table>
+      <thead><tr><th>Término ES</th><th>Traducción aprobada</th><th>Producto</th><th>Estado</th></tr></thead>
+      <tbody>
+        <tr><td>144Hz nativos</td><td>native 144Hz</td><td>C755</td><td><span class="pill p-ok">bloqueado</span></td></tr>
+        <tr><td>Game Master</td><td>Game Master <span style="color:var(--muted);font-size:11.5px">(no traducir)</span></td><td>C755</td><td><span class="pill p-ok">bloqueado</span></td></tr>
+        <tr><td>Retroiluminación Mini LED</td><td>Mini LED backlight</td><td>Todos</td><td><span class="pill p-ok">bloqueado</span></td></tr>
+        <tr><td>Punto de venta</td><td>point of sale</td><td>Todos</td><td><span class="pill p-warn">propuesto</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note info"><strong>Un término aprobado no se traduce de otra forma</strong>El glosario se aplica antes que el modelo. Marcar "Game Master" como no traducible impide que una ejecución lo convierta en "Maestro de Juego" (E9-4, caso F-34).</div>
+</section>
+
+<!-- ══ UI-14 ══ -->
+<section class="scr" id="ui14">
+  <div class="hd"><div class="id">UI-14</div><h2>Aprobación</h2><p>Solicitar revisión, comentar, aprobar o devolver (E8-4 a E8-7).</p></div>
+  <div class="card">
+    <h3>Estado del flujo</h3>
+    <div class="steps"><div class="done">draft</div><div class="done">extraction_review</div><div class="on">internal_review</div><div>client_review</div><div>approved</div></div>
+  </div>
+  <div class="card">
+    <div class="note bad" style="margin-bottom:14px"><strong>No se puede aprobar todavía</strong>El campo <code class="mono">marca_producto.especificaciones</code> está en <code>conflict</code> sin resolver. Un claim sin evidencia válida bloquea la transición a <code>approved</code> (E5-9, caso F-16).</div>
+    <div class="fld"><label>Comentario</label><textarea placeholder="Explica qué debe cambiar…" style="min-height:64px"></textarea></div>
+    <div class="row">
+      <button class="btn dis">Aprobar internamente</button>
+      <button class="btn">Solicitar cambios</button>
+      <a href="#ui09" class="btn pri">Resolver conflicto pendiente</a>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Aprobación del cliente</h3>
+    <div class="note" style="margin-bottom:12px"><strong>La aprobación de TCL ocurre fuera de la plataforma</strong>El consultor envía el brief por sus canales habituales y registra aquí el resultado. TCL no tiene login de aprobación en MVP 1 (DEC-012).</div>
+    <div class="g2">
+      <div class="fld"><label>Resultado</label><select><option>— sin registrar —</option><option>Aprobado por el cliente</option><option>Cambios solicitados</option></select></div>
+      <div class="fld"><label>Fecha de la decisión</label><input type="date"></div>
+    </div>
+    <div class="fld"><label>Constancia</label><textarea placeholder="Correo, acta de reunión o referencia de la aprobación…" style="min-height:56px"></textarea></div>
+    <button class="btn">Registrar decisión del cliente</button>
+  </div>
+  <div class="card">
+    <h3>Historial de aprobaciones</h3>
+    <table>
+      <thead><tr><th>Versión</th><th>Etapa</th><th>Decisión</th><th>Actor</th><th>Fecha</th></tr></thead>
+      <tbody>
+        <tr><td>v2 ES</td><td>interna</td><td><span class="pill p-bad">cambios solicitados</span></td><td>G. Calambás</td><td>10 ago 16:04</td></tr>
+        <tr><td>v1 ES</td><td>interna</td><td><span class="pill p-bad">cambios solicitados</span></td><td>G. Calambás</td><td>9 ago 11:20</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ══ UI-15 ══ -->
+<section class="scr" id="ui15">
+  <div class="hd"><div class="id">UI-15</div><h2>Exportación</h2><p>Generar DOCX o PDF desde plantilla aprobada (E10-2, E10-3, E10-5).</p></div>
+  <div class="card">
+    <div class="g2">
+      <div class="fld"><label>Versión a exportar</label><select><option>v3 · ES · internal_review</option><option>v1 · EN · internal_review</option></select></div>
+      <div class="fld"><label>Formato</label><select><option>DOCX</option><option>PDF</option><option>Ambos</option></select></div>
+      <div class="fld"><label>Plantilla</label><select><option>brief-maestro-v1</option></select></div>
+      <div class="fld"><label>Incluir</label><select><option>Todas las secciones</option><option>Sin evidencias</option></select></div>
+    </div>
+    <div class="note" style="margin:6px 0 14px"><strong>Solo se puede exportar una versión aprobada como entregable oficial</strong>Una versión en <code>internal_review</code> se exporta marcada como borrador, con marca de agua. La exportación siempre declara campaña, idioma y versión dentro del archivo (E10-5, caso F-39).</div>
+    <button class="btn pri">Generar exportación</button>
+  </div>
+  <div class="card">
+    <h3>Exportaciones anteriores</h3>
+    <table>
+      <thead><tr><th>Archivo</th><th>Versión</th><th>Plantilla</th><th>Autor</th><th>Fecha</th></tr></thead>
+      <tbody>
+        <tr><td>brief_C755_v2_ES.docx</td><td>v2 ES</td><td class="mono">brief-maestro-v1</td><td>G. Calambás</td><td>10 ago 16:10</td></tr>
+        <tr><td>brief_C755_v1_ES.pdf</td><td>v1 ES</td><td class="mono">brief-maestro-v1</td><td>G. Calambás</td><td>9 ago 11:30</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:12.5px;color:var(--muted);margin:12px 0 0">Cada exportación queda registrada en auditoría con actor y fecha. Los enlaces de descarga expiran (E10-6, E10-7).</p>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+  const screens = [...document.querySelectorAll('.scr')];
+  const links = [...document.querySelectorAll('nav a')];
+  function show(){
+    const id = (location.hash || '#ui03').slice(1);
+    screens.forEach(s => s.classList.toggle('on', s.id === id));
+    links.forEach(a => a.classList.toggle('on', a.dataset.s === id));
+    window.scrollTo(0,0);
+  }
+  addEventListener('hashchange', show);
+  show();
+</script>
+</body>
+</html>

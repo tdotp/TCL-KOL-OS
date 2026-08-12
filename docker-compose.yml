@@ -1,0 +1,97 @@
+# TCL KOL OS — entorno de desarrollo local
+#
+# Levanta el sistema completo: web, worker, base de datos y cola.
+# ADR-001: monolito modular, sin Kubernetes ni red de microservicios.
+#
+#   docker compose up
+#
+# Requisitos: Docker Desktop instalado (ver README §Requisitos).
+
+name: tcl-kol-os
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: tclkolos-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tclkolos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-tclkolos}
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./infra/db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-tclkolos} -d ${POSTGRES_DB:-tclkolos}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: tclkolos-redis
+    # ADR-007: Redis no conserva estado de negocio. Perderlo cuesta trabajo
+    # encolado, nunca información. Por eso no se monta volumen.
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  worker:
+    build:
+      context: ./services/ai-worker
+      dockerfile: Dockerfile
+    container_name: tclkolos-worker
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tclkolos}:${POSTGRES_PASSWORD:-devpassword}@db:5432/${POSTGRES_DB:-tclkolos}
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      AI_ENABLED: ${AI_ENABLED:-false}
+      AI_PROVIDER: ${AI_PROVIDER:-}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-50}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - '${WORKER_PORT:-8000}:8000'
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./services/ai-worker:/app
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: tclkolos-web
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tclkolos}:${POSTGRES_PASSWORD:-devpassword}@db:5432/${POSTGRES_DB:-tclkolos}
+      REDIS_URL: redis://redis:6379/0
+      WORKER_URL: http://worker:8000
+      NODE_ENV: ${NODE_ENV:-development}
+      AI_ENABLED: ${AI_ENABLED:-false}
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+    depends_on:
+      db:
+        condition: service_healthy
+      worker:
+        condition: service_started
+    volumes:
+      - ./apps/web:/repo/apps/web
+      - ./packages:/repo/packages
+      - /repo/apps/web/.next
+      - /repo/node_modules
+
+volumes:
+  db-data:

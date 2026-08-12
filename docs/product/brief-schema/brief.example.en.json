@@ -1,0 +1,659 @@
+{
+  "meta": {
+    "briefVersionId": "bv-0f2a91c4-en-1",
+    "briefId": "br-8c31a0de",
+    "campaignId": "cmp-2026-tcl-qled-c755",
+    "language": "en",
+    "version": 1,
+    "parentVersionId": null,
+    "translationOfId": "bv-0f2a91c4-es-3",
+    "status": "internal_review",
+    "createdBy": "usr-gcalambas",
+    "createdAt": "2026-08-11T15:40:00-05:00",
+    "templateVersion": "brief-maestro-v1"
+  },
+
+  "contexto": {
+    "situacion": {
+      "value": "TCL enters the Colombian year-end season with the QLED C755 as its flagship gaming reference. The premium TV category is dominated by Samsung and LG in mind share, and Colombian consumers associate 'gaming TV' with Korean brands. TCL offers a better price-to-spec ratio but low consideration in the segment.",
+      "status": "found",
+      "confidence": 0.88,
+      "provenanceType": "translated",
+      "criticidad": "critico",
+      "evidence": [
+        {
+          "sourceId": "src-ppt-global-c755",
+          "fragmentId": "frg-0031",
+          "page": null,
+          "slide": 4,
+          "quote": "Q4 flagship gaming positioning — C755 series, price-to-spec leadership vs. Korean competitors",
+          "relation": "soporta"
+        },
+        {
+          "sourceId": "src-brief-cliente-co",
+          "fragmentId": "frg-0118",
+          "page": 1,
+          "slide": null,
+          "quote": "Necesitamos ganar consideración en el segmento gaming, hoy dominado por Samsung y LG.",
+          "relation": "soporta"
+        }
+      ]
+    },
+    "categoria": {
+      "value": "Premium QLED televisions — gaming segment",
+      "status": "found",
+      "confidence": 0.95,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": [
+        {
+          "sourceId": "src-ficha-tecnica-c755",
+          "fragmentId": "frg-0002",
+          "page": 1,
+          "slide": null,
+          "quote": "TCL C755 QLED Gaming TV Series",
+          "relation": "soporta"
+        }
+      ]
+    },
+    "contexto_global": {
+      "value": "Global material positions the C755 series as a gaming reference focused on 144Hz and next-gen console compatibility. The global narrative is 'Play Beyond Limits'.",
+      "status": "found",
+      "confidence": 0.91,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": [
+        {
+          "sourceId": "src-ppt-global-c755",
+          "fragmentId": "frg-0009",
+          "page": null,
+          "slide": 2,
+          "quote": "Global campaign narrative: Play Beyond Limits",
+          "relation": "soporta"
+        }
+      ]
+    }
+  },
+
+  "objetivo": {
+    "tipo": {
+      "value": "consideration",
+      "status": "found",
+      "confidence": 0.84,
+      "provenanceType": "translated",
+      "criticidad": "critico",
+      "evidence": [
+        {
+          "sourceId": "src-brief-cliente-co",
+          "fragmentId": "frg-0120",
+          "page": 1,
+          "slide": null,
+          "quote": "Objetivo: generar interés y consideración en gamers que hoy no evalúan TCL.",
+          "relation": "soporta"
+        }
+      ]
+    },
+    "negocio": {
+      "value": "Increase TCL's share of the premium TV category in Colombia during Q4, leveraging the year-end season.",
+      "status": "found",
+      "confidence": 0.79,
+      "provenanceType": "translated",
+      "criticidad": "critico",
+      "evidence": [
+        {
+          "sourceId": "src-brief-cliente-co",
+          "fragmentId": "frg-0121",
+          "page": 1,
+          "slide": null,
+          "quote": "Crecer participación en TV premium en Q4 aprovechando temporada.",
+          "relation": "soporta"
+        }
+      ]
+    },
+    "marca_comunicacion": {
+      "value": "Establish TCL as a legitimate and desirable option for demanding gamers, not as the budget alternative.",
+      "status": "manual",
+      "confidence": null,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": []
+    },
+    "comportamiento_esperado": {
+      "value": "Get gamers to include the C755 in their comparison before deciding on a purchase.",
+      "status": "manual",
+      "confidence": null,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": []
+    }
+  },
+
+  "target_audiencia": {
+    "descripcion": {
+      "value": "Console and PC gamers, men and women aged 22 to 38, urban, socioeconomic strata 4-6, who research specifications before buying and consume reviews on YouTube and TikTok.",
+      "status": "found",
+      "confidence": 0.82,
+      "provenanceType": "translated",
+      "criticidad": "critico",
+      "evidence": [
+        {
+          "sourceId": "src-brief-cliente-co",
+          "fragmentId": "frg-0124",
+          "page": 2,
+          "slide": null,
+          "quote": "Gamers 22-38, urbanos, estratos 4 a 6, altamente informados sobre specs.",
+          "relation": "soporta"
+        }
+      ]
+    },
+    "rango_edad": {
+      "value": "22–38 years old",
+      "status": "found",
+      "confidence": 0.93,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": [
+        {
+          "sourceId": "src-brief-cliente-co",
+          "fragmentId": "frg-0124",
+          "page": 2,
+          "slide": null,
+          "quote": "Gamers 22-38",
+          "relation": "soporta"
+        }
+      ]
+    },
+    "ubicacion": {
+      "value": ["Bogotá", "Medellín", "Cali", "Barranquilla"],
+      "status": "found",
+      "confidence": 0.9,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": [
+        {
+          "sourceId": "src-brief-cliente-co",
+          "fragmentId": "frg-0125",
+          "page": 2,
+          "slide": null,
+          "quote": "Ciudades prioritarias: Bogotá, Medellín, Cali y Barranquilla.",
+          "relation": "soporta"
+        }
+      ]
+    },
+    "comportamiento": {
+      "value": "Compares technical specifications before buying; trusts niche creators more than brand advertising.",
+      "status": "manual",
+      "confidence": null,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": []
+    },
+    "relacion_categoria": {
+      "value": null,
+      "status": "not_found",
+      "confidence": null,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": []
+    }
+  },
+
+  "problema_insight": {
+    "problema": {
+      "value": "We need Colombian gamers to consider TCL, because today the brand does not make their shortlist even though the product competes on specifications.",
+      "status": "manual",
+      "confidence": null,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": []
+    },
+    "tension": {
+      "value": "I want the best TV for gaming, but I assume the brand I know is the one that performs best.",
+      "status": "manual",
+      "confidence": null,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": []
+    },
+    "insight": {
+      "value": null,
+      "status": "not_found",
+      "confidence": null,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": []
+    },
+    "cambio_comportamiento": {
+      "value": "Get gamers to check the spec sheet before assuming which brand performs better.",
+      "status": "manual",
+      "confidence": null,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": []
+    }
+  },
+
+  "marca_producto": {
+    "productId": {
+      "value": "prd-tcl-c755-55",
+      "status": "manual",
+      "confidence": null,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": []
+    },
+    "nombre_producto": {
+      "value": "TCL QLED C755 — 55\"",
+      "status": "found",
+      "confidence": 0.97,
+      "provenanceType": "translated",
+      "criticidad": "critico",
+      "evidence": [
+        {
+          "sourceId": "src-ficha-tecnica-c755",
+          "fragmentId": "frg-0001",
+          "page": 1,
+          "slide": null,
+          "quote": "TCL C755 QLED 55\" (55C755)",
+          "relation": "soporta"
+        }
+      ]
+    },
+    "rol_marca": {
+      "value": "Informed challenger: the brand that wins when the consumer compares with data.",
+      "status": "manual",
+      "confidence": null,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": []
+    },
+    "beneficio_principal": {
+      "value": "144Hz QLED panel with Game Master, built for next-gen consoles.",
+      "status": "found",
+      "confidence": 0.94,
+      "provenanceType": "translated",
+      "criticidad": "claim",
+      "evidence": [
+        {
+          "sourceId": "src-ficha-tecnica-c755",
+          "fragmentId": "frg-0014",
+          "page": 2,
+          "slide": null,
+          "quote": "Native 144Hz VRR panel with Game Master 3.0",
+          "relation": "soporta"
+        }
+      ]
+    },
+    "diferenciales": {
+      "value": [
+        "Native 144Hz refresh rate",
+        "VRR and ALLM compatibility",
+        "Mini LED backlight"
+      ],
+      "status": "found",
+      "confidence": 0.89,
+      "provenanceType": "translated",
+      "criticidad": "claim",
+      "evidence": [
+        {
+          "sourceId": "src-ficha-tecnica-c755",
+          "fragmentId": "frg-0014",
+          "page": 2,
+          "slide": null,
+          "quote": "Native 144Hz VRR panel with Game Master 3.0",
+          "relation": "soporta"
+        },
+        {
+          "sourceId": "src-ficha-tecnica-c755",
+          "fragmentId": "frg-0016",
+          "page": 2,
+          "slide": null,
+          "quote": "Mini LED backlight, ALLM supported",
+          "relation": "soporta"
+        }
+      ]
+    },
+    "rtbs": {
+      "value": [
+        "The spec sheet certifies a native 144Hz panel, not interpolated",
+        "Mini LED delivers finer contrast zone control than conventional LED"
+      ],
+      "status": "found",
+      "confidence": 0.86,
+      "provenanceType": "translated",
+      "criticidad": "claim",
+      "evidence": [
+        {
+          "sourceId": "src-ficha-tecnica-c755",
+          "fragmentId": "frg-0014",
+          "page": 2,
+          "slide": null,
+          "quote": "Native 144Hz VRR panel with Game Master 3.0",
+          "relation": "soporta"
+        }
+      ]
+    },
+    "especificaciones": {
+      "value": null,
+      "status": "conflict",
+      "confidence": 0.41,
+      "provenanceType": "translated",
+      "criticidad": "claim",
+      "evidence": [
+        {
+          "sourceId": "src-ppt-global-c755",
+          "fragmentId": "frg-0022",
+          "page": null,
+          "slide": 11,
+          "quote": "Peak brightness: 1500 nits",
+          "relation": "soporta"
+        },
+        {
+          "sourceId": "src-ficha-tecnica-c755",
+          "fragmentId": "frg-0019",
+          "page": 3,
+          "slide": null,
+          "quote": "Peak brightness: 1300 nits (HDR)",
+          "relation": "contradice"
+        }
+      ]
+    },
+    "activos_marca": {
+      "value": ["TCL logo", "Global Play Beyond Limits narrative", "2026 brand palette"],
+      "status": "found",
+      "confidence": 0.8,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": [
+        {
+          "sourceId": "src-ppt-global-c755",
+          "fragmentId": "frg-0009",
+          "page": null,
+          "slide": 2,
+          "quote": "Global campaign narrative: Play Beyond Limits",
+          "relation": "soporta"
+        }
+      ]
+    }
+  },
+
+  "mandatorios": {
+    "value": [
+      {
+        "categoria": "mensaje",
+        "descripcion": "Any mention of 144Hz must clarify it is the panel's native refresh rate."
+      },
+      {
+        "categoria": "legal",
+        "descripcion": "Include the terms and validity notice for the seasonal promotion."
+      },
+      {
+        "categoria": "identidad",
+        "descripcion": "Logo usage per TCL 2026 brand manual; do not alter proportions or color."
+      },
+      {
+        "categoria": "producto",
+        "descripcion": "The product must appear powered on and displaying real gaming content."
+      },
+      {
+        "categoria": "canales",
+        "descripcion": "Priority on YouTube and TikTok; Instagram as support."
+      },
+      {
+        "categoria": "timing",
+        "descripcion": "No posts before in-store availability date."
+      }
+    ],
+    "status": "found",
+    "confidence": 0.87,
+    "provenanceType": "translated",
+    "criticidad": "critico",
+    "evidence": [
+      {
+        "sourceId": "src-brief-cliente-co",
+        "fragmentId": "frg-0131",
+        "page": 3,
+        "slide": null,
+        "quote": "Mandatorios: aclarar 144Hz nativos, leyenda legal de promoción, manual de marca 2026, producto encendido.",
+        "relation": "soporta"
+      }
+    ]
+  },
+
+  "mensaje_principal": {
+    "one_line": {
+      "value": "Compare the specs, not the logos.",
+      "status": "manual",
+      "confidence": null,
+      "provenanceType": "translated",
+      "criticidad": "critico",
+      "evidence": [
+        {
+          "sourceId": "src-brief-cliente-co",
+          "fragmentId": "frg-0120",
+          "page": 1,
+          "slide": null,
+          "quote": "Objetivo: generar interés y consideración en gamers que hoy no evalúan TCL.",
+          "relation": "contexto"
+        }
+      ]
+    },
+    "mensaje_clave": {
+      "value": "The C755 competes on specifications with TVs from more expensive brands.",
+      "status": "manual",
+      "confidence": null,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": []
+    },
+    "beneficio_diferencial": {
+      "value": "Native 144Hz and Mini LED at a price below direct competitors.",
+      "status": "found",
+      "confidence": 0.83,
+      "provenanceType": "translated",
+      "criticidad": "claim",
+      "evidence": [
+        {
+          "sourceId": "src-ficha-tecnica-c755",
+          "fragmentId": "frg-0014",
+          "page": 2,
+          "slide": null,
+          "quote": "Native 144Hz VRR panel with Game Master 3.0",
+          "relation": "soporta"
+        }
+      ]
+    },
+    "tono": {
+      "value": "Direct, technical and without condescension. Speaks as an equal to someone who knows specs.",
+      "status": "manual",
+      "confidence": null,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": []
+    }
+  },
+
+  "accion_kpis": {
+    "accion_esperada": {
+      "value": "Get gamers to look up the C755 spec sheet and add it to their purchase comparison.",
+      "status": "manual",
+      "confidence": null,
+      "provenanceType": "translated",
+      "criticidad": "critico",
+      "evidence": [
+        {
+          "sourceId": "src-brief-cliente-co",
+          "fragmentId": "frg-0126",
+          "page": 2,
+          "slide": null,
+          "quote": "Acción esperada: buscar más información y visitar el e-commerce.",
+          "relation": "soporta"
+        }
+      ]
+    },
+    "criterio_exito": {
+      "value": "The idea will be successful if traffic to the C755 product page grows steadily throughout the campaign.",
+      "status": "manual",
+      "confidence": null,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": []
+    },
+    "kpis": {
+      "value": [
+        "Total reach on YouTube and TikTok",
+        "Engagement rate per asset",
+        "Clicks to e-commerce",
+        "Product page visits"
+      ],
+      "status": "found",
+      "confidence": 0.85,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": [
+        {
+          "sourceId": "src-brief-cliente-co",
+          "fragmentId": "frg-0128",
+          "page": 2,
+          "slide": null,
+          "quote": "KPI: alcance, engagement, clics al sitio y visitas a ficha de producto.",
+          "relation": "soporta"
+        }
+      ]
+    }
+  },
+
+  "entregable_creativo": {
+    "entregables": {
+      "value": [
+        "1 main review video per KOL",
+        "3 short vertical assets per KOL",
+        "1 set of product-in-use photos"
+      ],
+      "status": "manual",
+      "confidence": null,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": []
+    },
+    "canales": {
+      "value": ["YouTube", "TikTok", "Instagram"],
+      "status": "found",
+      "confidence": 0.9,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": [
+        {
+          "sourceId": "src-brief-cliente-co",
+          "fragmentId": "frg-0130",
+          "page": 3,
+          "slide": null,
+          "quote": "Canales obligatorios: YouTube y TikTok. Instagram opcional.",
+          "relation": "soporta"
+        }
+      ]
+    },
+    "formatos": {
+      "value": ["Horizontal video 16:9", "Vertical video 9:16", "Photo 4:5"],
+      "status": "manual",
+      "confidence": null,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": []
+    },
+    "alcance": {
+      "value": null,
+      "status": "not_found",
+      "confidence": null,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": []
+    },
+    "desafio_creativo": {
+      "value": "How might we get a gamer who already picked their brand to reopen the comparison?",
+      "status": "manual",
+      "confidence": null,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": []
+    }
+  },
+
+  "practico": {
+    "fecha_inicio": {
+      "value": "2026-10-15",
+      "status": "found",
+      "confidence": 0.92,
+      "provenanceType": "translated",
+      "criticidad": "critico",
+      "evidence": [
+        {
+          "sourceId": "src-brief-cliente-co",
+          "fragmentId": "frg-0133",
+          "page": 3,
+          "slide": null,
+          "quote": "Inicio de campaña: 15 de octubre de 2026.",
+          "relation": "soporta"
+        }
+      ]
+    },
+    "fecha_fin": {
+      "value": "2026-12-24",
+      "status": "found",
+      "confidence": 0.92,
+      "provenanceType": "translated",
+      "criticidad": "critico",
+      "evidence": [
+        {
+          "sourceId": "src-brief-cliente-co",
+          "fragmentId": "frg-0133",
+          "page": 3,
+          "slide": null,
+          "quote": "Cierre: 24 de diciembre de 2026.",
+          "relation": "soporta"
+        }
+      ]
+    },
+    "hitos": {
+      "value": [
+        "R1 — scripts delivery: September 25",
+        "R2 — video delivery: October 8",
+        "Publication: from October 15"
+      ],
+      "status": "manual",
+      "confidence": null,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": []
+    },
+    "presupuesto": {
+      "value": null,
+      "status": "not_found",
+      "confidence": null,
+      "provenanceType": "translated",
+      "criticidad": "informativo",
+      "evidence": []
+    },
+    "restricciones": {
+      "value": [
+        "Do not mention competing brands by name",
+        "Do not publish before in-store availability",
+        "Do not use the global launch date without confirmation from TCL Colombia"
+      ],
+      "status": "found",
+      "confidence": 0.88,
+      "provenanceType": "translated",
+      "criticidad": "critico",
+      "evidence": [
+        {
+          "sourceId": "src-brief-cliente-co",
+          "fragmentId": "frg-0134",
+          "page": 3,
+          "slide": null,
+          "quote": "No mencionar competencia por nombre. No publicar antes de disponibilidad en PDV.",
+          "relation": "soporta"
+        }
+      ]
+    }
+  }
+}

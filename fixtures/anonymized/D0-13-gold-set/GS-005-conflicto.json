@@ -1,0 +1,59 @@
+{
+  "id": "GS-005",
+  "nombre": "Contradicción entre PPT global y ficha técnica",
+  "origen": "sintetico",
+  "justificacion_sintetico": "El material real disponible aún no se ha revisado en busca de contradicciones. Este borde debe verificarse sí o sí porque la regla de §9.4 ('si dos fuentes se contradicen, crear una pregunta de conflicto') es lo que impide que el sistema elija en silencio un valor sobre otro.",
+  "mide": ["IA-03", "IA-04"],
+
+  "entrada": {
+    "fuentes": [
+      {
+        "sourceId": "src-ppt-global-demo",
+        "tipo": "ppt_global",
+        "fragmentos": [
+          {
+            "fragmentId": "frg-a01",
+            "slide": 11,
+            "text": "Peak brightness: 1500 nits. HDR performance leader in its segment."
+          }
+        ]
+      },
+      {
+        "sourceId": "src-ficha-tecnica-demo",
+        "tipo": "ficha_tecnica",
+        "fragmentos": [
+          {
+            "fragmentId": "frg-b01",
+            "page": 3,
+            "text": "Peak brightness: 1300 nits (HDR). Measured under standard conditions."
+          }
+        ]
+      }
+    ],
+    "campo_solicitado": "marca_producto.especificaciones"
+  },
+
+  "salida_esperada": {
+    "status": "conflict",
+    "value": null,
+    "criticidad": "claim",
+    "evidence_minima": 2,
+    "evidence_debe_incluir": ["frg-a01", "frg-b01"],
+    "genera_local_question": true,
+    "local_question_esperada": {
+      "key": "marca_producto.especificaciones",
+      "reason_contiene": ["contradicción", "1500", "1300"],
+      "status": "pendiente"
+    }
+  },
+
+  "criterios_de_fallo": [
+    "Elegir uno de los dos valores sin marcar conflicto",
+    "Promediar o reconciliar los valores",
+    "Marcar found con una sola evidencia",
+    "No generar la pregunta local",
+    "Marcar not_found (el dato SÍ existe, el problema es que existe dos veces distinto)"
+  ],
+
+  "nota": "El último criterio de fallo es el más sutil: not_found y conflict describen situaciones distintas y confundirlos oculta el problema en lugar de exponerlo."
+}

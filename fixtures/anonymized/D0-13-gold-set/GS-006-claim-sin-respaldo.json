@@ -1,0 +1,52 @@
+{
+  "id": "GS-006",
+  "nombre": "Claim sin respaldo en ninguna fuente",
+  "origen": "sintetico",
+  "justificacion_sintetico": "Verifica el umbral de §15 ('claims y datos técnicos con evidencia: 100%') desde el lado del bloqueo: no basta con que los claims extraídos tengan evidencia, hay que comprobar que un claim sin respaldo no logra colarse hasta la aprobación.",
+  "mide": ["IA-03", "IA-04"],
+
+  "entrada": {
+    "fuentes": [
+      {
+        "sourceId": "src-ficha-parcial",
+        "tipo": "ficha_tecnica",
+        "fragmentos": [
+          {
+            "fragmentId": "frg-d01",
+            "page": 1,
+            "text": "Demo QLED 55\". Resolution: 4K UHD. Refresh rate: 120Hz."
+          }
+        ]
+      }
+    ],
+    "brief_parcial_con_claim_manual": {
+      "marca_producto.beneficio_principal": {
+        "value": "El mejor televisor gaming del mercado colombiano.",
+        "status": "manual",
+        "provenanceType": "manual_local",
+        "criticidad": "claim",
+        "evidence": []
+      }
+    },
+    "accion_solicitada": "transicion_a_approved"
+  },
+
+  "salida_esperada": {
+    "transicion_permitida": false,
+    "error_esperado": {
+      "code": "BRIEF_INVALID_TRANSITION",
+      "message_contiene": ["evidencia", "marca_producto.beneficio_principal"]
+    },
+    "campos_bloqueantes": ["marca_producto.beneficio_principal"],
+    "sugerencia_al_usuario": "Aportar evidencia o reclasificar el campo como informativo si no es una afirmación verificable."
+  },
+
+  "criterios_de_fallo": [
+    "Permitir la transición a approved",
+    "Advertir sin bloquear",
+    "Reclasificar automáticamente el campo a informativo para dejarlo pasar",
+    "Generar evidencia inventada para satisfacer la regla"
+  ],
+
+  "nota": "El tercer y cuarto criterio de fallo describen 'soluciones' que satisfacen la métrica destruyendo su propósito. La métrica de groundedness solo significa algo si el sistema prefiere bloquear antes que fabricar el respaldo."
+}

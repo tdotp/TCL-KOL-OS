@@ -1,0 +1,10 @@
+node_modules
+dist
+.next
+coverage
+.agents
+.claude
+package-lock.json
+docs/product/D0-10-prototipo
+*.md
+docs/product/brief-schema

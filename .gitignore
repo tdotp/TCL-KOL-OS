@@ -1,0 +1,48 @@
+# Dependencias
+node_modules/
+.venv/
+__pycache__/
+*.py[cod]
+
+# Configuración local — NUNCA se sube (§27: ninguna credencial en Git)
+.env
+.env.local
+.env.*.local
+*.pem
+*-service-account*.json
+
+# Compilación
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Pruebas y herramientas
+coverage/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.eslintcache
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Editores
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Skills de agentes instaladas con `npx skills add`.
+# No son código del proyecto: `skills-lock.json` las hace reproducibles.
+.agents/
+.claude/*
+!.claude/launch.json
+
+# Material operativo real: contiene datos personales de KOL (DEC-013).
+# Se analiza localmente, no se versiona.
+/fixtures/real/
+*.xlsx
+*.pptx
+!docs/**/*.xlsx
