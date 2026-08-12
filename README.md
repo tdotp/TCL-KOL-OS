@@ -2,7 +2,7 @@
 
 Plataforma interna de SmartPR para coordinar campañas de influencers (KOL) de TCL, desde la recepción de la estrategia global hasta el cierre y medición de cada campaña.
 
-**Estado:** MVP 1 · Sprint 0 completado (base del repositorio)
+**Estado:** MVP 1 · Sprint 1 completado (identidad, campañas y aislamiento verificado)
 **Documento rector:** [`TCL_KOL_OS_DOCUMENTO_MAESTRO_EJECUCION.md`](TCL_KOL_OS_DOCUMENTO_MAESTRO_EJECUCION.md)
 
 ---
@@ -193,14 +193,13 @@ Todas las variables están documentadas en [`.env.example`](.env.example).
 | Limitación | Detalle |
 |---|---|
 | **Sin backup automático** | Riesgo aceptado en ADR-005 mientras el sistema corra en local. Mitigación mínima: `pg_dump` manual antes de cada sesión |
-| **Sin persistencia todavía** | El Sprint 0 entrega el dominio y el cableado; las tablas llegan en el Sprint 1 |
-| **Sin autenticación** | OIDC entra en el Sprint 1 (Épica E2) |
+| **OIDC no conectado** | El adaptador está listo; faltan las credenciales de Google Workspace. En desarrollo se usa `AUTH_PROVIDER=dev` |
 | **Tiempo de ciclo del brief sin línea base** | Ver [`D0-14`](docs/product/D0-14-linea-base.md) §8 |
 
 ---
 
 ## Siguiente incremento
 
-**Sprint 1 — dominio y acceso** (Épicas E2 y E3): login OIDC, organizaciones y roles, campañas y productos, auditoría base.
+**Sprint 2 — fuentes documentales** (Épica E4): carga y vinculación de archivos, hash, procesamiento asíncrono y parsers de PPTX, PDF y DOCX con localización de página y diapositiva.
 
-Demo esperada: iniciar sesión, crear una campaña, e **intentar acceder a una campaña de otra organización y comprobar que falla**.
+Demo esperada: cargar un PPT real y verlo procesarse **sin bloquear la interfaz**.

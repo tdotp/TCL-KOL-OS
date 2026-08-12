@@ -11,3 +11,6 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Búsqueda textual con tolerancia a errores, complemento del vectorial.
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+-- Correos insensibles a mayúsculas: el login no puede depender de cómo se escriba.
+CREATE EXTENSION IF NOT EXISTS citext;

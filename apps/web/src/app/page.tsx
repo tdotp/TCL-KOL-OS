@@ -1,81 +1,72 @@
-/**
- * Página de verificación del Sprint 0.
- *
- * Existe para demostrar que el cableado funciona: la aplicación web consume
- * `packages/domain` y las reglas de negocio se ejecutan de verdad.
- * Se reemplaza por el inicio operativo (UI-02) en el Sprint 1.
- */
+import { redirect } from 'next/navigation';
+import { listAudit, getPool, listCampaigns } from '@tcl-kol-os/db';
+import { Encabezado } from '@/components/Encabezado';
+import { currentUser } from '@/lib/session';
 
-import { TRANSITIONS, actionsFor, allowedTransitions } from '@tcl-kol-os/domain';
-import type { Role, User } from '@tcl-kol-os/domain';
+export const dynamic = 'force-dynamic';
 
-const DEMO_USER: User = {
-  id: 'usr-demo',
-  email: 'demo@smartpr.co',
-  name: 'Usuario piloto',
-  organizationId: 'org-smartpr',
-  role: 'admin',
-  status: 'activo',
-};
+/** UI-02 · Inicio operativo: qué está pendiente, sin tener que buscarlo. */
+export default async function Home() {
+  const user = await currentUser();
+  if (user === undefined) redirect('/login');
 
-const card: React.CSSProperties = {
-  background: '#fff',
-  border: '1px solid #dfe3e8',
-  borderRadius: 8,
-  padding: 20,
-  marginBottom: 16,
-};
-
-export default function Home() {
-  const roles: Role[] = ['admin', 'director', 'consultor', 'analista', 'legal', 'cliente'];
+  const campanas = await listCampaigns(user);
+  const recientes = campanas.ok ? campanas.value.slice(0, 5) : [];
+  const actividad = await listAudit(getPool(), user.organizationId, 6);
 
   return (
-    <main style={{ maxWidth: 820, margin: '0 auto', padding: '40px 24px' }}>
-      <h1 style={{ fontSize: 26, marginBottom: 4 }}>TCL KOL OS</h1>
-      <p style={{ color: '#5c6570', marginTop: 0 }}>
-        Sprint 0 — base del repositorio. El dominio está cableado y ejecutándose.
-      </p>
+    <>
+      <Encabezado user={user} />
+      <main>
+        <h1>Inicio</h1>
+        <p className="sub">{campanas.ok ? campanas.value.length : 0} campaña(s) en tu organización.</p>
 
-      <div style={card}>
-        <h2 style={{ fontSize: 14, textTransform: 'uppercase', color: '#5c6570', letterSpacing: '.05em' }}>
-          Máquina de estados del brief
-        </h2>
-        <p style={{ margin: '0 0 8px' }}>
-          <strong>{TRANSITIONS.length}</strong> transiciones declaradas, cada una con rol y guardas.
-        </p>
-        <p style={{ margin: 0, fontSize: 14 }}>
-          Desde <code>internal_review</code>, un <strong>director</strong> puede ir a:{' '}
-          <code>{allowedTransitions('internal_review', { ...DEMO_USER, role: 'director' }).join(', ')}</code>
-        </p>
-        <p style={{ margin: '4px 0 0', fontSize: 14 }}>
-          Un <strong>consultor</strong>, en cambio:{' '}
-          <code>
-            {allowedTransitions('internal_review', { ...DEMO_USER, role: 'consultor' }).join(', ') ||
-              '(ninguna)'}
-          </code>{' '}
-          — no puede aprobar internamente.
-        </p>
-      </div>
+        <div className="card">
+          <h2>Campañas recientes</h2>
+          {recientes.length === 0 ? (
+            <p className="vacio">
+              Todavía no hay campañas. <a href="/campanas/nueva">Crear la primera</a>.
+            </p>
+          ) : (
+            <table>
+              <tbody>
+                {recientes.map((c) => (
+                  <tr key={c.id}>
+                    <td>
+                      <a href={`/campanas/${c.id}`}>{c.name}</a>
+                    </td>
+                    <td>{c.category ?? '—'}</td>
+                    <td>
+                      <span className={`pill ${c.status === 'activa' ? 'ok' : ''}`}>{c.status}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
 
-      <div style={card}>
-        <h2 style={{ fontSize: 14, textTransform: 'uppercase', color: '#5c6570', letterSpacing: '.05em' }}>
-          Permisos por rol
-        </h2>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-          <tbody>
-            {roles.map((role) => (
-              <tr key={role} style={{ borderBottom: '1px solid #dfe3e8' }}>
-                <td style={{ padding: '7px 0', fontWeight: 600, width: 110 }}>{role}</td>
-                <td style={{ padding: '7px 0', color: '#5c6570' }}>{actionsFor(role).length} acciones</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <p style={{ fontSize: 13, color: '#5c6570' }}>
-        Próximo incremento: Sprint 1 — identidad, organizaciones y campañas (épicas E2 y E3).
-      </p>
-    </main>
+        <div className="card">
+          <h2>Actividad</h2>
+          {actividad.length === 0 ? (
+            <p className="vacio">Sin actividad registrada.</p>
+          ) : (
+            <table>
+              <tbody>
+                {actividad.map((a) => (
+                  <tr key={a.id}>
+                    <td className="mono">{a.action}</td>
+                    <td>{a.actor_name ?? '—'}</td>
+                    <td style={{ color: 'var(--muted)', fontSize: 13 }}>
+                      {new Date(a.created_at).toLocaleString('es-CO')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </main>
+    </>
   );
 }

@@ -1,0 +1,257 @@
+:root {
+  --bg: #f6f7f9;
+  --panel: #fff;
+  --ink: #16191d;
+  --muted: #5c6570;
+  --line: #dfe3e8;
+  --brand: #1f6feb;
+  --brand-soft: #e8f0fe;
+  --ok: #1a7f37;
+  --ok-soft: #e6f4ea;
+  --warn: #9a6700;
+  --warn-soft: #fff8e1;
+  --bad: #cf222e;
+  --bad-soft: #ffebe9;
+  --chip: #eef1f4;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --ink: #e6edf3;
+    --muted: #8b949e;
+    --line: #30363d;
+    --brand: #4493f8;
+    --brand-soft: #0d2d6b;
+    --ok: #3fb950;
+    --ok-soft: #0f2f17;
+    --warn: #d29922;
+    --warn-soft: #3a2d06;
+    --bad: #f85149;
+    --bad-soft: #3d1518;
+    --chip: #21262d;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font: 15px/1.55 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+a {
+  color: var(--brand);
+}
+
+header.top {
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+header.top .marca {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+header.top nav {
+  display: flex;
+  gap: 16px;
+  flex: 1;
+  font-size: 14px;
+}
+
+header.top nav a {
+  text-decoration: none;
+  color: var(--muted);
+}
+
+header.top nav a:hover {
+  color: var(--ink);
+}
+
+header.top .quien {
+  font-size: 13px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+main {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 28px 24px 60px;
+}
+
+h1 {
+  font-size: 23px;
+  margin: 0 0 4px;
+}
+
+.sub {
+  color: var(--muted);
+  margin: 0 0 22px;
+  font-size: 14px;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px;
+  margin-bottom: 16px;
+}
+
+.card h2 {
+  margin: 0 0 12px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+td {
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+.pill {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 99px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--chip);
+  color: var(--muted);
+}
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.bad { background: var(--bad-soft); color: var(--bad); }
+.pill.info { background: var(--brand-soft); color: var(--brand); }
+
+.btn {
+  display: inline-block;
+  padding: 8px 15px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.btn.pri {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.fld {
+  margin-bottom: 14px;
+}
+
+.fld label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+
+.fld input,
+.fld select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+}
+
+.g2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.aviso {
+  border-left: 3px solid var(--warn);
+  background: var(--warn-soft);
+  padding: 11px 14px;
+  border-radius: 0 6px 6px 0;
+  font-size: 13.5px;
+  margin-bottom: 16px;
+}
+
+.aviso.error {
+  border-color: var(--bad);
+  background: var(--bad-soft);
+}
+
+.aviso strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+}
+
+.vacio {
+  color: var(--muted);
+  font-size: 14px;
+  padding: 24px 0;
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .g2 {
+    grid-template-columns: 1fr;
+  }
+}

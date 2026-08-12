@@ -4,6 +4,39 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [No publicado]
 
+### Sprint 1 — Dominio y acceso · 11 de agosto de 2026
+
+Épicas E2 (identidad y autorización) y E3 (campañas y productos).
+
+#### Añadido
+
+- **`packages/db`** — acceso a datos que *aplica* las políticas de `packages/domain` sin redefinirlas (ADR-008).
+- **Migraciones versionadas** (`infra/db/migrations/`) con ejecutor transaccional: una migración a medias no existe. Tablas: organizaciones, usuarios, productos, campañas, `campaign_products` y auditoría.
+- **`campaign_products`** — la relación campaña↔producto de DEC-016, con `rol`, `prioridad` y `participacion_presupuesto`, y restricción de unicidad por par.
+- **Auditoría de solo inserción**: un trigger impide `UPDATE` y `DELETE` sobre `audit_events`. Un registro que se puede editar no es auditoría.
+- **Sesión con proveedor conmutable** *(E2-1)*: `AUTH_PROVIDER=dev` para desarrollo, `oidc` para Google Workspace. En ambos casos el usuario debe existir previamente en la base — autenticarse verifica quién eres, no concede acceso.
+- **Cookie firmada** con HMAC y comparación en tiempo constante; un usuario desactivado pierde acceso sin esperar a que expire.
+- **Pantallas UI-01 a UI-05**: acceso, inicio operativo, lista de campañas, nueva campaña multiproducto y detalle *(E3-1 a E3-3)*.
+- **Aviso de reparto de presupuesto** *(E3-9)*: en vivo al crear y en el detalle. El caso real del P80 (60/20/10 = 90%) queda visible sin bloquear.
+- **17 pruebas de integración contra PostgreSQL real** *(E2-6)*, incluidas las de IDOR, escalamiento de rol e inmutabilidad de la auditoría.
+- **Seed** con tres organizaciones: sin una segunda organización no se puede demostrar el aislamiento.
+
+#### Corregido
+
+- Para **crear** o **listar** no hay recurso cuya existencia proteger, así que la respuesta correcta es `FORBIDDEN_ROLE`, no `RESOURCE_NOT_FOUND`. Lo detectó una prueba de integración; el código estaba mal, no la expectativa.
+- `NODE_ENV` deja de declararse en `.env`: Next.js lo fija por comando y declararlo manualmente rompía el build de producción.
+
+#### Verificado en el navegador
+
+Abrir por URL una campaña de otra organización devuelve **404**, idéntico a una campaña inexistente. La campaña del P80 muestra sus tres productos con rol y prioridad, y el aviso de que el reparto suma 90%.
+
+#### Pendiente
+
+- OIDC real: el adaptador está listo, faltan las credenciales de Google Workspace.
+- Sin backup automático: riesgo aceptado en ADR-005.
+
+---
+
 ### Sprint 0 — Base del repositorio · 11 de agosto de 2026
 
 Épica E1 del backlog de MVP 1 ([D0-11](docs/product/D0-11-backlog-mvp1.md)).

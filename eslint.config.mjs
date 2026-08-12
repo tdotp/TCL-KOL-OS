@@ -62,4 +62,22 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'off',
     },
   },
+
+  // Scripts de línea de comandos: `console` ES su interfaz de usuario, no una
+  // traza olvidada. La prohibición existe para el código de servidor, donde
+  // los logs deben ser estructurados y llevar requestId (Épica E12-3).
+  {
+    files: ['packages/db/src/migrate.ts', 'packages/db/src/seed.ts'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+
+  // Archivos de configuración: corren en Node, fuera del bundle.
+  {
+    files: ['*.config.mjs', '*.config.ts', '**/next.config.mjs'],
+    languageOptions: {
+      globals: { process: 'readonly', __dirname: 'readonly' },
+    },
+  },
 );
