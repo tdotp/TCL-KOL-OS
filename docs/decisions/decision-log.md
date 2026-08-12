@@ -265,6 +265,18 @@ El material operativo entregado por el product owner (ver [D0-14](../product/D0-
   El criterio de selección **no es el precio**: un modelo que falla GS-004 (inventa un dato ausente) o GS-005 (elige entre fuentes contradictorias) no sirve para el nivel eficiente por barato que sea, porque rompe la regla de §9.4 y ninguna rebaja compensa eso.
 - **Alternativas consideradas:** (1) un proveedor directo —descartada: obligaría a un adaptador por proveedor y a negociar embeddings aparte; (2) modelos fijos en código —descartada: contradice E11-1 e impide medir; (3) modelos locales —descartada por ahora: el equipo corre en una máquina de trabajo, no hay GPU dedicada.
 - **Consecuencia operativa:** la clave vive únicamente en el `.env` local, que está en `.gitignore`. Nunca se escribe en el repositorio ni se comparte por chat.
+- **Niveles adoptados tras medir** (12 de agosto de 2026, evidencia en [D0-13 anexo](../product/D0-13-validacion-niveles.md)):
+
+  | Nivel | Modelo | Aciertos | Costo |
+  |---|---|:--:|---:|
+  | eficiente | `google/gemini-2.5-flash-lite` | 3/4 | $0.00043 |
+  | equilibrado | `anthropic/claude-haiku-4.5` | 4/4 | $0.00692 |
+  | avanzado | `anthropic/claude-sonnet-5` | 4/4 | $0.02378 |
+  | embeddings | `openai/text-embedding-3-small` | — | 1536 dim |
+
+  Los siete modelos probados respetan `not_found` y resisten la inyección de prompt. La diferencia está en juzgar un claim sin respaldo, que solo los de Anthropic detectan — por eso el nivel equilibrado, que hace tareas de juicio, usa haiku.
+
+  **El nivel avanzado no aporta con la evidencia actual**: sonnet-5 empata con haiku por 3,4 veces el costo. Se configura porque `resolver_ambiguedad` lo declara, pero conviene revisarlo cuando el gold set tenga casos más difíciles.
 - **Responsable de aprobación:** Gerardo Calambás.
 
 ---
