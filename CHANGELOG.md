@@ -4,6 +4,49 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [No publicado]
 
+### Sprint 2 — Fuentes documentales · 12 de agosto de 2026
+
+Épica E4. Demo: cargar un PPT real y verlo procesarse **sin bloquear la interfaz**.
+
+#### Verificado con material real
+
+```
+25.0 MB · la carga responde en 88 ms · 42 fragmentos · 30 diapositivas
+```
+
+El parseo tarda ~6 s, pero ocurre en el worker. La interfaz devuelve el control en 88 ms.
+
+#### Añadido
+
+- **Parsers con localización** *(E4-5, E4-6)*: PPTX por diapositiva —incluidas tablas, formas agrupadas y notas del presentador—, PDF y DOCX por página. Un `Fragment` sin página ni diapositiva **no se puede construir**: sin ubicación no hay evidencia citable (§9.4).
+- **Validación por contenido real** *(E4-1, caso S-05)*: se leen los primeros bytes, no la extensión ni el `Content-Type`. Un ejecutable renombrado a `.pdf` se rechaza. Los OOXML se distinguen entre sí por su contenido interno, porque todos son ZIP.
+- **Hash SHA-256 y detección de duplicados** *(E4-3)*: el mismo contenido con otro nombre se detecta y el mensaje nombra el archivo original.
+- **Cola en PostgreSQL** con `FOR UPDATE SKIP LOCKED` *(ADR-009)*, reintentos con backoff 1/5/15 min y límite de intentos *(E4-9, E4-10)*.
+- **Idempotencia**: reprocesar borra los fragmentos previos en la misma transacción que inserta los nuevos. Un índice parcial impide dos jobs activos por documento.
+- **UI-06 y UI-07**: carga de fuentes y estado de procesamiento que se refresca solo mientras hay trabajo — la prueba visible de que la página sigue viva.
+- **Worker resiliente** *(casos R-02, R-04)*: si la base desaparece, reconecta con backoff en lugar de morir o quedarse mudo.
+- **21 pruebas nuevas** del worker (parsers y validación) y **13** de carga contra base real.
+
+#### Corregido
+
+Tres fallos encontrados al probar de verdad, ninguno visible en los tests unitarios:
+
+- **La ruta de almacenamiento se resolvía contra `process.cwd()`**, así que el mismo archivo caía en directorios distintos según quién lo guardara y el worker no lo encontraba. Ahora se ancla a la raíz del monorepo.
+- **El worker recibía la referencia relativa del archivo** y la usaba como ruta absoluta.
+- **El sondeo dejaba una transacción abierta** cuando no había trabajo. La conexión quedaba `idle in transaction`, reteniendo el snapshot inicial: el worker arrancaba bien y **no volvía a ver ningún job**. Falla silenciosa, la peor clase.
+
+#### Decisiones
+
+- **DEC-017** — El reparto de presupuesto sale del alta de campaña: es un dato del brief del cliente, no de la configuración. Se conserva en el modelo; cambia quién lo aporta y cuándo.
+- **ADR-009** — La cola vive en PostgreSQL, no en Redis (coherente con ADR-007).
+
+#### Pendiente
+
+- OCR de imágenes y PDF escaneado *(E4-7)*.
+- Google Drive *(E4-2)*: la interfaz de almacenamiento está lista, faltan las credenciales.
+
+---
+
 ### Sprint 1 — Dominio y acceso · 11 de agosto de 2026
 
 Épicas E2 (identidad y autorización) y E3 (campañas y productos).

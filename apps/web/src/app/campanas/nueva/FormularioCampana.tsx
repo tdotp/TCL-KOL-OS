@@ -13,21 +13,18 @@ interface Producto {
 /**
  * Formulario de campaña multiproducto (DEC-016, historia E3-8).
  *
- * El reparto de presupuesto se muestra en vivo: si no suma 100%, se avisa sin
- * bloquear (historia E3-9). El brief P80 real declara 60/20/10 = 90%, y eso
- * puede ser deliberado — el sistema lo hace visible en vez de decidirlo.
+ * Aquí solo se eligen los productos. El reparto de presupuesto NO se pide:
+ * al crear la campaña ese dato todavía no existe —llega en el brief del
+ * cliente— y pedirlo obligaría a inventarlo. Se extrae del brief cuando esté
+ * (DEC-017).
  */
 export function FormularioCampana({ productos }: { productos: readonly Producto[] }) {
   const [estado, accion, enviando] = useActionState(crearCampana, {});
   const [elegidos, setElegidos] = useState<string[]>([]);
-  const [reparto, setReparto] = useState<Record<string, string>>({});
 
   const alternar = (id: string) => {
     setElegidos((previos) => (previos.includes(id) ? previos.filter((p) => p !== id) : [...previos, id]));
   };
-
-  const suma = elegidos.reduce((acc, id) => acc + (Number(reparto[id]) || 0), 0);
-  const repartoDeclarado = elegidos.some((id) => (reparto[id] ?? '') !== '');
 
   return (
     <form action={accion}>
@@ -67,8 +64,7 @@ export function FormularioCampana({ productos }: { productos: readonly Producto[
       <div className="card">
         <h2>Productos ({elegidos.length})</h2>
         <p className="sub" style={{ marginBottom: 12 }}>
-          El primero que selecciones queda como <strong>flagship</strong>. El reparto de presupuesto es
-          opcional.
+          El primero que selecciones queda como <strong>flagship</strong>.
         </p>
 
         <table>
@@ -101,33 +97,11 @@ export function FormularioCampana({ productos }: { productos: readonly Producto[
                       </span>
                     )}
                   </td>
-                  <td style={{ width: 120 }}>
-                    {activo && (
-                      <input
-                        name={`participacion_${p.id}`}
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="1"
-                        placeholder="% presup."
-                        value={reparto[p.id] ?? ''}
-                        onChange={(e) => setReparto((r) => ({ ...r, [p.id]: e.target.value }))}
-                        style={{ padding: '5px 8px', fontSize: 13 }}
-                      />
-                    )}
-                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
-
-        {repartoDeclarado && Math.abs(suma - 100) > 0.01 && (
-          <div className="aviso" style={{ marginTop: 14, marginBottom: 0 }}>
-            <strong>El reparto suma {suma}%, no 100%</strong>
-            Puede ser deliberado. Se registra tal cual y queda visible en el detalle de la campaña.
-          </div>
-        )}
       </div>
 
       <div className="row">

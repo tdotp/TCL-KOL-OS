@@ -9,4 +9,6 @@ export * from './client.ts';
 export * from './audit.ts';
 export * from './campaigns.ts';
 export * from './users.ts';
+export * from './storage.ts';
+export * from './sources.ts';
 export { migrate } from './migrate.ts';

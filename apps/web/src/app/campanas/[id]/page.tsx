@@ -89,6 +89,18 @@ export default async function DetalleCampanaPage({
         </div>
 
         <div className="card">
+          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
+            <h2 style={{ margin: 0 }}>Fuentes</h2>
+            <a className="btn" href={`/campanas/${campaign.id}/fuentes`}>
+              Ver y cargar fuentes
+            </a>
+          </div>
+          <p className="sub" style={{ margin: 0 }}>
+            PPT de TCL China, fichas técnicas y briefs del cliente: el material del que sale el brief.
+          </p>
+        </div>
+
+        <div className="card">
           <h2>Brief</h2>
           <p className="vacio">
             El brief se construye en el Sprint 3. Las fuentes y la extracción llegan en el Sprint 2.

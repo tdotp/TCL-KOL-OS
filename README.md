@@ -2,7 +2,7 @@
 
 Plataforma interna de SmartPR para coordinar campañas de influencers (KOL) de TCL, desde la recepción de la estrategia global hasta el cierre y medición de cada campaña.
 
-**Estado:** MVP 1 · Sprint 1 completado (identidad, campañas y aislamiento verificado)
+**Estado:** MVP 1 · Sprint 2 completado (fuentes documentales procesándose en segundo plano)
 **Documento rector:** [`TCL_KOL_OS_DOCUMENTO_MAESTRO_EJECUCION.md`](TCL_KOL_OS_DOCUMENTO_MAESTRO_EJECUCION.md)
 
 ---
@@ -194,12 +194,14 @@ Todas las variables están documentadas en [`.env.example`](.env.example).
 |---|---|
 | **Sin backup automático** | Riesgo aceptado en ADR-005 mientras el sistema corra en local. Mitigación mínima: `pg_dump` manual antes de cada sesión |
 | **OIDC no conectado** | El adaptador está listo; faltan las credenciales de Google Workspace. En desarrollo se usa `AUTH_PROVIDER=dev` |
+| **Google Drive no conectado** | La interfaz de almacenamiento está lista; en desarrollo los originales van al sistema de archivos |
+| **Sin OCR** | Las imágenes y los PDF escaneados se conservan pero no se extraen (E4-7) |
 | **Tiempo de ciclo del brief sin línea base** | Ver [`D0-14`](docs/product/D0-14-linea-base.md) §8 |
 
 ---
 
 ## Siguiente incremento
 
-**Sprint 2 — fuentes documentales** (Épica E4): carga y vinculación de archivos, hash, procesamiento asíncrono y parsers de PPTX, PDF y DOCX con localización de página y diapositiva.
+**Sprint 3 — extracción** (Épicas E5 y E11): fragmentos con embeddings, extracción estructurada contra el esquema del brief, evidencia por campo y el harness de IA con sus adaptadores.
 
-Demo esperada: cargar un PPT real y verlo procesarse **sin bloquear la interfaz**.
+Demo esperada: un claim extraído que **abre su diapositiva de origen**.

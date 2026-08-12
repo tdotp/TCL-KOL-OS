@@ -11,7 +11,8 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
-import { archiveCampaign, createCampaign, findUserByEmail } from '@tcl-kol-os/db';
+import { archiveCampaign, createCampaign, findUserByEmail, retrySource, uploadSource } from '@tcl-kol-os/db';
+import type { SourceType } from '@tcl-kol-os/db';
 import { SESSION_COOKIE, SESSION_MAX_AGE, authProvider, buildSessionValue, currentUser } from './session.ts';
 
 export async function iniciarSesion(_previo: unknown, formData: FormData): Promise<{ error?: string }> {
@@ -62,18 +63,14 @@ export async function crearCampana(_previo: unknown, formData: FormData): Promis
     return { error: 'Seleccione al menos un producto (DEC-016).' };
   }
 
-  const productos = productIds.map((productId, indice) => {
-    const participacion = formData.get(`participacion_${productId}`);
-    const valor =
-      participacion === null || String(participacion).trim() === '' ? undefined : Number(participacion) / 100;
-    return {
-      productId,
-      rol: (productIds.length === 1 ? 'unico' : indice === 0 ? 'flagship' : 'secundario') as
-        'unico' | 'flagship' | 'secundario',
-      prioridad: indice + 1,
-      participacionPresupuesto: valor,
-    };
-  });
+  // El reparto de presupuesto no se pide aquí: llega del brief del cliente
+  // cuando exista (DEC-017). Pedirlo al crear la campaña obligaría a inventarlo.
+  const productos = productIds.map((productId, indice) => ({
+    productId,
+    rol: (productIds.length === 1 ? 'unico' : indice === 0 ? 'flagship' : 'secundario') as
+      'unico' | 'flagship' | 'secundario',
+    prioridad: indice + 1,
+  }));
 
   const fechaInicio = String(formData.get('startDate') ?? '').trim();
   const fechaFin = String(formData.get('endDate') ?? '').trim();
@@ -107,4 +104,56 @@ export async function archivarCampana(formData: FormData): Promise<void> {
 
   revalidatePath('/campanas');
   redirect('/campanas');
+}
+
+// ─────────────────────────── Fuentes documentales (Épica E4) ──────────────────
+
+/**
+ * Carga de una fuente (UI-06).
+ *
+ * Devuelve de inmediato: la validación y el hash son rápidos, y el
+ * procesamiento —que para un PPT de 25 MB tarda unos 6 segundos— ocurre en el
+ * worker. La interfaz nunca se bloquea (criterio de la Épica E4).
+ */
+export async function cargarFuente(
+  _previo: unknown,
+  formData: FormData,
+): Promise<{ error?: string | undefined; aviso?: string | undefined; ok?: boolean | undefined }> {
+  const user = await currentUser();
+  if (user === undefined) redirect('/login');
+
+  const campaignId = String(formData.get('campaignId') ?? '');
+  const archivo = formData.get('archivo');
+
+  if (!(archivo instanceof File) || archivo.size === 0) {
+    return { error: 'Seleccione un archivo.' };
+  }
+
+  const contenido = new Uint8Array(await archivo.arrayBuffer());
+
+  const resultado = await uploadSource(user, {
+    campaignId,
+    filename: archivo.name,
+    contenido,
+    tipoDeclarado: archivo.type === '' ? undefined : archivo.type,
+    type: (String(formData.get('tipo') ?? 'otro') || 'otro') as SourceType,
+  });
+
+  if (!resultado.ok) return { error: resultado.error.message };
+
+  revalidatePath(`/campanas/${campaignId}/fuentes`);
+  return { ok: true, aviso: resultado.value.aviso };
+}
+
+/** Reintento de un procesamiento fallido (UI-07, E4-9). */
+export async function reintentarFuente(formData: FormData): Promise<void> {
+  const user = await currentUser();
+  if (user === undefined) redirect('/login');
+
+  const sourceId = String(formData.get('sourceId') ?? '');
+  const campaignId = String(formData.get('campaignId') ?? '');
+
+  await retrySource(user, sourceId);
+  revalidatePath(`/campanas/${campaignId}/fuentes`);
+  redirect(`/campanas/${campaignId}/fuentes`);
 }

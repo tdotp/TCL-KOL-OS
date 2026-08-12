@@ -203,6 +203,28 @@ El material operativo entregado por el product owner (ver [D0-14](../product/D0-
   - Impacto estimado: 3–5 sesiones adicionales sobre D0-15, repartidas entre las épicas E3, E5, E7 y E10.
 - **Responsable de aprobación:** Gerardo Calambás.
 
+### DEC-017 — El reparto de presupuesto no se captura al crear la campaña
+
+- **Fecha:** 12 de agosto de 2026
+- **Estado:** **aprobada** — matiza DEC-016
+- **Contexto:** DEC-016 modeló `participacionPresupuesto` por producto, y el formulario de alta de campaña pedía ese porcentaje al seleccionar cada producto. Al usarlo, el product owner observó que el campo no aporta en ese momento: *"si son múltiples productos, seleccionarlos y ya. No hay que definir porcentajes de variación porque el esfuerzo sería el mismo"*.
+- **Decisión:** el formulario de campaña **solo selecciona productos**. El reparto de presupuesto se retira de la interfaz de alta.
+- **Por qué es correcto y no una simplificación:** el reparto es un dato **del brief del cliente**, no de la configuración de la campaña. En el brief P80 viene declarado por TCL (60/20/10); en el alta de campaña alguien tendría que inventarlo o copiarlo a mano antes de tener el documento. Pedir un dato antes de que exista su fuente produce exactamente el tipo de contenido que el sistema no debe generar.
+- **Qué se conserva:** la columna `campaign_products.participacion_presupuesto` y el campo `productos[].participacionPresupuesto` del esquema del brief. El dato sigue siendo real y sigue estando modelado; cambia **quién lo aporta y cuándo**: se extraerá del brief con su evidencia, en lugar de teclearse.
+- **Consecuencias:** la historia E3-9 (aviso de reparto que no suma 100%) se mantiene, pero se traslada del alta de campaña al brief. El aviso del detalle de campaña sigue funcionando con datos ya cargados.
+- **Responsable de aprobación:** Gerardo Calambás.
+
+### ADR-009 — La cola de procesamiento vive en PostgreSQL, no en Redis
+
+- **Fecha:** 12 de agosto de 2026
+- **Estado:** aprobada
+- **Contexto:** la Épica E4 exige procesamiento asíncrono con reintentos e idempotencia. La opción evidente era Redis, que ya está en el stack (§8.1).
+- **Decisión:** el estado de los jobs vive en la tabla `processing_jobs`. Los workers toman trabajo con `SELECT … FOR UPDATE SKIP LOCKED`.
+- **Por qué:** ADR-007 establece que Redis solo contiene trabajo en tránsito y que perderlo no puede perder información. Un documento cargado y pendiente de procesar **es** información de negocio: si Redis se reinicia, ese trabajo no puede desaparecer. `SKIP LOCKED` da exclusión mutua entre varios workers sin broker.
+- **Alternativas consideradas:** (1) Redis como cola con estado — descartada por contradecir ADR-007; (2) Redis como cola + PostgreSQL como respaldo — descartada por mantener dos fuentes de verdad para lo mismo.
+- **Consecuencias:** el sondeo añade latencia (1–2 s) frente a una notificación push. Es aceptable: el procesamiento de un PPT tarda segundos, no milisegundos. Si la latencia llega a importar, Redis puede añadirse como señal de despertar sin mover el estado.
+- **Responsable de aprobación:** Gerardo Calambás.
+
 ---
 
 ## Decisiones pendientes que no bloquean MVP 0

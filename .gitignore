@@ -46,3 +46,4 @@ Thumbs.db
 *.xlsx
 *.pptx
 !docs/**/*.xlsx
+.storage/
