@@ -107,7 +107,7 @@ Detalle en **[D0-03 — Flujo TO-BE](D0-03-flujo-to-be.md)**.
 | D0-08 | Modelo de datos | `../architecture/D0-08-modelo-datos.md` | 🟢 Completo — 17 entidades |
 | D0-09 | Arquitectura | `../architecture/D0-09-arquitectura.md` | 🟢 Completo + anexo de seguridad |
 | D0-10 | Prototipo navegable | `D0-10-prototipo.md` | 🟢 Completo — 13 de 13 pantallas |
-| D0-11 | Backlog MVP 1 | `D0-11-backlog-mvp1.md` | 🟢 Completo — 58 historias |
+| D0-11 | Backlog MVP 1 | `D0-11-backlog-mvp1.md` | 🟢 Completo — 115 historias |
 | D0-12 | Plan de pruebas | `D0-12-plan-pruebas.md` | 🟢 Completo — 84 casos |
 | D0-13 | Gold set inicial | `D0-13-gold-set.md` | 🟡 **Parcial** — 4 de 7 casos |
 | D0-14 | Línea base | `D0-14-linea-base.md` | 🟡 **Desbloqueado** — 5 de 7 indicadores medidos |

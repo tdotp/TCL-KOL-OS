@@ -1,7 +1,8 @@
 # D0-15 — Estimación de MVP 1
 
-**Versión:** 1 · **Fecha:** 11 de agosto de 2026 · **Estado:** propuesta para validación
-**Fuentes:** D0-11 (backlog: 58 historias), documento maestro §13 (rangos preliminares), §25 (sprints), §33 (equipo), §36 (riesgos); `docs/decisions/decision-log.md`.
+**Versión:** 2 · **Fecha:** 11 de agosto de 2026 · **Estado:** propuesta para validación
+**Cambios en la v2:** incorpora las 7 historias de DEC-016 (campañas multiproducto) y corrige el conteo total del backlog, que la v1 reportaba como 58 en lugar de 115.
+**Fuentes:** D0-11 (backlog: 115 historias), documento maestro §13 (rangos preliminares), §25 (sprints), §33 (equipo), §36 (riesgos); `docs/decisions/decision-log.md`.
 
 ---
 
@@ -21,20 +22,19 @@ Estimar en pesos y FTE un trabajo que no se ejecuta así produciría un número 
 |---|:--:|:--:|---|:--:|
 | E1 · Base del repositorio | 10 | 7 | Media — configuración, poca lógica | 2–3 |
 | E2 · Identidad y autorización | 7 | 6 | **Alta** — el aislamiento debe ser correcto a la primera | 3–4 |
-| E3 · Campañas y productos | 7 | 6 | Baja — CRUD con auditoría | 2–3 |
+| E3 · Campañas y productos | 9 | 7 | Media — CRUD, auditoría y multiproducto | 3–4 |
 | E4 · Fuentes documentales | 11 | 10 | **Alta** — parsing de tres formatos con localización | 4–6 |
-| E5 · Esquema y extracción | 9 | 9 | **Muy alta** — es el corazón del producto | 5–7 |
-| E6 · Preguntas locales | 6 | 5 | Media | 2–3 |
-| E7 · Editor de brief | 7 | 5 | **Alta** — mucha interfaz, autosave, validación en vivo | 4–5 |
+| E5 · Esquema y extracción | 10 | 10 | **Muy alta** — es el corazón del producto | 6–8 |
+| E6 · Preguntas locales | 7 | 6 | Media | 2–3 |
+| E7 · Editor de brief | 9 | 7 | **Alta** — interfaz, autosave, compartido/específico | 5–6 |
 | E8 · Versionado y aprobación | 9 | 8 | **Alta** — la inmutabilidad no admite errores | 3–5 |
 | E9 · Traducción y glosario | 7 | 6 | Media | 3–4 |
-| E10 · Exportación | 7 | 5 | Media — generación de DOCX/PDF | 3–4 |
-| E11 · Harness y observabilidad | 10 | 8 | **Alta** — adaptadores, validación, costo | 4–5 |
+| E10 · Exportación | 8 | 6 | Media — DOCX/PDF y tabla comparativa | 4–5 |
+| E11 · Harness y observabilidad | 10 | 9 | **Alta** — adaptadores, validación, costo | 4–5 |
 | E12 · Auditoría y operación | 7 | 4 | Media | 2–3 |
-| E13 · Calidad y accesibilidad | 11 | 8 | **Alta** — transversal, se acumula al final | 4–6 |
-| **Total** | **58** | **87** ⁽*⁾ | — | **41–58** |
+| E13 · Calidad y accesibilidad | 11 | 9 | **Alta** — transversal, se acumula al final | 4–6 |
+| **Total** | **115** | **95** | — | **45–62** |
 
-⁽*⁾ 44 `must`, 12 `should`, 2 `could`. La suma por épica incluye solapamiento de conteo entre prioridades.
 
 **Una "sesión"** es un bloque de trabajo enfocado que termina en algo demostrable — aproximadamente lo que cabe entre dos revisiones del product owner.
 
@@ -102,7 +102,7 @@ Todo lo de §15 más lo confirmado en el descubrimiento. **Ninguno entra sin dec
 
 CRM de influencers · revisión de guiones · análisis de video · métricas y dashboards analíticos · workflow logístico · inventario y canjes · scoring de influencers · WhatsApp automático · publicación en redes · firma electrónica · migración histórica masiva de Drive · login de aprobación para TCL · portal de influencers · soporte de idiomas más allá de ES/EN.
 
-**Única excepción ya aprobada (ADR-004):** vista de solo lectura para TCL con estado y descarga. Ya está dentro de las 58 historias, no añade alcance.
+**Única excepción ya aprobada (ADR-004):** vista de solo lectura para TCL con estado y descarga. Ya está dentro de las 115 historias, no añade alcance.
 
 ---
 
@@ -115,7 +115,7 @@ El trabajo que no puede hacer el agente, ordenado por urgencia:
 | 1 | Material de 5–10 campañas reales | **Ya** | D0-13, D0-14, supuesto 4 |
 | 2 | Decidir proveedor de IA | Antes del Sprint 3 | E5, E11 |
 | 3 | Definir qué campos hacen un brief "completo" | Antes del Sprint 3 | E5-9 |
-| 4 | Confirmar si una campaña puede tener varios productos | Antes del Sprint 1 | E3-5 |
+| ~~4~~ | ~~Confirmar si una campaña puede tener varios productos~~ | **Resuelto: DEC-016** | — |
 | 5 | Confirmar si se puede revertir una aprobación interna | Antes del Sprint 5 | E8-6 |
 | 6 | Habilitar la cuenta de servicio de Google Workspace | Antes del Sprint 2 | E4-2 |
 | 7 | Revisar cada demo de sprint | Cada 2 semanas | Todo el calendario |
@@ -130,7 +130,7 @@ El trabajo que no puede hacer el agente, ordenado por urgencia:
 | Duración | 8–12 semanas | 8–16 semanas según ritmo de revisión |
 | Inversión | COP 55–90 M | No aplica en esta fase (DEC-001) |
 | Equipo | 5–7 personas | Agente + product owner |
-| Base | Rangos de referencia | 58 historias con criterios de aceptación |
+| Base | Rangos de referencia | 115 historias con criterios de aceptación |
 | Alcance | Épicas E1–E13 | Igual, sin cambios |
 
 **El rango de duración coincide por casualidad, no por acuerdo.** La estimación preliminar suponía un equipo humano completo; esta supone un agente con revisión humana. Que ambos den un número similar no valida ninguno — solo indica que el tamaño del trabajo es consistente con lo previsto.

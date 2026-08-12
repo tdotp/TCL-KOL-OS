@@ -12,7 +12,15 @@
     "createdAt": "2026-08-11T14:22:00-05:00",
     "templateVersion": "brief-maestro-v1"
   },
-
+  "productos": [
+    {
+      "productId": "prd-tcl-c755-55",
+      "nombre": "TCL QLED C755 — 55\"",
+      "rol": "unico",
+      "prioridad": 1,
+      "participacionPresupuesto": 1.0
+    }
+  ],
   "contexto": {
     "situacion": {
       "value": "TCL entra a la temporada de fin de año en Colombia con el QLED C755 como referencia insignia de gaming. La categoría de TV premium está dominada por Samsung y LG en participación de mente, y el consumidor colombiano asocia 'gaming TV' con marcas coreanas. TCL tiene mejor relación precio-especificación pero baja consideración en el segmento.",
@@ -74,7 +82,6 @@
       ]
     }
   },
-
   "objetivo": {
     "tipo": {
       "value": "consideration",
@@ -127,7 +134,6 @@
       "evidence": []
     }
   },
-
   "target_audiencia": {
     "descripcion": {
       "value": "Gamers de consola y PC, hombres y mujeres de 22 a 38 años, urbanos, estrato 4-6, que investigan especificaciones antes de comprar y consumen reviews en YouTube y TikTok.",
@@ -164,7 +170,12 @@
       ]
     },
     "ubicacion": {
-      "value": ["Bogotá", "Medellín", "Cali", "Barranquilla"],
+      "value": [
+        "Bogotá",
+        "Medellín",
+        "Cali",
+        "Barranquilla"
+      ],
       "status": "found",
       "confidence": 0.9,
       "provenanceType": "extracted",
@@ -197,7 +208,6 @@
       "evidence": []
     }
   },
-
   "problema_insight": {
     "problema": {
       "value": "Tenemos que lograr que el gamer colombiano considere a TCL, porque hoy la marca no aparece en su lista corta aunque su producto compita en especificaciones.",
@@ -232,151 +242,148 @@
       "evidence": []
     }
   },
-
-  "marca_producto": {
-    "productId": {
-      "value": "prd-tcl-c755-55",
-      "status": "manual",
-      "confidence": null,
-      "provenanceType": "manual_local",
-      "criticidad": "informativo",
-      "evidence": []
-    },
-    "nombre_producto": {
-      "value": "TCL QLED C755 — 55\"",
-      "status": "found",
-      "confidence": 0.97,
-      "provenanceType": "extracted",
-      "criticidad": "critico",
-      "evidence": [
-        {
-          "sourceId": "src-ficha-tecnica-c755",
-          "fragmentId": "frg-0001",
-          "page": 1,
-          "slide": null,
-          "quote": "TCL C755 QLED 55\" (55C755)",
-          "relation": "soporta"
-        }
-      ]
-    },
-    "rol_marca": {
-      "value": "Retador informado: la marca que gana cuando el consumidor compara con datos.",
-      "status": "manual",
-      "confidence": null,
-      "provenanceType": "manual_local",
-      "criticidad": "informativo",
-      "evidence": []
-    },
-    "beneficio_principal": {
-      "value": "Panel QLED de 144Hz con Game Master, pensado para consolas de nueva generación.",
-      "status": "found",
-      "confidence": 0.94,
-      "provenanceType": "extracted",
-      "criticidad": "claim",
-      "evidence": [
-        {
-          "sourceId": "src-ficha-tecnica-c755",
-          "fragmentId": "frg-0014",
-          "page": 2,
-          "slide": null,
-          "quote": "Native 144Hz VRR panel with Game Master 3.0",
-          "relation": "soporta"
-        }
-      ]
-    },
-    "diferenciales": {
-      "value": [
-        "Frecuencia nativa de 144Hz",
-        "Compatibilidad con VRR y ALLM",
-        "Retroiluminación Mini LED"
-      ],
-      "status": "found",
-      "confidence": 0.89,
-      "provenanceType": "extracted",
-      "criticidad": "claim",
-      "evidence": [
-        {
-          "sourceId": "src-ficha-tecnica-c755",
-          "fragmentId": "frg-0014",
-          "page": 2,
-          "slide": null,
-          "quote": "Native 144Hz VRR panel with Game Master 3.0",
-          "relation": "soporta"
-        },
-        {
-          "sourceId": "src-ficha-tecnica-c755",
-          "fragmentId": "frg-0016",
-          "page": 2,
-          "slide": null,
-          "quote": "Mini LED backlight, ALLM supported",
-          "relation": "soporta"
-        }
-      ]
-    },
-    "rtbs": {
-      "value": [
-        "La ficha técnica certifica panel nativo de 144Hz, no interpolado",
-        "Mini LED entrega mayor control de zonas de contraste que un LED convencional"
-      ],
-      "status": "found",
-      "confidence": 0.86,
-      "provenanceType": "extracted",
-      "criticidad": "claim",
-      "evidence": [
-        {
-          "sourceId": "src-ficha-tecnica-c755",
-          "fragmentId": "frg-0014",
-          "page": 2,
-          "slide": null,
-          "quote": "Native 144Hz VRR panel with Game Master 3.0",
-          "relation": "soporta"
-        }
-      ]
-    },
-    "especificaciones": {
-      "value": null,
-      "status": "conflict",
-      "confidence": 0.41,
-      "provenanceType": "extracted",
-      "criticidad": "claim",
-      "evidence": [
-        {
-          "sourceId": "src-ppt-global-c755",
-          "fragmentId": "frg-0022",
-          "page": null,
-          "slide": 11,
-          "quote": "Peak brightness: 1500 nits",
-          "relation": "soporta"
-        },
-        {
-          "sourceId": "src-ficha-tecnica-c755",
-          "fragmentId": "frg-0019",
-          "page": 3,
-          "slide": null,
-          "quote": "Peak brightness: 1300 nits (HDR)",
-          "relation": "contradice"
-        }
-      ]
-    },
-    "activos_marca": {
-      "value": ["Logo TCL", "Narrativa global Play Beyond Limits", "Paleta de marca 2026"],
-      "status": "found",
-      "confidence": 0.8,
-      "provenanceType": "extracted",
-      "criticidad": "informativo",
-      "evidence": [
-        {
-          "sourceId": "src-ppt-global-c755",
-          "fragmentId": "frg-0009",
-          "page": null,
-          "slide": 2,
-          "quote": "Global campaign narrative: Play Beyond Limits",
-          "relation": "soporta"
-        }
-      ]
+  "marca_producto": [
+    {
+      "productId": "prd-tcl-c755-55",
+      "nombre_producto": {
+        "value": "TCL QLED C755 — 55\"",
+        "status": "found",
+        "confidence": 0.97,
+        "provenanceType": "extracted",
+        "criticidad": "critico",
+        "evidence": [
+          {
+            "sourceId": "src-ficha-tecnica-c755",
+            "fragmentId": "frg-0001",
+            "page": 1,
+            "slide": null,
+            "quote": "TCL C755 QLED 55\" (55C755)",
+            "relation": "soporta"
+          }
+        ]
+      },
+      "rol_marca": {
+        "value": "Retador informado: la marca que gana cuando el consumidor compara con datos.",
+        "status": "manual",
+        "confidence": null,
+        "provenanceType": "manual_local",
+        "criticidad": "informativo",
+        "evidence": []
+      },
+      "beneficio_principal": {
+        "value": "Panel QLED de 144Hz con Game Master, pensado para consolas de nueva generación.",
+        "status": "found",
+        "confidence": 0.94,
+        "provenanceType": "extracted",
+        "criticidad": "claim",
+        "evidence": [
+          {
+            "sourceId": "src-ficha-tecnica-c755",
+            "fragmentId": "frg-0014",
+            "page": 2,
+            "slide": null,
+            "quote": "Native 144Hz VRR panel with Game Master 3.0",
+            "relation": "soporta"
+          }
+        ]
+      },
+      "diferenciales": {
+        "value": [
+          "Frecuencia nativa de 144Hz",
+          "Compatibilidad con VRR y ALLM",
+          "Retroiluminación Mini LED"
+        ],
+        "status": "found",
+        "confidence": 0.89,
+        "provenanceType": "extracted",
+        "criticidad": "claim",
+        "evidence": [
+          {
+            "sourceId": "src-ficha-tecnica-c755",
+            "fragmentId": "frg-0014",
+            "page": 2,
+            "slide": null,
+            "quote": "Native 144Hz VRR panel with Game Master 3.0",
+            "relation": "soporta"
+          },
+          {
+            "sourceId": "src-ficha-tecnica-c755",
+            "fragmentId": "frg-0016",
+            "page": 2,
+            "slide": null,
+            "quote": "Mini LED backlight, ALLM supported",
+            "relation": "soporta"
+          }
+        ]
+      },
+      "rtbs": {
+        "value": [
+          "La ficha técnica certifica panel nativo de 144Hz, no interpolado",
+          "Mini LED entrega mayor control de zonas de contraste que un LED convencional"
+        ],
+        "status": "found",
+        "confidence": 0.86,
+        "provenanceType": "extracted",
+        "criticidad": "claim",
+        "evidence": [
+          {
+            "sourceId": "src-ficha-tecnica-c755",
+            "fragmentId": "frg-0014",
+            "page": 2,
+            "slide": null,
+            "quote": "Native 144Hz VRR panel with Game Master 3.0",
+            "relation": "soporta"
+          }
+        ]
+      },
+      "especificaciones": {
+        "value": null,
+        "status": "conflict",
+        "confidence": 0.41,
+        "provenanceType": "extracted",
+        "criticidad": "claim",
+        "evidence": [
+          {
+            "sourceId": "src-ppt-global-c755",
+            "fragmentId": "frg-0022",
+            "page": null,
+            "slide": 11,
+            "quote": "Peak brightness: 1500 nits",
+            "relation": "soporta"
+          },
+          {
+            "sourceId": "src-ficha-tecnica-c755",
+            "fragmentId": "frg-0019",
+            "page": 3,
+            "slide": null,
+            "quote": "Peak brightness: 1300 nits (HDR)",
+            "relation": "contradice"
+          }
+        ]
+      },
+      "activos_marca": {
+        "value": [
+          "Logo TCL",
+          "Narrativa global Play Beyond Limits",
+          "Paleta de marca 2026"
+        ],
+        "status": "found",
+        "confidence": 0.8,
+        "provenanceType": "extracted",
+        "criticidad": "informativo",
+        "evidence": [
+          {
+            "sourceId": "src-ppt-global-c755",
+            "fragmentId": "frg-0009",
+            "page": null,
+            "slide": 2,
+            "quote": "Global campaign narrative: Play Beyond Limits",
+            "relation": "soporta"
+          }
+        ]
+      }
     }
-  },
-
+  ],
   "mandatorios": {
     "value": [
       {
@@ -419,7 +426,6 @@
       }
     ]
   },
-
   "mensaje_principal": {
     "one_line": {
       "value": "Compara las specs, no los logos.",
@@ -472,7 +478,6 @@
       "evidence": []
     }
   },
-
   "accion_kpis": {
     "accion_esperada": {
       "value": "Que el gamer busque la ficha técnica del C755 y lo agregue a su comparación de compra.",
@@ -522,7 +527,6 @@
       ]
     }
   },
-
   "entregable_creativo": {
     "entregables": {
       "value": [
@@ -537,7 +541,11 @@
       "evidence": []
     },
     "canales": {
-      "value": ["YouTube", "TikTok", "Instagram"],
+      "value": [
+        "YouTube",
+        "TikTok",
+        "Instagram"
+      ],
       "status": "found",
       "confidence": 0.9,
       "provenanceType": "extracted",
@@ -554,7 +562,11 @@
       ]
     },
     "formatos": {
-      "value": ["Video horizontal 16:9", "Video vertical 9:16", "Foto 4:5"],
+      "value": [
+        "Video horizontal 16:9",
+        "Video vertical 9:16",
+        "Foto 4:5"
+      ],
       "status": "manual",
       "confidence": null,
       "provenanceType": "manual_local",
@@ -578,7 +590,6 @@
       "evidence": []
     }
   },
-
   "practico": {
     "fecha_inicio": {
       "value": "2026-10-15",

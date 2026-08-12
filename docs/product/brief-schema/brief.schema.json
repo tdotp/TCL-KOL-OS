@@ -6,6 +6,7 @@
   "type": "object",
   "required": [
     "meta",
+    "productos",
     "contexto",
     "objetivo",
     "target_audiencia",
@@ -19,22 +20,62 @@
 
   "properties": {
     "meta": { "$ref": "#/$defs/meta" },
-    "contexto": { "$ref": "#/$defs/bloqueContexto" },
-    "objetivo": { "$ref": "#/$defs/bloqueObjetivo" },
-    "target_audiencia": { "$ref": "#/$defs/bloqueTarget" },
+
+    "productos": {
+      "description": "Productos que cubre la campaña, con su rol y prioridad (DEC-016). Una campaña puede tener uno (lanzamiento simple), varios de una misma línea (P80 / Pro / Ultra) o varios sin relación entre sí (campaña de temporada).",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/productoDeCampana" }
+    },
+
+    "contexto": {
+      "description": "Nivel campaña. Único y compartido por todos los productos.",
+      "$ref": "#/$defs/bloqueContexto"
+    },
+    "objetivo": {
+      "description": "Nivel campaña. Único y compartido.",
+      "$ref": "#/$defs/bloqueObjetivo"
+    },
+    "target_audiencia": {
+      "description": "Compartido con excepción: por defecto único; un producto puede declarar el suyo en `overrides`.",
+      "$ref": "#/$defs/bloqueTarget"
+    },
     "problema_insight": {
-      "description": "Opcional. Un brief puramente operativo (formato Brief de Campaña – Producto) no contempla trabajo estratégico-creativo; no se obliga a rellenarlo cuando su fuente no lo contiene.",
+      "description": "Opcional y compartido con excepción. Un brief puramente operativo no contempla trabajo estratégico-creativo; no se obliga a rellenarlo cuando su fuente no lo contiene.",
       "oneOf": [{ "$ref": "#/$defs/bloqueProblemaInsight" }, { "type": "null" }]
     },
-    "marca_producto": { "$ref": "#/$defs/bloqueMarcaProducto" },
-    "mandatorios": { "$ref": "#/$defs/campoListaMandatorios" },
-    "mensaje_principal": { "$ref": "#/$defs/bloqueMensaje" },
-    "accion_kpis": { "$ref": "#/$defs/bloqueAccionKpis" },
+    "marca_producto": {
+      "description": "Nivel producto: se repite, uno por cada entrada de `productos`. Ficha técnica, precio, diferenciales y RTBs SIEMPRE difieren entre productos.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/bloqueMarcaProducto" }
+    },
+    "mandatorios": {
+      "description": "Compartido con excepción.",
+      "$ref": "#/$defs/campoListaMandatorios"
+    },
+    "mensaje_principal": {
+      "description": "Compartido con excepción. En una campaña de temporada con productos sin relación, cada uno suele declarar el suyo.",
+      "$ref": "#/$defs/bloqueMensaje"
+    },
+    "accion_kpis": {
+      "description": "Nivel campaña. Los KPIs se miden sobre la campaña completa.",
+      "$ref": "#/$defs/bloqueAccionKpis"
+    },
     "entregable_creativo": {
-      "description": "Opcional. Presente cuando el brief abre trabajo creativo a una agencia.",
+      "description": "Opcional, nivel campaña. Presente cuando el brief abre trabajo creativo a una agencia.",
       "oneOf": [{ "$ref": "#/$defs/bloqueEntregable" }, { "type": "null" }]
     },
-    "practico": { "$ref": "#/$defs/bloquePractico" }
+    "practico": {
+      "description": "Nivel campaña: fechas, hitos y presupuesto total. El reparto por producto vive en `productos[].participacionPresupuesto`.",
+      "$ref": "#/$defs/bloquePractico"
+    },
+
+    "overrides": {
+      "description": "Excepciones por producto sobre los bloques compartidos-con-excepción (DEC-016). Ausente o vacío = todos los productos comparten. Un bloque no declarado aquí se hereda del nivel campaña.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/overrideDeProducto" }
+    }
   },
 
   "$defs": {
@@ -330,12 +371,61 @@
       }
     },
 
-    "bloqueMarcaProducto": {
+    "productoDeCampana": {
+      "description": "Un producto dentro de la campaña, con el papel que juega en ella.",
       "type": "object",
-      "required": ["nombre_producto"],
+      "required": ["productId", "nombre"],
       "additionalProperties": false,
       "properties": {
-        "productId": { "$ref": "#/$defs/campoTexto" },
+        "productId": { "type": "string", "minLength": 1 },
+        "nombre": { "type": "string", "minLength": 1 },
+        "rol": {
+          "description": "flagship: el producto que lidera la campaña. secundario: acompaña. entrada: gama de acceso. unico: campaña de un solo producto.",
+          "enum": ["flagship", "secundario", "entrada", "unico"]
+        },
+        "prioridad": {
+          "description": "1 = mayor prioridad. Ordena el esfuerzo de contenidos (P80: Ultra > Pro > básico).",
+          "type": "integer",
+          "minimum": 1
+        },
+        "participacionPresupuesto": {
+          "description": "Fracción del presupuesto destinada a este producto (0–1). El brief P80 declara 0.6 / 0.2 / 0.1.",
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+
+    "overrideDeProducto": {
+      "description": "Excepción declarada por un producto sobre un bloque compartido. Solo los cuatro bloques compartidos-con-excepción admiten override (DEC-016).",
+      "type": "object",
+      "required": ["productId"],
+      "additionalProperties": false,
+      "minProperties": 2,
+      "properties": {
+        "productId": { "type": "string", "minLength": 1 },
+        "motivo": {
+          "description": "Por qué este producto no comparte el bloque. Obliga a justificar la divergencia en vez de crearla por descuido.",
+          "type": "string"
+        },
+        "target_audiencia": { "$ref": "#/$defs/bloqueTarget" },
+        "problema_insight": { "$ref": "#/$defs/bloqueProblemaInsight" },
+        "mensaje_principal": { "$ref": "#/$defs/bloqueMensaje" },
+        "mandatorios": { "$ref": "#/$defs/campoListaMandatorios" }
+      }
+    },
+
+    "bloqueMarcaProducto": {
+      "type": "object",
+      "required": ["productId", "nombre_producto"],
+      "additionalProperties": false,
+      "properties": {
+        "productId": {
+          "description": "Ancla el bloque a una entrada de `productos`. Sin esto, una especificación en una campaña de varios modelos es ambigua.",
+          "type": "string",
+          "minLength": 1
+        },
         "nombre_producto": { "$ref": "#/$defs/campoTexto" },
         "rol_marca": { "$ref": "#/$defs/campoTexto" },
         "beneficio_principal": { "$ref": "#/$defs/campoTexto" },

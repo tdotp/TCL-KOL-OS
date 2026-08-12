@@ -141,25 +141,81 @@ Ningún campo del brief es un valor suelto. Todos se envuelven en la misma estru
 
 ---
 
+## 3 bis. Campañas con varios productos (DEC-016)
+
+Una campaña puede cubrir varios productos. El material real lo muestra en tres formas: una línea con gamas (P80, P80 Pro, P80 Ultra), productos complementarios (televisor y barra de sonido, los monitores 27G64 y 25G64) y campañas de temporada que agrupan productos sin relación (Black Days, Día de la Madre, Amor y Amistad).
+
+**No hay tres diseños. Hay una regla de tres niveles.**
+
+| Nivel | Bloques | Comportamiento |
+|---|---|---|
+| **Campaña** | `contexto` · `objetivo` · `accion_kpis` · `practico` · `entregable_creativo` | Únicos y compartidos |
+| **Producto** | `marca_producto` | Se repite: ficha técnica, precio, diferenciales y RTBs **siempre** difieren |
+| **Compartido con excepción** | `target_audiencia` · `problema_insight` · `mensaje_principal` · `mandatorios` | Únicos por defecto; un producto puede declarar el suyo en `overrides` |
+
+### Por qué esta partición
+
+`contexto` y `practico` describen la **ocasión comercial**, no el producto: la temporada de Black Days y sus fechas son las mismas para el televisor y para el aire acondicionado. Permitir excepciones ahí invitaría a duplicar información que debe ser única.
+
+`marca_producto`, en cambio, no admite compartirse nunca: dos productos con la misma ficha técnica serían el mismo producto.
+
+Los cuatro del medio son los que varían según el caso, y por eso son los únicos overridables.
+
+### No hay que clasificar la campaña
+
+El esquema **no pide declarar un tipo** (línea / bundle / temporada). Esa decisión obligaría a acertar antes de tener el material y envejecería mal. La estructura se revela sola: si no hay `overrides`, todos los productos comparten; si los hay, ese producto se desengancha de ese bloque.
+
+### Los tres casos, resueltos
+
+| Caso | `productos` | `overrides` |
+|---|:--:|---|
+| Lanzamiento simple (C755) | 1, rol `unico` | ninguno |
+| Línea con gamas (P80) | 3, roles `flagship` / `secundario` / `entrada` | uno: el P80 básico tiene audiencia propia |
+| Temporada con productos sueltos | N, roles `secundario` | uno por producto: mensaje y audiencia propios |
+
+### Cómo se ancla la evidencia
+
+Cada bloque `marca_producto` lleva un `productId` obligatorio. Una especificación en una campaña de tres modelos **sin decir de cuál** no es un dato ambiguo: es un error esperando a salir publicado. Es exactamente lo que corrigieron a mano en el guion de David Osorio — *"cuando habla de la tasa de refresco que diga 288hz vrr o sino 144hz nativos"*.
+
+### El reparto de presupuesto
+
+`productos[].participacionPresupuesto` guarda la fracción por producto. El brief P80 declara 0.6 / 0.2 / 0.1 — que **suma 90%, no 100%**. El esquema no lo rechaza porque puede ser deliberado ("aprox"), pero es precisamente el tipo de hueco que el sistema debe convertir en pregunta al consultor en vez de dejarlo pasar.
+
+---
+
 ## 4. Verificación ejecutada
 
 El esquema no se entrega solo como propuesta: se validó técnicamente.
 
 ```
 ✅ El schema compila correctamente (JSON Schema 2020-12)
-✅ brief.example.es.json — instancia válida
-✅ brief.example.en.json — instancia válida
+✅ brief.example.es.json           — instancia válida (1 producto)
+✅ brief.example.en.json           — instancia válida (1 producto)
+✅ brief.example.multiproducto.json — instancia válida (3 productos)
 
---- Pruebas negativas (deben fallar) ---
-✅ "claim con valor pero SIN evidencia" rechazado correctamente
-✅ "not_found CON valor (dato inventado)" rechazado correctamente
-✅ "conflict con UNA sola evidencia" rechazado correctamente
-✅ "versión EN sin translationOfId" rechazado correctamente
-✅ "campo crítico faltante (mensaje_principal.one_line)" rechazado correctamente
-✅ "status fuera del enum permitido" rechazado correctamente
+--- Pruebas negativas: reglas anti-alucinación (§9.4) ---
+✅ "claim con valor pero SIN evidencia" rechazado
+✅ "not_found CON valor (dato inventado)" rechazado
+✅ "conflict con UNA sola evidencia" rechazado
+✅ "versión EN sin translationOfId" rechazado
+✅ "campo crítico faltante (mensaje_principal.one_line)" rechazado
+✅ "status fuera del enum permitido" rechazado
+
+--- Pruebas negativas: campañas multiproducto (DEC-016) ---
+✅ "campaña sin ningún producto" rechazado
+✅ "bloque marca_producto sin productId que lo ancle" rechazado
+✅ "marca_producto vacío" rechazado
+✅ "override sobre un bloque NO overridable (contexto)" rechazado
+✅ "override sin productId" rechazado
+✅ "override vacío (declara excepción sin decir qué cambia)" rechazado
+✅ "participación de presupuesto fuera de rango (1.5)" rechazado
+✅ "rol de producto inválido" rechazado
+✅ "prioridad cero" rechazado
 ```
 
-Las pruebas negativas importan más que las positivas: demuestran que las reglas de §9.4 **no dependen de que el modelo se comporte bien**. Un brief con un claim sin evidencia no llega a persistirse como versión aprobable, porque no pasa la validación de esquema.
+Las pruebas negativas importan más que las positivas: demuestran que las reglas **no dependen de que el modelo se comporte bien**. Un brief con un claim sin evidencia, o con una excepción declarada sobre un bloque que debe ser compartido, no llega a persistirse como versión aprobable — no pasa la validación.
+
+El ejemplo multiproducto es el brief P80 real, con sus tres modelos, sus precios, su reparto de presupuesto y una excepción de audiencia para el modelo de entrada.
 
 Para reproducir la validación:
 

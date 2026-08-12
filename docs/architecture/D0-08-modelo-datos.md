@@ -17,8 +17,10 @@ erDiagram
     User ||--o{ Comment : "escribe"
     User ||--o{ Approval : "decide"
 
-    Product ||--o{ Campaign : "es objeto de"
+    Campaign ||--o{ CampaignProduct : "cubre"
+    Product ||--o{ CampaignProduct : "participa en"
     Product ||--o{ GlossaryTerm : "acota"
+    CampaignProduct ||--o{ BriefField : "ancla"
 
     Campaign ||--o{ SourceDocument : "reúne"
     Campaign ||--|| Brief : "produce"
@@ -79,6 +81,15 @@ erDiagram
         string model
         string market
         jsonb metadata
+    }
+
+    CampaignProduct {
+        uuid id PK
+        uuid campaignId FK
+        uuid productId FK
+        enum rol
+        int prioridad
+        decimal participacionPresupuesto
     }
 
     SourceDocument {
@@ -263,7 +274,7 @@ Organización propietaria de recursos. Es la raíz del aislamiento entre SmartPR
 | `name` | string | Sí | Nombre de la campaña |
 | `market` | string | Sí | Mercado destino (por defecto `CO`) |
 | `category` | string | No | Categoría de producto |
-| `productId` | uuid | No | Producto principal; opcional al crear, obligatorio antes de aprobar el brief |
+| ~~`productId`~~ | — | — | **Eliminado en DEC-016.** Los productos viven en `CampaignProduct`; una campaña admite varios |
 | `ownerId` | uuid | Sí | Consultor responsable |
 | `startDate` / `endDate` | date | No | Ventana de ejecución |
 | `status` | enum | Sí | `activa` \| `archivada` \| `cancelada` |
@@ -280,6 +291,25 @@ Organización propietaria de recursos. Es la raíz del aislamiento entre SmartPR
 | `model` | string | Sí | Referencia comercial |
 | `market` | string | No | Mercado donde ya fue lanzado — relevante para DEC-008 |
 | `metadata` | jsonb | No | Especificaciones técnicas estructuradas |
+
+### 2.4 bis · CampaignProduct
+
+Relación entre campaña y producto, con el papel que el producto juega en esa campaña (DEC-016).
+
+| Campo | Tipo | Obligatorio | Descripción |
+|---|---|:--:|---|
+| `id` | uuid | Sí | Identificador |
+| `campaignId` | uuid | Sí | Campaña |
+| `productId` | uuid | Sí | Producto |
+| `rol` | enum | Sí | `flagship` \| `secundario` \| `entrada` \| `unico` |
+| `prioridad` | int | Sí | 1 = mayor. Ordena el esfuerzo de contenidos |
+| `participacionPresupuesto` | decimal | No | Fracción 0–1 del presupuesto de campaña |
+
+**Por qué existe como entidad y no como una lista de IDs:** el brief P80 no solo declara tres productos — declara que el Ultra es el flagship, que se lleva el 60% del presupuesto y que va primero en prioridad. Esa información pertenece a la relación, no al producto (el mismo P80 Ultra podría ser secundario en una campaña de temporada).
+
+**Restricción:** `UNIQUE(campaignId, productId)` — un producto no aparece dos veces en la misma campaña.
+
+**Regla de negocio no impuesta por el esquema:** las participaciones de presupuesto de una campaña deberían sumar 1. El brief P80 declara 0.6 / 0.2 / 0.1 = 0.9. No se rechaza —puede ser deliberado— pero genera una `LocalQuestion` al consultor.
 
 ### 2.5 SourceDocument
 
@@ -344,7 +374,8 @@ Descompone `BriefVersion.content` en campos consultables individualmente. Existe
 |---|---|:--:|---|
 | `id` | uuid | Sí | Identificador |
 | `briefVersionId` | uuid | Sí | Versión a la que pertenece |
-| `key` | string | Sí | Ruta canónica del campo (ej. `marca_producto.rtbs[0]`) |
+| `key` | string | Sí | Ruta canónica del campo. En campañas multiproducto lleva el producto: `marca_producto[prd-p80-ultra].rtbs` (DEC-016) |
+| `campaignProductId` | uuid | No | Ancla el campo a un producto concreto. Nulo si el campo es de nivel campaña |
 | `value` | jsonb | No | Valor; nulo si `status = not_found` |
 | `status` | enum | Sí | `found` \| `not_found` \| `conflict` \| `manual` |
 | `confidence` | float | No | 0–1; nulo cuando el origen es manual |
@@ -471,6 +502,6 @@ No requieren interfaz ni tabla en MVP 1, pero el diseño no debe bloquearlas (§
 
 | Punto | Impacto | Responsable | Cuándo |
 |---|---|---|---|
-| ¿`Campaign` puede tener más de un producto? | Medio — hoy `productId` es único | Product owner | Antes de Épica E3 |
+| ~~¿`Campaign` puede tener más de un producto?~~ | **Resuelto en DEC-016**: sí, vía `CampaignProduct` | — | 11 ago 2026 |
 | ¿Se permite revertir una aprobación interna? | Medio — añadiría un estado al ciclo | Product owner | Antes de Épica E8 |
 | Política de retención de `AIRun` | Bajo — afecta costo de almacenamiento, no funcionalidad | Product owner | Antes del piloto |

@@ -174,6 +174,35 @@ El material operativo entregado por el product owner (ver [D0-14](../product/D0-
 - **Consecuencia sobre las preguntas locales:** el conjunto de preguntas **se deriva de los campos del formato de SmartPR**, no se inventa por campaña. Esto convierte a `LocalQuestion` (Épica E6) en un componente central del producto, no en un mecanismo auxiliar de relleno de vacíos.
 - **Responsable de aprobación:** Gerardo Calambás.
 
+### DEC-016 — Campañas con varios productos
+
+- **Fecha:** 11 de agosto de 2026
+- **Estado:** **aprobada**
+- **Contexto:** el modelo asumía un producto por campaña. El material real lo desmiente en tres formas distintas:
+  1. **Línea con gamas** — el brief `TCL_P80_Brief_Contenidos.docx` es una campaña con tres productos (P80, P80 Pro, P80 Ultra), con reparto de presupuesto 60/20/10, prioridad Ultra > Pro > básico y competencia mapeada por modelo.
+  2. **Productos complementarios** — `LANZAMIENTO MONITORES` (27G64 y 25G64), la hoja `C7L y X11L`, o un televisor con su barra de sonido.
+  3. **Campañas de temporada** — `BLACK DAYS`, `Mothers`, y las que vienen (San Valentín, Amor y Amistad), que agrupan productos que pueden o no compartir narrativa.
+- **Decisión:** una campaña admite varios productos, gobernados por una **regla de tres niveles** sobre los bloques canónicos del brief:
+
+  | Nivel | Bloques | Comportamiento |
+  |---|---|---|
+  | Siempre de campaña | `contexto` · `objetivo` · `accion_kpis` · `practico` · `entregable_creativo` | Únicos, compartidos |
+  | Siempre por producto | `marca_producto` | Se repite, uno por producto |
+  | Compartido con excepción | `target_audiencia` · `problema_insight` · `mensaje_principal` · `mandatorios` | Únicos por defecto; un producto puede declarar el suyo |
+
+- **Alternativas consideradas:**
+  - *Tratar cada producto como una campaña aparte* — descartada: triplicaría contexto, objetivo, audiencia e insight, y contradice el material (el brief P80 es un solo documento para tres productos).
+  - *Clasificar la campaña por tipo al crearla (línea / bundle / temporada)* — descartada: obliga a acertar la clasificación antes de tener el material, y envejece mal. La estructura se revela sola según existan o no excepciones.
+  - *Hacer todos los bloques overridables* — descartada: `contexto` y `practico` son de la ocasión comercial, no del producto. Permitir excepciones ahí invita a duplicar información que debe ser única.
+- **Consecuencias:**
+  - Nueva relación `CampaignProduct` con `rol` (flagship / secundario / entrada), `prioridad` y `participacionPresupuesto`.
+  - En el esquema, `marca_producto` pasa de objeto a arreglo, y aparece un `overrides[]` opcional por producto.
+  - Las claves de campo quedan ancladas al producto: `marca_producto[prd-x].especificaciones`. Sin esto, una especificación en una campaña de tres modelos es ambigua — el tipo de error que ya corrigieron a mano en el guion de David Osorio ("288hz vrr o sino 144hz nativos").
+  - La exportación produce un documento con secciones compartidas, secciones por producto y **tabla comparativa** — el formato que el propio brief P80 ya usa en "FICHA TÉCNICA Y PRECIOS".
+  - Las preguntas locales siguen la misma regla: una vez si el campo es compartido, una por producto si está desenganchado.
+  - Impacto estimado: 3–5 sesiones adicionales sobre D0-15, repartidas entre las épicas E3, E5, E7 y E10.
+- **Responsable de aprobación:** Gerardo Calambás.
+
 ---
 
 ## Decisiones pendientes que no bloquean MVP 0

@@ -1,0 +1,741 @@
+{
+  "meta": {
+    "briefVersionId": "bv-p80-es-1",
+    "briefId": "br-p80",
+    "campaignId": "cmp-2026-tcl-p80",
+    "language": "es",
+    "version": 1,
+    "parentVersionId": null,
+    "translationOfId": null,
+    "status": "extraction_review",
+    "createdBy": "usr-gcalambas",
+    "createdAt": "2026-08-11T18:00:00-05:00",
+    "templateVersion": "brief-maestro-v1"
+  },
+  "productos": [
+    {
+      "productId": "prd-p80-ultra",
+      "nombre": "TCL P80 Ultra",
+      "rol": "flagship",
+      "prioridad": 1,
+      "participacionPresupuesto": 0.6
+    },
+    {
+      "productId": "prd-p80-pro",
+      "nombre": "TCL P80 Pro",
+      "rol": "secundario",
+      "prioridad": 2,
+      "participacionPresupuesto": 0.2
+    },
+    {
+      "productId": "prd-p80",
+      "nombre": "TCL P80",
+      "rol": "entrada",
+      "prioridad": 3,
+      "participacionPresupuesto": 0.1
+    }
+  ],
+  "contexto": {
+    "situacion": {
+      "value": "Mercado de smartphones saturado y dominado por Samsung y Xiaomi. TCL tiene propuesta de valor superior (NXTPAPER en Pro y Ultra, AMOLED 1.5K en toda la linea, camara periscopio, autonomia) pero bajo brand awareness y baja confianza como marca de smartphones. Unico canal offline: Alkosto y Ktronix.",
+      "status": "found",
+      "confidence": 0.9,
+      "provenanceType": "extracted",
+      "criticidad": "critico",
+      "evidence": [
+        {
+          "sourceId": "src-brief-p80",
+          "quote": "Posicionar la nueva linea TCL P80 en un mercado de smartphones altamente saturado y dominado por Samsung y Xiaomi",
+          "relation": "soporta",
+          "page": 1
+        }
+      ]
+    },
+    "categoria": {
+      "value": "Smartphones - gama media-alta",
+      "status": "found",
+      "confidence": 0.96,
+      "provenanceType": "extracted",
+      "criticidad": "informativo",
+      "evidence": [
+        {
+          "sourceId": "src-brief-p80",
+          "quote": "CATEGORIA: Smartphones",
+          "relation": "soporta",
+          "page": 1
+        }
+      ]
+    },
+    "contexto_global": {
+      "value": "Los tres modelos se presentan globalmente en IFA Berlin el 4 de septiembre. Todo el contenido generado alli debe integrarse al plan de contenidos de Colombia.",
+      "status": "found",
+      "confidence": 0.93,
+      "provenanceType": "extracted",
+      "criticidad": "informativo",
+      "evidence": [
+        {
+          "sourceId": "src-brief-p80",
+          "quote": "IFA Berlin (lanzamiento global): 4 de septiembre 2026",
+          "relation": "soporta",
+          "page": 1
+        }
+      ]
+    }
+  },
+  "objetivo": {
+    "tipo": {
+      "value": "consideration",
+      "status": "found",
+      "confidence": 0.82,
+      "provenanceType": "extracted",
+      "criticidad": "critico",
+      "evidence": [
+        {
+          "sourceId": "src-brief-p80",
+          "quote": "traducir especificaciones tecnicas superiores en percepcion real de valor y en trafico de compra hacia Alkosto",
+          "relation": "soporta",
+          "page": 1
+        }
+      ]
+    },
+    "negocio": {
+      "value": "Generar trafico de compra hacia Alkosto, unico canal de venta offline, y construir confianza de marca en la categoria movil.",
+      "status": "found",
+      "confidence": 0.85,
+      "provenanceType": "extracted",
+      "criticidad": "critico",
+      "evidence": [
+        {
+          "sourceId": "src-brief-p80",
+          "quote": "trafico de compra hacia Alkosto, unico canal de venta",
+          "relation": "soporta",
+          "page": 1
+        }
+      ]
+    },
+    "marca_comunicacion": {
+      "value": "Construir por primera vez confianza de marca en moviles, apalancada en la reputacion de TCL en pantallas.",
+      "status": "manual",
+      "confidence": null,
+      "provenanceType": "manual_local",
+      "criticidad": "informativo",
+      "evidence": []
+    },
+    "comportamiento_esperado": {
+      "value": "Que el consumidor evalue la linea P80 antes de asumir que Samsung o Xiaomi rinden mas.",
+      "status": "manual",
+      "confidence": null,
+      "provenanceType": "manual_local",
+      "criticidad": "informativo",
+      "evidence": []
+    }
+  },
+  "target_audiencia": {
+    "descripcion": {
+      "value": "Profesionales y empleados de oficina de 25 a 44 anos, uso intensivo diario para productividad y entretenimiento. Preferencia actual: Samsung > Xiaomi > Apple.",
+      "status": "found",
+      "confidence": 0.88,
+      "provenanceType": "extracted",
+      "criticidad": "critico",
+      "evidence": [
+        {
+          "sourceId": "src-brief-p80",
+          "quote": "Edad: 25-44 anos. Profesionales y empleados de oficina.",
+          "relation": "soporta",
+          "page": 2
+        }
+      ]
+    },
+    "rango_edad": {
+      "value": "25-44 anos",
+      "status": "found",
+      "confidence": 0.95,
+      "provenanceType": "extracted",
+      "criticidad": "informativo",
+      "evidence": [
+        {
+          "sourceId": "src-brief-p80",
+          "quote": "Edad: 25-44 anos",
+          "relation": "soporta",
+          "page": 2
+        }
+      ]
+    },
+    "comportamiento": {
+      "value": "Prioriza specs fundamentales (bateria, almacenamiento, fluidez) por encima de camara y pantalla.",
+      "status": "found",
+      "confidence": 0.86,
+      "provenanceType": "extracted",
+      "criticidad": "informativo",
+      "evidence": [
+        {
+          "sourceId": "src-brief-p80",
+          "quote": "priorizan specs fundamentales (bateria, almacenamiento, fluidez del sistema)",
+          "relation": "soporta",
+          "page": 2
+        }
+      ]
+    },
+    "relacion_categoria": {
+      "value": "Dudas por resolver: confiabilidad de TCL como fabricante de telefonos, beneficio real de NXTPAPER, resistencia al agua, garantia y postventa.",
+      "status": "found",
+      "confidence": 0.84,
+      "provenanceType": "extracted",
+      "criticidad": "informativo",
+      "evidence": [
+        {
+          "sourceId": "src-brief-p80",
+          "quote": "confiabilidad de TCL como fabricante de telefonos, beneficio real de NXTPAPER, resistencia al agua/durabilidad",
+          "relation": "soporta",
+          "page": 2
+        }
+      ]
+    }
+  },
+  "problema_insight": {
+    "problema": {
+      "value": "Traducir especificaciones superiores en percepcion real de valor, partiendo de bajo awareness.",
+      "status": "manual",
+      "confidence": null,
+      "provenanceType": "manual_local",
+      "criticidad": "informativo",
+      "evidence": []
+    },
+    "tension": {
+      "value": "Quiero un celular que aguante y rinda, pero necesito confiar primero en que la marca es seria en celulares.",
+      "status": "manual",
+      "confidence": null,
+      "provenanceType": "manual_local",
+      "criticidad": "informativo",
+      "evidence": []
+    },
+    "insight": {
+      "value": "El consumidor de este segmento es racional: exige fundamentos y valida con camara y pantalla, pero necesita confiar primero en TCL como marca de celulares.",
+      "status": "found",
+      "confidence": 0.87,
+      "provenanceType": "extracted",
+      "criticidad": "informativo",
+      "evidence": [
+        {
+          "sourceId": "src-brief-p80",
+          "quote": "necesita confiar primero en que TCL es una marca seria de celulares",
+          "relation": "soporta",
+          "page": 3
+        }
+      ]
+    }
+  },
+  "marca_producto": [
+    {
+      "productId": "prd-p80-ultra",
+      "nombre_producto": {
+        "value": "TCL P80 Ultra",
+        "status": "found",
+        "confidence": 0.98,
+        "provenanceType": "extracted",
+        "criticidad": "critico",
+        "evidence": [
+          {
+            "sourceId": "src-ficha-p80",
+            "quote": "P80 Ultra",
+            "relation": "soporta",
+            "page": 1
+          }
+        ]
+      },
+      "beneficio_principal": {
+        "value": "Camara periscopio con zoom optico 3x, lider en su clase, en un smartphone de gama media.",
+        "status": "found",
+        "confidence": 0.92,
+        "provenanceType": "extracted",
+        "criticidad": "claim",
+        "evidence": [
+          {
+            "sourceId": "src-ficha-p80",
+            "quote": "Periscopio 3x, lider en su clase",
+            "relation": "soporta",
+            "page": 1
+          }
+        ]
+      },
+      "diferenciales": {
+        "value": [
+          "AMOLED 1.5K con NXTPAPER",
+          "Bateria 5.800 mAh con carga rapida de 45W",
+          "Camara periscopio 3x"
+        ],
+        "status": "found",
+        "confidence": 0.9,
+        "provenanceType": "extracted",
+        "criticidad": "claim",
+        "evidence": [
+          {
+            "sourceId": "src-ficha-p80",
+            "quote": "5,800 mAh - carga rapida 45W",
+            "relation": "soporta",
+            "page": 1
+          },
+          {
+            "sourceId": "src-ficha-p80",
+            "quote": "AMOLED 1.5K + NXTPAPER",
+            "relation": "soporta",
+            "page": 1
+          }
+        ]
+      },
+      "especificaciones": {
+        "value": [
+          "512GB + 8+16GB RAM de expansion",
+          "Precio: $2.999.900 con descuento a $2.599.900"
+        ],
+        "status": "found",
+        "confidence": 0.94,
+        "provenanceType": "extracted",
+        "criticidad": "claim",
+        "evidence": [
+          {
+            "sourceId": "src-ficha-p80",
+            "quote": "512GB + 8+16GB RAM expansion",
+            "relation": "soporta",
+            "page": 1
+          },
+          {
+            "sourceId": "src-ficha-p80",
+            "quote": "$2.999.900 - $2.599.900 + obsequio",
+            "relation": "soporta",
+            "page": 1
+          }
+        ]
+      }
+    },
+    {
+      "productId": "prd-p80-pro",
+      "nombre_producto": {
+        "value": "TCL P80 Pro",
+        "status": "found",
+        "confidence": 0.98,
+        "provenanceType": "extracted",
+        "criticidad": "critico",
+        "evidence": [
+          {
+            "sourceId": "src-ficha-p80",
+            "quote": "P80 Pro",
+            "relation": "soporta",
+            "page": 1
+          }
+        ]
+      },
+      "beneficio_principal": {
+        "value": "Pantalla AMOLED 1.5K con NXTPAPER: se lee bajo el sol y cuida la vista.",
+        "status": "found",
+        "confidence": 0.91,
+        "provenanceType": "extracted",
+        "criticidad": "claim",
+        "evidence": [
+          {
+            "sourceId": "src-ficha-p80",
+            "quote": "AMOLED 1.5K + NXTPAPER",
+            "relation": "soporta",
+            "page": 1
+          }
+        ]
+      },
+      "diferenciales": {
+        "value": [
+          "AMOLED 1.5K con NXTPAPER",
+          "512GB de almacenamiento"
+        ],
+        "status": "found",
+        "confidence": 0.89,
+        "provenanceType": "extracted",
+        "criticidad": "claim",
+        "evidence": [
+          {
+            "sourceId": "src-ficha-p80",
+            "quote": "AMOLED 1.5K + NXTPAPER",
+            "relation": "soporta",
+            "page": 1
+          },
+          {
+            "sourceId": "src-ficha-p80",
+            "quote": "512GB + 8+16GB RAM expansion",
+            "relation": "soporta",
+            "page": 1
+          }
+        ]
+      },
+      "especificaciones": {
+        "value": null,
+        "status": "not_found",
+        "confidence": null,
+        "provenanceType": "extracted",
+        "criticidad": "claim",
+        "evidence": []
+      }
+    },
+    {
+      "productId": "prd-p80",
+      "nombre_producto": {
+        "value": "TCL P80",
+        "status": "found",
+        "confidence": 0.98,
+        "provenanceType": "extracted",
+        "criticidad": "critico",
+        "evidence": [
+          {
+            "sourceId": "src-ficha-p80",
+            "quote": "P80",
+            "relation": "soporta",
+            "page": 1
+          }
+        ]
+      },
+      "beneficio_principal": {
+        "value": "Diseno delgado de 7.5 mm con chip de 4nm y AMOLED 1.5K.",
+        "status": "found",
+        "confidence": 0.9,
+        "provenanceType": "extracted",
+        "criticidad": "claim",
+        "evidence": [
+          {
+            "sourceId": "src-ficha-p80",
+            "quote": "Delgado, 7.5 mm",
+            "relation": "soporta",
+            "page": 1
+          },
+          {
+            "sourceId": "src-ficha-p80",
+            "quote": "4nm, alto rendimiento",
+            "relation": "soporta",
+            "page": 1
+          }
+        ]
+      },
+      "diferenciales": {
+        "value": [
+          "Diseno de 7.5 mm",
+          "Chip de 4nm",
+          "AMOLED 1.5K"
+        ],
+        "status": "found",
+        "confidence": 0.88,
+        "provenanceType": "extracted",
+        "criticidad": "claim",
+        "evidence": [
+          {
+            "sourceId": "src-ficha-p80",
+            "quote": "Delgado, 7.5 mm",
+            "relation": "soporta",
+            "page": 1
+          },
+          {
+            "sourceId": "src-ficha-p80",
+            "quote": "4nm, alto rendimiento",
+            "relation": "soporta",
+            "page": 1
+          }
+        ]
+      },
+      "especificaciones": {
+        "value": [
+          "256GB + 8+16GB RAM de expansion",
+          "Precio: $1.899.900 con descuento a $1.699.900"
+        ],
+        "status": "found",
+        "confidence": 0.93,
+        "provenanceType": "extracted",
+        "criticidad": "claim",
+        "evidence": [
+          {
+            "sourceId": "src-ficha-p80",
+            "quote": "256GB + 8+16GB RAM expansion",
+            "relation": "soporta",
+            "page": 1
+          },
+          {
+            "sourceId": "src-ficha-p80",
+            "quote": "$1.899.900 - $1.699.900 + obsequio",
+            "relation": "soporta",
+            "page": 1
+          }
+        ]
+      }
+    }
+  ],
+  "mandatorios": {
+    "value": [
+      {
+        "categoria": "mensaje",
+        "descripcion": "El zoom 100x se comunica como capacidad, no como claim de calidad de imagen."
+      },
+      {
+        "categoria": "canales",
+        "descripcion": "Llamado a la accion de compra hacia Alkosto, unico canal offline."
+      },
+      {
+        "categoria": "negocio",
+        "descripcion": "KOL no comprometidos con marcas competidoras, en particular Samsung."
+      },
+      {
+        "categoria": "producto",
+        "descripcion": "NXTPAPER solo se atribuye a P80 Pro y P80 Ultra; el P80 basico no lo incluye."
+      },
+      {
+        "categoria": "timing",
+        "descripcion": "El contenido de IFA (4 sept.) se integra al plan de contenidos local."
+      }
+    ],
+    "status": "found",
+    "confidence": 0.86,
+    "provenanceType": "extracted",
+    "criticidad": "critico",
+    "evidence": [
+      {
+        "sourceId": "src-brief-p80",
+        "quote": "3x optico / hasta 100x digital como capacidad, no como claim de calidad",
+        "relation": "soporta",
+        "page": 3
+      },
+      {
+        "sourceId": "src-brief-p80",
+        "quote": "KOLs no comprometidos con otras marcas (Samsung)",
+        "relation": "soporta",
+        "page": 3
+      }
+    ]
+  },
+  "mensaje_principal": {
+    "one_line": {
+      "value": "La decision inteligente. Rendimiento que se siente comodo.",
+      "status": "found",
+      "confidence": 0.88,
+      "provenanceType": "extracted",
+      "criticidad": "critico",
+      "evidence": [
+        {
+          "sourceId": "src-brief-p80",
+          "quote": "Adaptacion local del Campaign Message House global (Smart Choice. Performance meets comfort.)",
+          "relation": "soporta",
+          "page": 3
+        }
+      ]
+    },
+    "mensaje_clave": {
+      "value": "Un smartphone que entrega rendimiento y comodidad de uso real por encima de lo que promete su precio.",
+      "status": "found",
+      "confidence": 0.85,
+      "provenanceType": "extracted",
+      "criticidad": "informativo",
+      "evidence": [
+        {
+          "sourceId": "src-brief-p80",
+          "quote": "entrega rendimiento y comodidad de uso real (bateria, pantalla, camara) por encima de lo que promete su precio",
+          "relation": "soporta",
+          "page": 3
+        }
+      ]
+    },
+    "beneficio_diferencial": {
+      "value": "CAPTURE (periscopio), SEE (NXTPAPER) y LIVE (IA con Gemini) como pilares heredados del message house global.",
+      "status": "found",
+      "confidence": 0.87,
+      "provenanceType": "extracted",
+      "criticidad": "claim",
+      "evidence": [
+        {
+          "sourceId": "src-brief-p80",
+          "quote": "CAPTURE - Camara periscopio ... SEE - NXTPAPER + pantalla ... LIVE - Experiencia premium con IA",
+          "relation": "soporta",
+          "page": 3
+        }
+      ]
+    },
+    "tono": {
+      "value": "Racional y directo, apoyado en datos verificables.",
+      "status": "manual",
+      "confidence": null,
+      "provenanceType": "manual_local",
+      "criticidad": "informativo",
+      "evidence": []
+    }
+  },
+  "accion_kpis": {
+    "accion_esperada": {
+      "value": "Visitar Alkosto, fisico o en linea, para evaluar y comprar la linea P80.",
+      "status": "found",
+      "confidence": 0.89,
+      "provenanceType": "extracted",
+      "criticidad": "critico",
+      "evidence": [
+        {
+          "sourceId": "src-brief-p80",
+          "quote": "con llamado a la accion de compra hacia Alkosto",
+          "relation": "soporta",
+          "page": 3
+        }
+      ]
+    },
+    "criterio_exito": {
+      "value": "La campana sera exitosa si el contenido resuelve activamente las dudas del consumidor sobre TCL como marca de smartphones.",
+      "status": "found",
+      "confidence": 0.84,
+      "provenanceType": "extracted",
+      "criticidad": "informativo",
+      "evidence": [
+        {
+          "sourceId": "src-brief-p80",
+          "quote": "reviews que resuelvan activamente las dudas del consumidor sobre TCL como marca de smartphones",
+          "relation": "soporta",
+          "page": 4
+        }
+      ]
+    },
+    "kpis": {
+      "value": [
+        "Engagement rate (E.R.)",
+        "Impresiones",
+        "Interacciones",
+        "Cobertura en medios Tier 1 de vertical mobile/tech"
+      ],
+      "status": "found",
+      "confidence": 0.91,
+      "provenanceType": "extracted",
+      "criticidad": "informativo",
+      "evidence": [
+        {
+          "sourceId": "src-brief-p80",
+          "quote": "KPIs clave = engagement rate (E.R.), impresiones e interacciones",
+          "relation": "soporta",
+          "page": 3
+        }
+      ]
+    }
+  },
+  "practico": {
+    "fecha_inicio": {
+      "value": "2026-09-04",
+      "status": "found",
+      "confidence": 0.95,
+      "provenanceType": "extracted",
+      "criticidad": "critico",
+      "evidence": [
+        {
+          "sourceId": "src-brief-p80",
+          "quote": "IFA Berlin (lanzamiento global): 4 de septiembre 2026",
+          "relation": "soporta",
+          "page": 1
+        }
+      ]
+    },
+    "fecha_fin": {
+      "value": "2026-11-30",
+      "status": "found",
+      "confidence": 0.8,
+      "provenanceType": "extracted",
+      "criticidad": "critico",
+      "evidence": [
+        {
+          "sourceId": "src-brief-p80",
+          "quote": "Sostenimiento: Octubre-Noviembre 2026",
+          "relation": "soporta",
+          "page": 1
+        }
+      ]
+    },
+    "hitos": {
+      "value": [
+        "IFA Berlin (global): 4 de septiembre",
+        "Lanzamiento local Colombia: aprox. 20 de septiembre",
+        "Sostenimiento: octubre a noviembre"
+      ],
+      "status": "found",
+      "confidence": 0.92,
+      "provenanceType": "extracted",
+      "criticidad": "informativo",
+      "evidence": [
+        {
+          "sourceId": "src-brief-p80",
+          "quote": "Lanzamiento local Colombia: aprox. 20 de septiembre 2026",
+          "relation": "soporta",
+          "page": 1
+        }
+      ]
+    },
+    "presupuesto": {
+      "value": "USD 55.000 para KOL y Paid PR. Compra de equipos y evento van por fuera; evento aprox. USD 20.000.",
+      "status": "found",
+      "confidence": 0.93,
+      "provenanceType": "extracted",
+      "criticidad": "critico",
+      "evidence": [
+        {
+          "sourceId": "src-brief-p80",
+          "quote": "USD 55,000 - 100% dedicado a acciones de KOL y Paid PR",
+          "relation": "soporta",
+          "page": 4
+        },
+        {
+          "sourceId": "src-brief-p80",
+          "quote": "Aprox evento: 20,000 USD Budget",
+          "relation": "soporta",
+          "page": 4
+        }
+      ]
+    },
+    "restricciones": {
+      "value": [
+        "Alkosto es el unico canal offline; Falabella y Mercado Libre solo en linea",
+        "El reparto de presupuesto por producto declarado en el brief suma 90%, no 100%"
+      ],
+      "status": "found",
+      "confidence": 0.85,
+      "provenanceType": "extracted",
+      "criticidad": "critico",
+      "evidence": [
+        {
+          "sourceId": "src-brief-p80",
+          "quote": "Unico canal de venta: Alkosto",
+          "relation": "soporta",
+          "page": 1
+        },
+        {
+          "sourceId": "src-brief-p80",
+          "quote": "Una division aprox 60% del presupuesto en el flagship, 20% p80 pro y 10%P80",
+          "relation": "soporta",
+          "page": 3
+        }
+      ]
+    }
+  },
+  "overrides": [
+    {
+      "productId": "prd-p80",
+      "motivo": "El brief declara una audiencia secundaria distinta para el P80 basico y advierte que no se compartio research especifico.",
+      "target_audiencia": {
+        "descripcion": {
+          "value": "Perfil similar al de Pro/Ultra pero mas sensible a precio: busca lo esencial bien resuelto (diseno delgado, buen chip, bateria confiable).",
+          "status": "found",
+          "confidence": 0.8,
+          "provenanceType": "extracted",
+          "criticidad": "critico",
+          "evidence": [
+            {
+              "sourceId": "src-brief-p80",
+              "quote": "Perfil similar al de Pro/Ultra pero mas sensible a precio, buscando lo esencial bien resuelto",
+              "relation": "soporta",
+              "page": 2
+            }
+          ]
+        },
+        "relacion_categoria": {
+          "value": null,
+          "status": "not_found",
+          "confidence": null,
+          "provenanceType": "extracted",
+          "criticidad": "critico",
+          "evidence": []
+        }
+      }
+    }
+  ]
+}

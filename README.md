@@ -37,10 +37,8 @@ Brief en el formato de SmartPR, ES y EN, con trazabilidad completa
 |---|---|---|
 | **Node.js** | ≥ 20 | Sí |
 | **npm** | ≥ 10 | Sí |
-| **Docker Desktop** | reciente | Para levantar el sistema completo |
+| **Docker Desktop** | >= 29 | Para levantar el sistema completo |
 | **Python** | ≥ 3.9 local · 3.11 en contenedor | Solo para trabajar el worker sin Docker |
-
-> **Docker no está instalado en la máquina de desarrollo actual.** Sin él se pueden ejecutar el dominio, las pruebas y el servidor web, pero no la base de datos ni el worker. Instalación: <https://www.docker.com/products/docker-desktop/>
 
 ---
 
@@ -145,7 +143,7 @@ Es el corazón del sistema y lo único que está completo en el Sprint 0.
 | Módulo | Contenido |
 |---|---|
 | `types.ts` | Entidades canónicas del modelo de datos (D0-08) |
-| `brief-states.ts` | Máquina de estados: 12 estados, 26 transiciones, 4 guardas |
+| `brief-states.ts` | Máquina de estados: 12 estados, 25 transiciones, 4 guardas |
 | `permissions.ts` | RBAC por rol y aislamiento entre organizaciones |
 | `errors.ts` | Errores tipados con código, sin filtrar trazas internas |
 
@@ -195,7 +193,6 @@ Todas las variables están documentadas en [`.env.example`](.env.example).
 | Limitación | Detalle |
 |---|---|
 | **Sin backup automático** | Riesgo aceptado en ADR-005 mientras el sistema corra en local. Mitigación mínima: `pg_dump` manual antes de cada sesión |
-| **Docker no instalado** | El criterio de aceptación `docker compose up` está pendiente de verificar |
 | **Sin persistencia todavía** | El Sprint 0 entrega el dominio y el cableado; las tablas llegan en el Sprint 1 |
 | **Sin autenticación** | OIDC entra en el Sprint 1 (Épica E2) |
 | **Tiempo de ciclo del brief sin línea base** | Ver [`D0-14`](docs/product/D0-14-linea-base.md) §8 |

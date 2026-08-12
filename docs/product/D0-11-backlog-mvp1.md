@@ -16,7 +16,9 @@ Cada historia es una **porción vertical demoable**: atraviesa interfaz, dominio
 | **Bloqueada por** | Historias que deben estar terminadas antes. Sin ciclos |
 | **Aceptación** | Verificable por observación o por prueba, no por opinión |
 
-**Total:** 13 épicas · 58 historias · 44 `must`, 12 `should`, 2 `could`.
+**Total:** 13 épicas · 115 historias · 95 `must`, 20 `should`.
+
+> Las 7 historias añadidas el 11 de agosto de 2026 corresponden a **DEC-016** (campañas multiproducto): E3-8, E3-9, E5-10, E6-7, E7-8, E7-9 y E10-8.
 
 ---
 
@@ -68,6 +70,8 @@ Cada historia es una **porción vertical demoable**: atraviesa interfaz, dominio
 | E3-5 | Catálogo mínimo de producto | must | E3-1 | Se puede asociar un producto existente o crear uno nuevo |
 | E3-6 | `AuditEvent` en toda mutación de campaña | must | E3-4 | Cada cambio queda registrado con actor y fecha |
 | E3-7 | Inicio operativo (UI-02) con campañas recientes y errores | should | E3-2 | Muestra lo pendiente sin tener que buscar |
+| E3-8 | **Varios productos por campaña** (DEC-016) | must | E3-5 | Se asocian N productos con `rol`, `prioridad` y `participacionPresupuesto`; un producto no se repite en la misma campaña |
+| E3-9 | Aviso cuando el reparto de presupuesto no suma 100% | should | E3-8 | El caso real del P80 (60/20/10 = 90%) genera una advertencia visible, no un bloqueo |
 
 ---
 
@@ -106,6 +110,7 @@ Cada historia es una **porción vertical demoable**: atraviesa interfaz, dominio
 | E5-7 | Revisión de extracción (UI-08) con confirmación de campos críticos | must | E5-4 | El consultor confirma o corrige antes de avanzar |
 | E5-8 | Pantalla de evidencias (UI-11) que abre fuente, página y fragmento | must | E5-6 | Un clic en un claim muestra de dónde salió |
 | E5-9 | Bloqueo de aprobación si un claim carece de evidencia | must | E5-6 | La transición a `approved` falla y explica por qué |
+| E5-10 | **Claims anclados a producto** (DEC-016) | must | E5-6, E3-8 | En una campaña multiproducto, una especificación sin `productId` no se persiste; la clave del campo incluye el producto |
 
 ---
 
@@ -121,6 +126,7 @@ Cada historia es una **porción vertical demoable**: atraviesa interfaz, dominio
 | E6-4 | Descartar pregunta exigiendo justificación | must | E6-2 | No se puede descartar sin escribir el motivo |
 | E6-5 | La respuesta alimenta una nueva versión sin mezclarse con lo extraído | must | E6-3 | El campo queda con `provenanceType: manual_local`, distinguible de lo extraído |
 | E6-6 | Preguntas pendientes visibles en el detalle de campaña | should | E6-2 | No se puede aprobar ignorando preguntas críticas sin verlas |
+| E6-7 | **Preguntas según el alcance del campo** (DEC-016) | must | E6-1, E3-8 | Un campo compartido se pregunta una vez; uno desenganchado, una vez por producto. Nunca la misma pregunta repetida N veces |
 
 ---
 
@@ -137,6 +143,8 @@ Cada historia es una **porción vertical demoable**: atraviesa interfaz, dominio
 | E7-5 | Evidencias visibles en panel lateral | must | E5-8, E7-1 | Al editar un claim se ve su respaldo sin cambiar de pantalla |
 | E7-6 | Comentarios internos sobre campos | should | E7-1 | Un comentario queda asociado al campo y al autor |
 | E7-7 | Protección contra edición concurrente | should | E7-2 | Dos pestañas editando no se sobrescriben en silencio |
+| E7-8 | **Interruptor compartido / específico por producto** (DEC-016) | must | E7-1, E3-8 | En los cuatro bloques overridables, editar el compartido cambia todos los productos; declarar excepción desengancha solo uno y exige motivo |
+| E7-9 | Selector de producto en el editor | must | E7-8 | Se alterna entre productos sin salir del brief; los bloques de campaña se ven iguales en todos |
 
 ---
 
@@ -187,6 +195,7 @@ Cada historia es una **porción vertical demoable**: atraviesa interfaz, dominio
 | E10-5 | Metadatos de versión, idioma y campaña en el archivo | must | E10-2 | Abrir el archivo permite saber a qué versión corresponde |
 | E10-6 | Almacenamiento del export y registro en auditoría | must | E10-2 | Cada exportación queda registrada con actor |
 | E10-7 | Descarga con URL firmada y expiración | should | E10-6 | Un enlace vencido deja de servir el archivo |
+| E10-8 | **Exportación multiproducto con tabla comparativa** (DEC-016) | must | E10-2, E3-8 | Un documento: secciones compartidas una vez, sección por producto, y tabla comparativa de ficha técnica y precios — el formato que ya usa el brief P80 |
 
 ---
 
@@ -278,7 +287,7 @@ CRM de influencers · revisión de guiones o video · métricas y dashboards ana
 
 | Requisito (§23.1) | Estado |
 |---|---|
-| Backlog con épicas, historias, aceptación, prioridad y dependencias | ✅ 58 historias en 13 épicas |
+| Backlog con épicas, historias, aceptación, prioridad y dependencias | ✅ 115 historias en 13 épicas |
 | Dependencias verificables y sin ciclos | ✅ Toda dependencia apunta a una historia previa |
 | Criterios de aceptación verificables | ✅ Redactados como observación o prueba, no como opinión |
 
@@ -286,7 +295,7 @@ CRM de influencers · revisión de guiones o video · métricas y dashboards ana
 
 | Punto | Historia afectada | Responsable | Cuándo |
 |---|---|---|---|
-| ¿Una campaña puede tener más de un producto? | E3-5 | Product owner | Antes del Sprint 1 |
+| ~~¿Una campaña puede tener más de un producto?~~ | E3-5 | **Resuelto en DEC-016** | 11 ago 2026 |
 | ¿Se puede revertir una aprobación interna? | E8-6 | Product owner | Antes del Sprint 5 |
 | ¿Qué campos hacen un brief "completo" para aprobar? | E5-9 | Product owner | Antes del Sprint 3 |
 | Proveedor de IA concreto | E11-2 | Product owner | Antes del Sprint 3 |
