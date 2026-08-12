@@ -249,6 +249,24 @@ El material operativo entregado por el product owner (ver [D0-14](../product/D0-
 - **Consecuencia para Drive (DEC-006):** cuando se conecte la API, un Google Doc podrá exportarse a Markdown **sin descargarlo**. Vincular el documento bastaría.
 - **Responsable de aprobación:** Gerardo Calambás.
 
+### DEC-019 — OpenRouter como proveedor y niveles de modelo configurables
+
+- **Fecha:** 12 de agosto de 2026
+- **Estado:** **aprobada** — resuelve el pendiente abierto en DEC-008
+- **Decisión:** el proveedor de IA es **OpenRouter**, con una sola clave. Los tres niveles de §9.2 —eficiente, equilibrado, avanzado— se configuran por variable de entorno; el modelo concreto de cada nivel **se decide midiendo contra el gold set**, no por opinión.
+- **Por qué OpenRouter encaja con la arquitectura:**
+  - API compatible con OpenAI, así que **un solo adaptador** cubre todos los modelos (criterio de E11-1).
+  - Cubre **embeddings en el mismo endpoint**, de modo que el RAG de §9.3 no necesita un segundo proveedor. Era el hueco que más preocupaba.
+  - Devuelve el **costo real por petición**, con lo que `AIRun.estimatedCost` deja de ser una estimación.
+- **Privacidad (cierra el matiz de DEC-008):** cada petición declara `data_collection: "deny"`, que excluye a los proveedores que entrenan con los datos enviados. Se declara **en el código y por petición**, no solo como casilla de la cuenta: un ajuste de cuenta lo puede desmarcar alguien sin darse cuenta, una línea de código queda en el historial.
+- **Sin modelos por defecto, a propósito:** las variables `AI_MODEL_*` nacen vacías. Un modelo que aparece porque nadie configuró nada acabaría en producción sin que nadie lo hubiera decidido, y su costo y su calidad serían una sorpresa. El router falla con un mensaje que dice exactamente qué falta.
+- **Cómo se valida un nivel** (`scripts/validar_niveles.py`): se corren los casos del gold set contra los modelos candidatos y se compara exactitud, resistencia a inventar datos, latencia y costo real.
+
+  El criterio de selección **no es el precio**: un modelo que falla GS-004 (inventa un dato ausente) o GS-005 (elige entre fuentes contradictorias) no sirve para el nivel eficiente por barato que sea, porque rompe la regla de §9.4 y ninguna rebaja compensa eso.
+- **Alternativas consideradas:** (1) un proveedor directo —descartada: obligaría a un adaptador por proveedor y a negociar embeddings aparte; (2) modelos fijos en código —descartada: contradice E11-1 e impide medir; (3) modelos locales —descartada por ahora: el equipo corre en una máquina de trabajo, no hay GPU dedicada.
+- **Consecuencia operativa:** la clave vive únicamente en el `.env` local, que está en `.gitignore`. Nunca se escribe en el repositorio ni se comparte por chat.
+- **Responsable de aprobación:** Gerardo Calambás.
+
 ---
 
 ## Decisiones pendientes que no bloquean MVP 0
