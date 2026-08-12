@@ -40,10 +40,24 @@ Tres fallos encontrados al probar de verdad, ninguno visible en los tests unitar
 - **DEC-017** — El reparto de presupuesto sale del alta de campaña: es un dato del brief del cliente, no de la configuración. Se conserva en el modelo; cambia quién lo aporta y cuándo.
 - **ADR-009** — La cola vive en PostgreSQL, no en Redis (coherente con ADR-007).
 
+#### Markdown como formato preferido (DEC-018)
+
+Los briefs viven en Google Docs, que exporta a Markdown de forma nativa. Eso evita el problema de fondo del DOCX: un documento de texto no tiene páginas hasta renderizarse, así que citar "página 3" es fabricar una precisión que no existe.
+
+```
+DOCX antes:  «página 1»                                    ← inventado
+Markdown:    «Brief P80 › El Reto › Desafío», línea 12     ← exacto y estable
+```
+
+- Parser de Markdown con ruta de encabezados y número de línea; ignora `#` dentro de bloques de código.
+- La **sección** pasa a ser un localizador válido: la restricción de base exige *algún* localizador, no una página.
+- El DOCX deja de numerar páginas y cita por encabezado; los saltos quedan como metadato.
+- El texto plano no tiene firma de bytes, así que solo se acepta como Markdown si además la extensión lo declara. El principio se mantiene: **el contenido solo puede restringir, nunca ampliar**. Un script renombrado a `.pptx` sigue rechazándose.
+
 #### Pendiente
 
 - OCR de imágenes y PDF escaneado *(E4-7)*.
-- Google Drive *(E4-2)*: la interfaz de almacenamiento está lista, faltan las credenciales.
+- Google Drive *(E4-2)*: la interfaz de almacenamiento está lista, faltan las credenciales. Al conectarla, un Google Doc podrá exportarse a Markdown **sin descargarlo**.
 
 ---
 

@@ -31,7 +31,12 @@ export default async function FragmentosPage({
   const fragmentos = await getFragments(user, sourceId);
   if (!fragmentos.ok) notFound();
 
-  const ubicaciones = new Set(fragmentos.value.map((f) => (f.slide !== null ? `d${f.slide}` : `p${f.page}`)));
+  // El localizador depende de lo que el formato ofrezca de verdad (DEC-018).
+  const ubicaciones = new Set(
+    fragmentos.value.map((f) =>
+      f.slide !== null ? `d${f.slide}` : f.page !== null ? `p${f.page}` : `s${f.section}`,
+    ),
+  );
 
   return (
     <>
@@ -60,7 +65,13 @@ export default async function FragmentosPage({
                 <tr key={f.id}>
                   <td>
                     <span className="pill info">
-                      {f.slide !== null ? `diapositiva ${f.slide}` : `página ${f.page}`}
+                      {f.slide !== null
+                        ? `diapositiva ${f.slide}`
+                        : f.page !== null
+                          ? `página ${f.page}`
+                          : f.linea !== null
+                            ? `línea ${f.linea}`
+                            : 'sección'}
                     </span>
                     {f.metadata['origen'] === 'notas' && (
                       <div style={{ marginTop: 4 }}>

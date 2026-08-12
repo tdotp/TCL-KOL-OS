@@ -72,10 +72,7 @@ describe.skipIf(rutaReal === undefined)('procesamiento de un PPT real', () => {
       // esta prueba sea repetible hay que retirar cualquier copia previa del
       // mismo contenido, venga del propio test o de material de demo.
       const hash = createHash('sha256').update(contenido).digest('hex');
-      await query(`DELETE FROM source_documents WHERE campaign_id = $1 AND hash = $2`, [
-        campanaId,
-        hash,
-      ]);
+      await query(`DELETE FROM source_documents WHERE campaign_id = $1 AND hash = $2`, [campanaId, hash]);
 
       const t0 = Date.now();
       const resultado = await uploadSource(admin, {

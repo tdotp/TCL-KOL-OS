@@ -45,6 +45,7 @@ export interface FragmentRow {
   readonly page: number | null;
   readonly slide: number | null;
   readonly section: string | null;
+  readonly linea: number | null;
   readonly text: string;
   readonly metadata: Record<string, unknown>;
 }
@@ -121,7 +122,7 @@ export async function getFragments(
   }
 
   const { rows } = await getPool().query<FragmentRow>(
-    `SELECT id, ordinal, page, slide, section, text, metadata
+    `SELECT id, ordinal, page, slide, section, linea, text, metadata
        FROM source_fragments WHERE source_id = $1 ORDER BY ordinal LIMIT $2`,
     [sourceId, limite],
   );
@@ -172,6 +173,7 @@ export async function uploadSource(actor: User, input: UploadInput): Promise<Res
     input.contenido.byteLength,
     maxBytes(),
     input.tipoDeclarado,
+    input.filename,
   );
 
   if (!validacion.valido || validacion.mimeType === undefined) {

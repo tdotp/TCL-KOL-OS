@@ -17,6 +17,7 @@ interface Fuente {
 }
 
 const ETIQUETA_TIPO: Record<string, string> = {
+  'text/markdown': 'MD',
   'application/pdf': 'PDF',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',

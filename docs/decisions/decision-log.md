@@ -225,6 +225,30 @@ El material operativo entregado por el product owner (ver [D0-14](../product/D0-
 - **Consecuencias:** el sondeo añade latencia (1–2 s) frente a una notificación push. Es aceptable: el procesamiento de un PPT tarda segundos, no milisegundos. Si la latencia llega a importar, Redis puede añadirse como señal de despertar sin mover el estado.
 - **Responsable de aprobación:** Gerardo Calambás.
 
+### DEC-018 — Markdown como formato preferido y la sección como localizador
+
+- **Fecha:** 12 de agosto de 2026
+- **Estado:** **aprobada**
+- **Contexto:** el parser de DOCX numeraba páginas contando saltos explícitos. Al revisarlo, el product owner señaló que los briefs viven en **Google Docs**, que exporta a Markdown de forma nativa.
+- **El problema de fondo no era el formato, era el localizador.** Un DOCX no tiene páginas hasta que se renderiza: Word las calcula al mostrarlo. Citar "página 3" en un documento de texto es fabricar una precisión que no existe, y una evidencia que no se puede verificar no sirve para nada (§9.4).
+- **Decisión, en tres partes:**
+  1. **Markdown es el formato preferido** para los briefs de SmartPR. Se exporta desde Google Docs con *Archivo → Descargar → Markdown*.
+  2. **La sección es un localizador válido.** La restricción de base pasa de exigir página o diapositiva a exigir *algún* localizador. Se añade la columna `linea` para formatos de texto.
+  3. **El DOCX deja de numerar páginas** y cita por ruta de encabezados. Los saltos se conservan como metadato informativo.
+- **Qué localiza cada formato, según lo que ofrece de verdad:**
+
+  | Formato | Localizador | Por qué |
+  |---|---|---|
+  | PPTX | diapositiva | Discreta y estable |
+  | PDF | página | Está impresa en el archivo |
+  | Markdown | ruta de encabezados + línea | Exacto y estable |
+  | DOCX | sección | No tiene páginas hasta renderizar |
+
+- **Un matiz de seguridad que surgió al implementarlo:** el texto plano no tiene firma de bytes, así que por contenido es imposible distinguir un Markdown de un script. Se resolvió manteniendo el principio: **el contenido solo puede restringir, nunca ampliar**. Un archivo con firma de PDF es PDF aunque se llame `.md`; un texto sin firma solo se acepta si además dice llamarse `.md`. Un script renombrado a `.pptx` sigue rechazándose (caso S-05).
+- **Beneficio que llega gratis:** al ser texto plano, las versiones del brief se comparan línea a línea, lo que simplifica el comparador de versiones (Épica E8-3).
+- **Consecuencia para Drive (DEC-006):** cuando se conecte la API, un Google Doc podrá exportarse a Markdown **sin descargarlo**. Vincular el documento bastaría.
+- **Responsable de aprobación:** Gerardo Calambás.
+
 ---
 
 ## Decisiones pendientes que no bloquean MVP 0

@@ -51,7 +51,7 @@ export function FormularioFuente({ campaignId }: { campaignId: string }) {
             name="archivo"
             type="file"
             required
-            accept=".pdf,.pptx,.docx,.png,.jpg,.jpeg"
+            accept=".md,.markdown,.pdf,.pptx,.docx,.png,.jpg,.jpeg"
             onChange={(e) => {
               const f = e.target.files?.[0];
               setNombre(f?.name ?? '');
@@ -86,8 +86,8 @@ export function FormularioFuente({ campaignId }: { campaignId: string }) {
       </button>
 
       <p className="sub" style={{ marginTop: 12, marginBottom: 0, fontSize: 13 }}>
-        PDF, PPTX, DOCX, PNG y JPG hasta 50 MB. El tipo se verifica por el contenido real del archivo, no por
-        su extensión.
+        <strong>Markdown</strong> es el formato preferido: si el brief está en Google Docs, expórtelo con{' '}
+        <em>Archivo → Descargar → Markdown</em>. También se aceptan PDF, PPTX, DOCX, PNG y JPG hasta 50 MB.
       </p>
     </form>
   );

@@ -124,8 +124,8 @@ def _guardar_fragmentos(conn: Any, source_id: str, fragmentos: List[Fragment]) -
             cur.execute(
                 """
                 INSERT INTO source_fragments
-                       (source_id, ordinal, page, slide, section, text, metadata)
-                VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
+                       (source_id, ordinal, page, slide, section, linea, text, metadata)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb)
                 """,
                 (
                     source_id,
@@ -133,6 +133,7 @@ def _guardar_fragmentos(conn: Any, source_id: str, fragmentos: List[Fragment]) -
                     f.page,
                     f.slide,
                     f.section,
+                    f.linea,
                     f.text,
                     _json(f.metadata),
                 ),

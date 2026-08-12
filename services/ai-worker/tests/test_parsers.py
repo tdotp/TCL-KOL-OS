@@ -150,21 +150,23 @@ def crear_docx(ruta: Path, con_salto: bool = True) -> Path:
     return ruta
 
 
-def test_docx_cuenta_las_paginas_por_saltos_explicitos(tmp_path: Path) -> None:
+def test_docx_no_inventa_numeros_de_pagina(tmp_path: Path) -> None:
+    """DEC-018: un DOCX no tiene páginas hasta renderizarse, así que no se numeran."""
     ruta = crear_docx(tmp_path / "brief.docx", con_salto=True)
     frags = parsers.parse(str(ruta), parsers.DOCX)
 
-    paginas = {f.page for f in frags}
-    assert paginas == {1, 2}, "el salto de página explícito debe incrementar el número"
+    assert all(f.page is None for f in frags), "no debe fabricarse un número de página"
+    assert all(f.section for f in frags), "todo fragmento debe quedar ubicado por sección"
+    assert all(f.metadata.get("localizador") == "seccion" for f in frags)
 
 
-def test_docx_sin_saltos_queda_todo_en_la_pagina_uno(tmp_path: Path) -> None:
-    """Un DOCX no tiene páginas hasta renderizarse: se declara la aproximación."""
-    ruta = crear_docx(tmp_path / "brief.docx", con_salto=False)
+def test_docx_registra_los_saltos_como_metadato_informativo(tmp_path: Path) -> None:
+    """Los saltos existen y se conservan, pero no son el localizador."""
+    ruta = crear_docx(tmp_path / "brief.docx", con_salto=True)
     frags = parsers.parse(str(ruta), parsers.DOCX)
 
-    assert {f.page for f in frags} == {1}
-    assert all(f.metadata.get("paginacion") == "saltos_explicitos" for f in frags)
+    saltos = {f.metadata.get("tras_saltos_de_pagina") for f in frags if f.metadata.get("origen") == "parrafos"}
+    assert saltos == {0, 1}
 
 
 def test_docx_atribuye_cada_bloque_a_su_encabezado(tmp_path: Path) -> None:
@@ -203,3 +205,88 @@ def test_soporta_declara_los_formatos_con_extraccion() -> None:
     assert parsers.soporta(parsers.DOCX)
     # Las imágenes se aceptan al cargar, pero su extracción exige OCR (E4-7).
     assert not parsers.soporta("image/png")
+
+
+# ─────────────────────────── Markdown (DEC-018) ───────────────────────────────
+
+BRIEF_MD = """# Brief P80
+
+Contenido introductorio del brief.
+
+## El Reto
+
+El mercado está dominado por Samsung y Xiaomi.
+
+### Audiencia primaria
+
+Profesionales de 25 a 44 años.
+
+### Audiencia secundaria
+
+Perfil más sensible a precio.
+
+## Mandatorios
+
+Aclarar que los 144Hz son nativos del panel.
+
+```python
+# esto es código, no un encabezado
+print("hola")
+```
+
+Texto final tras el bloque de código.
+"""
+
+
+def crear_md(ruta: Path, contenido: str = BRIEF_MD) -> Path:
+    ruta.write_text(contenido, encoding="utf-8")
+    return ruta
+
+
+def test_markdown_ubica_por_ruta_de_encabezados(tmp_path: Path) -> None:
+    ruta = crear_md(tmp_path / "brief.md")
+    frags = parsers.parse(str(ruta), parsers.MARKDOWN)
+
+    secciones = [f.section for f in frags]
+    assert "Brief P80 › El Reto › Audiencia primaria" in secciones
+    assert "Brief P80 › Mandatorios" in secciones
+
+
+def test_markdown_cierra_las_secciones_del_mismo_nivel(tmp_path: Path) -> None:
+    """`### Audiencia secundaria` no debe anidarse dentro de la primaria."""
+    ruta = crear_md(tmp_path / "brief.md")
+    frags = parsers.parse(str(ruta), parsers.MARKDOWN)
+
+    secundaria = next(f for f in frags if "secundaria" in (f.section or "").lower())
+    assert secundaria.section == "Brief P80 › El Reto › Audiencia secundaria"
+
+
+def test_markdown_registra_la_linea_de_inicio(tmp_path: Path) -> None:
+    """La línea es exacta y estable: no depende de fuente ni márgenes."""
+    ruta = crear_md(tmp_path / "brief.md")
+    frags = parsers.parse(str(ruta), parsers.MARKDOWN)
+
+    assert all(f.linea is not None and f.linea >= 1 for f in frags)
+    lineas = [f.linea for f in frags]
+    assert lineas == sorted(lineas), "las líneas deben ir en orden"
+
+
+def test_markdown_no_confunde_comentarios_de_codigo_con_encabezados(tmp_path: Path) -> None:
+    ruta = crear_md(tmp_path / "brief.md")
+    frags = parsers.parse(str(ruta), parsers.MARKDOWN)
+
+    for f in frags:
+        assert "esto es código" not in (f.section or "")
+
+
+def test_markdown_todo_fragmento_queda_ubicado(tmp_path: Path) -> None:
+    ruta = crear_md(tmp_path / "brief.md", "Texto sin ningún encabezado.\n")
+    frags = parsers.parse(str(ruta), parsers.MARKDOWN)
+
+    assert len(frags) == 1
+    assert frags[0].section == "(sin sección)"
+    assert frags[0].linea == 1
+
+
+def test_markdown_esta_en_el_registro() -> None:
+    assert parsers.soporta(parsers.MARKDOWN)

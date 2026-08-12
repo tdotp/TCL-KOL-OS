@@ -2,21 +2,20 @@
 
 Es el formato de los briefs que entrega el cliente.
 
-Sobre la "página" en DOCX
--------------------------
+Sobre la "página" en DOCX (DEC-018)
+-----------------------------------
 Un DOCX **no tiene páginas** hasta que se renderiza: la paginación depende de la
-fuente, los márgenes y el motor que lo abra. Word calcula las páginas al mostrar
-el documento, no las guarda.
+fuente, los márgenes y el motor que lo abra. Word las calcula al mostrar el
+documento, no las guarda.
 
-Lo que sí existe son los **saltos de página explícitos**. Este parser cuenta esos
-saltos y numera en consecuencia, lo que da una ubicación honesta y reproducible.
-Cuando el documento no tiene saltos explícitos, todo queda en la página 1 y se
-usa la sección (el encabezado más cercano) como ubicación fina.
+Por eso este parser **no numera páginas**. Localiza por **sección**: la ruta de
+encabezados más cercana. Es exacta, estable y verificable — no cambia si alguien
+toca el interlineado. Cuando hay saltos de página explícitos se registran como
+metadato informativo, no como el localizador.
 
-La alternativa —renderizar el documento para saber la página real— exige
-LibreOffice en el worker y produce una paginación que puede no coincidir con la
-que ve el consultor en su Word. Se prefiere una aproximación declarada a una
-precisión falsa.
+Formato preferido: si el brief vive en Google Docs, conviene exportarlo como
+**Markdown** en lugar de Word. Google Docs lo hace de forma nativa, y así la
+ubicación es ruta de encabezados más número de línea, sin ambigüedad alguna.
 """
 
 from __future__ import annotations
@@ -63,7 +62,7 @@ def parse(path: str) -> List[Fragment]:
 
     fragmentos: List[Fragment] = []
     ordinal = 0
-    pagina = 1
+    saltos = 0
     seccion: Optional[str] = None
     acumulado: List[str] = []
 
@@ -75,9 +74,13 @@ def parse(path: str) -> List[Fragment]:
                 Fragment(
                     ordinal=ordinal,
                     text=normalizar(texto),
-                    page=pagina,
-                    section=seccion,
-                    metadata={"origen": "parrafos", "paginacion": "saltos_explicitos"},
+                    # Sin página: en DOCX no existe hasta renderizar (DEC-018).
+                    section=seccion or "(sin encabezado)",
+                    metadata={
+                        "origen": "parrafos",
+                        "localizador": "seccion",
+                        "tras_saltos_de_pagina": saltos,
+                    },
                 )
             )
             ordinal += 1
@@ -86,7 +89,7 @@ def parse(path: str) -> List[Fragment]:
     for parrafo in documento.paragraphs:
         if _tiene_salto_de_pagina(parrafo):
             volcar()
-            pagina += 1
+            saltos += 1
 
         texto = parrafo.text.strip()
         if not texto:
@@ -112,9 +115,8 @@ def parse(path: str) -> List[Fragment]:
             Fragment(
                 ordinal=ordinal,
                 text=normalizar(texto),
-                page=pagina,
                 section=f"Tabla {indice}",
-                metadata={"origen": "tabla", "paginacion": "saltos_explicitos"},
+                metadata={"origen": "tabla", "localizador": "seccion"},
             )
         )
         ordinal += 1
