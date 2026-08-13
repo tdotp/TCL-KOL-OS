@@ -18,7 +18,7 @@ from typing import AsyncIterator
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from . import embeddings
+from . import embeddings, extraction, parsers
 from .ai.router import RouterError
 from .config import ConfigError, Settings, load_settings
 
@@ -27,6 +27,23 @@ class ConsultaEntrada(BaseModel):
     """Texto a vectorizar. Nada más: sin scope, sin identidad, sin permisos."""
 
     texto: str = Field(min_length=1, max_length=8000)
+
+
+class FragmentoEntrada(BaseModel):
+    """Un fragmento ya autorizado por la capa que sabe quién pregunta."""
+
+    id: str
+    source_id: str
+    filename: str
+    texto: str
+    page: int | None = None
+    slide: int | None = None
+    section: str | None = None
+    linea: int | None = None
+
+
+class ExtraccionEntrada(BaseModel):
+    fragmentos: list[FragmentoEntrada] = Field(min_length=1, max_length=200)
 
 logger = logging.getLogger("ai-worker")
 
@@ -99,6 +116,77 @@ async def embeber_consulta(peticion: ConsultaEntrada) -> dict[str, object]:
     return {"vector": vector, "dimensiones": len(vector)}
 
 
+@app.post("/extraccion")
+async def extraccion(peticion: ExtraccionEntrada) -> dict[str, object]:
+    """Extrae campos del brief a partir de fragmentos ya autorizados (E5-3).
+
+    Recibe los fragmentos en la petición en vez de leerlos de la base a partir
+    de un `campaign_id`. La diferencia importa: así el worker nunca tiene que
+    decidir si quien pregunta puede ver esa campaña —no tiene con qué—, y el
+    filtro por permiso se queda entero del lado que conoce al usuario (ADR-008).
+
+    Devuelve los campos verificados. **No persiste nada**: el dominio los valida
+    antes de que se conviertan en una versión del brief.
+    """
+    fragmentos = [
+        extraction.FragmentoDeEntrada(
+            id=f.id,
+            source_id=f.source_id,
+            filename=f.filename,
+            texto=f.texto,
+            page=f.page,
+            slide=f.slide,
+            section=f.section,
+            linea=f.linea,
+        )
+        for f in peticion.fragmentos
+    ]
+
+    try:
+        resultado = extraction.extraer(fragmentos)
+    except extraction.ExtraccionInvalida as exc:
+        # E5-3: una salida que no cumple el contrato no se persiste como versión
+        # aprobable. Se dice qué pasó, en vez de devolver campos a medias.
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RouterError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    return {
+        "modelo": resultado.modelo,
+        "nivel": resultado.nivel,
+        "prompt_version": extraction.VERSION_PROMPT,
+        "input_hash": resultado.input_hash,
+        "costo_usd": resultado.costo_usd,
+        "latencia_ms": resultado.latencia_ms,
+        "prompt_tokens": resultado.prompt_tokens,
+        "completion_tokens": resultado.completion_tokens,
+        "generation_id": resultado.generation_id,
+        "descartes": resultado.descartes,
+        "campos": [
+            {
+                "key": c.key,
+                "value": c.value,
+                "status": c.status,
+                "criticidad": c.criticidad,
+                "confidence": c.confidence,
+                "nota": c.nota,
+                "evidence": [
+                    {
+                        "fragmentId": e.fragment_id,
+                        "sourceId": e.source_id,
+                        "quote": e.quote,
+                        "relation": e.relation,
+                    }
+                    for e in c.evidence
+                ],
+            }
+            for c in resultado.campos
+        ],
+    }
+
+
 @app.get("/ready")
 async def ready() -> dict[str, object]:
     """Listo para recibir trabajo, con estado de cada dependencia."""
@@ -107,6 +195,6 @@ async def ready() -> dict[str, object]:
         "status": "ready",
         "environment": settings.environment,
         "ai_enabled": settings.ai_enabled,
-        "supported_formats": sorted(settings.supported_mime_types),
+        "supported_formats": sorted(parsers.tipos_soportados()),
         "max_upload_mb": settings.max_upload_mb,
     }

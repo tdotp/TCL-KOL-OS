@@ -1,7 +1,8 @@
 """Registro de parsers por tipo de contenido.
 
-Formatos soportados en MVP 1 (DEC-010): PPTX, PDF, DOCX, PNG y JPG.
-Las imágenes requieren OCR y se atienden en E4-7.
+Formatos con procesamiento automático (DEC-010, ampliado por DEC-018): Markdown
+—el preferido para los briefs de SmartPR—, PPTX, PDF y DOCX. PNG y JPG se
+aceptan y se conservan, pero requieren OCR y se atienden en E4-7.
 """
 
 from __future__ import annotations
@@ -38,6 +39,16 @@ def parse(path: str, mime_type: str) -> List[Fragment]:
 
 def soporta(mime_type: str) -> bool:
     return mime_type in _REGISTRO
+
+
+def tipos_soportados() -> frozenset[str]:
+    """Los tipos que de verdad tienen parser.
+
+    Se deriva del registro en vez de mantenerse en una lista aparte: una lista
+    paralela se desactualiza en cuanto se añade un formato, y fue justo lo que
+    pasó con Markdown al entrar por DEC-018.
+    """
+    return frozenset(_REGISTRO)
 
 
 __all__ = [
