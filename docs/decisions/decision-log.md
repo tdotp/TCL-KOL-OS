@@ -316,6 +316,30 @@ El material operativo entregado por el product owner (ver [D0-14](../product/D0-
 
 ---
 
+### DEC-021 — Qué campos hacen que un brief esté completo
+
+- **Fecha:** 13 de agosto de 2026
+- **Estado:** **aprobada** — cierra el pendiente de [D0-05 §8](../product/D0-05-plantilla-brief-maestro.md), que vencía «antes de cerrar Épica E5»
+- **Origen:** la extracción estructurada (E5-3/E5-4) necesita saber qué campos exigen evidencia y cuáles bloquean la aprobación **antes** de que exista la instancia del brief. El JSON Schema no lo dice, y no es un descuido: `criticidad` es un valor por instancia, porque el mismo campo puede ser crítico en una campaña e informativo en otra. Pero hace falta un valor por defecto.
+
+- **Decisión:** se adopta como criticidad por defecto la asignación del ejemplo `brief.example.es.json`, aprobado junto con D0-05 en el gate de MVP 0. Son 41 campos extraíbles: **11 críticos, 5 claims, 25 informativos**.
+
+  | Criticidad | Qué implica | Campos |
+  |---|---|---|
+  | `critico` | Sin dato, el brief no se puede aprobar; su ausencia genera una `LocalQuestion` (E6-1) | `contexto.situacion`, `objetivo.tipo`, `objetivo.negocio`, `target_audiencia.descripcion`, `marca_producto[].nombre_producto`, `mandatorios`, `mensaje_principal.one_line`, `accion_kpis.accion_esperada`, `practico.fecha_inicio`, `practico.fecha_fin`, `practico.restricciones` |
+  | `claim` | Afirmación sobre el producto; exige evidencia siempre (§15, umbral del 100%) | `marca_producto[].beneficio_principal`, `marca_producto[].diferenciales`, `marca_producto[].rtbs`, `marca_producto[].especificaciones`, `mensaje_principal.beneficio_diferencial` |
+  | `informativo` | Todo lo demás; no bloquea | (25 campos, valor implícito) |
+
+- **Confirmación con material real:** la primera extracción sobre la campaña P80 dejó `contexto.situacion` y `objetivo.tipo` en `not_found`. Se consultó si eran de verdad críticos o si la exigencia estaba mal calibrada, y el product owner confirmó que **sí lo son**. Es el resultado correcto: el brief del cliente no trae esos dos datos, y el sistema lo dice en vez de rellenarlos. Cada campaña arrancará con esas dos preguntas al cliente, y eso es información, no una falla de la extracción.
+
+- **Dónde vive:** una sola tabla, `CRITICIDAD_POR_DEFECTO` en `services/ai-worker/app/brief_schema.py`. La *forma* del brief se sigue leyendo del JSON Schema de D0-05 —nunca se copia—; solo la criticidad se declara aparte, porque el esquema no la tiene. Una prueba verifica que toda clave de la tabla exista en el esquema, para que no se desvíen.
+
+- **Por qué por defecto y no fijo:** `criticidad` sigue siendo una columna por campo en `brief_fields`. Una campaña puede subir o bajar la exigencia de un campo concreto; lo que fija esta decisión es con qué valor empieza. Cambiarlo es editar una lista, no perseguir criterios repartidos por el código.
+
+- **Responsable de aprobación:** Gerardo Calambás.
+
+---
+
 ## Decisiones pendientes que no bloquean MVP 0
 
 Quedan abiertas y sin efecto sobre el arranque, se resuelven durante la ejecución:

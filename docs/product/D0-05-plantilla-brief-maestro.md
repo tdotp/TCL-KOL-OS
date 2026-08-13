@@ -272,6 +272,6 @@ El contenido se guarda dos veces con propósitos distintos: como `jsonb` para le
 | Punto | Impacto | Cuándo se resuelve |
 |---|---|---|
 | Validar la cobertura de bloques contra briefs reales | Alto — el mapeo se construyó desde tres plantillas, no desde briefs diligenciados | Al recibir material para D0-14 |
-| ¿Qué campos exactos son obligatorios para aprobar? | Alto — hoy la obligatoriedad es estructural; falta la regla de negocio de "brief completo" | Antes de cerrar Épica E5 |
+| ~~¿Qué campos exactos son obligatorios para aprobar?~~ | **Resuelto** — [DEC-021](../decisions/decision-log.md): 11 críticos, 5 claims, 25 informativos. Confirmado contra la campaña P80 | 13 de agosto de 2026 |
 | ¿`presupuesto` debe tener confidencialidad propia? | Medio — hoy hereda la del recurso | Antes del piloto |
 | Versionado del propio esquema | Bajo — `templateVersion` ya existe en `meta` | Al primer cambio del esquema |

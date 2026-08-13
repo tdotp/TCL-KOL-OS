@@ -14,12 +14,16 @@ El valor por defecto que se usa aquí es el del ejemplo validado
 `brief.example.es.json`, que se aprobó junto con D0-05 en el gate de MVP 0. No
 es una invención de este módulo: es la asignación que ya se revisó.
 
-Lo que sigue abierto
---------------------
-D0-05 §8 deja pendiente *"¿qué campos exactos son obligatorios para aprobar?"*
-con fecha «antes de cerrar Épica E5». Este catálogo responde la pregunta
-**provisionalmente** y en un solo sitio, para que confirmarla o cambiarla sea
-editar una tabla y no perseguir criterios repartidos por el código.
+Esa asignación quedó confirmada en DEC-021, que cierra el pendiente de D0-05
+§8 —*"¿qué campos exactos son obligatorios para aprobar?"*—. Se probó contra
+material real: `contexto.situacion` y `objetivo.tipo` salieron `not_found` en
+la campaña P80, se preguntó si la exigencia estaba mal calibrada, y la
+respuesta fue que no. El brief del cliente no trae esos dos datos y el sistema
+lo dice, que es exactamente lo que debe hacer.
+
+Sigue siendo un **valor por defecto**, no una constante: `criticidad` es una
+columna por campo en `brief_fields`, y una campaña puede subir o bajar la
+exigencia de un campo concreto. Lo que esta tabla fija es con qué empieza.
 """
 
 from __future__ import annotations
@@ -64,7 +68,7 @@ def ruta_esquema() -> Path:
 #: Marcas que identifican a un campo hoja dentro del esquema.
 _CLAVES_DE_HOJA = {"value", "status", "provenanceType", "criticidad", "evidence"}
 
-#: Criticidad por defecto. Origen: `brief.example.es.json`, aprobado con D0-05.
+#: Criticidad por defecto (DEC-021). Origen: `brief.example.es.json`, D0-05.
 #:
 #: `critico`  → sin él el brief no se puede aprobar; su ausencia genera pregunta.
 #: `claim`    → afirmación sobre el producto; exige evidencia siempre (§15).
