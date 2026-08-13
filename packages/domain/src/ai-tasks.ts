@@ -50,7 +50,11 @@ const CATALOGO: Readonly<Record<AITask, AITaskSpec>> = {
   },
   detectar_vacios: {
     task: 'detectar_vacios',
-    tier: 'equilibrado',
+    // DEC-020: baja de equilibrado a eficiente. ~85% de esta tarea es
+    // determinista — un campo obligatorio vacío es un vacío, y eso lo sabe el
+    // esquema. El modelo solo aporta en el margen: la contradicción semántica
+    // que la extracción no vio y redactar la pregunta de forma entendible.
+    tier: 'eficiente',
     control: 'Cada vacío se convierte en una pregunta que responde una persona.',
     salidaEstructurada: true,
     generativa: true,
@@ -64,7 +68,10 @@ const CATALOGO: Readonly<Record<AITask, AITaskSpec>> = {
   },
   redactar_brief: {
     task: 'redactar_brief',
-    tier: 'equilibrado',
+    // DEC-020: baja de equilibrado a eficiente. La estructura, el mapeo
+    // bloque → sección y la plantilla ya están definidos (D0-05 §2.2). El
+    // modelo convierte valores en prosa; no decide nada.
+    tier: 'eficiente',
     control: 'Edición y aprobación humana; la IA nunca aprueba (ADR-002).',
     salidaEstructurada: true,
     generativa: true,
@@ -80,9 +87,11 @@ const CATALOGO: Readonly<Record<AITask, AITaskSpec>> = {
   },
   resolver_ambiguedad: {
     task: 'resolver_ambiguedad',
-    // §9.2: "avanzado solo si aporta". Es la única tarea que justifica el nivel
-    // caro, y aun así nunca decide: propone.
-    tier: 'avanzado',
+    // §9.2 decía "avanzado solo si aporta". DEC-020: con el gold set actual no
+    // aporta —sonnet-5 empata con haiku-4.5 por 3,4x el costo—, así que baja a
+    // equilibrado. Sigue siendo la única tarea de juicio real, y aun así nunca
+    // decide: propone, y una persona resuelve.
+    tier: 'equilibrado',
     control: 'Nunca aprobación automática. Un conflicto lo resuelve una persona.',
     salidaEstructurada: true,
     generativa: true,

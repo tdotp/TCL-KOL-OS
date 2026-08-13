@@ -15,9 +15,18 @@ import logging
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
 
+from . import embeddings
+from .ai.router import RouterError
 from .config import ConfigError, Settings, load_settings
+
+
+class ConsultaEntrada(BaseModel):
+    """Texto a vectorizar. Nada más: sin scope, sin identidad, sin permisos."""
+
+    texto: str = Field(min_length=1, max_length=8000)
 
 logger = logging.getLogger("ai-worker")
 
@@ -66,6 +75,28 @@ app = FastAPI(
 async def health() -> dict[str, str]:
     """Vivo. No comprueba dependencias (Épica E12-4)."""
     return {"status": "ok"}
+
+
+@app.post("/embeddings/consulta")
+async def embeber_consulta(peticion: ConsultaEntrada) -> dict[str, object]:
+    """Convierte el texto de una búsqueda en vector (E5-2).
+
+    Existe porque el proveedor de IA lo llama **solo el worker** (D0-09 §3), y
+    la web necesita el vector para buscar. Deliberadamente no busca ni recibe
+    organización ni campaña: el filtro por permiso se aplica en la consulta, del
+    lado que sabe quién es el usuario (ADR-008). Así este endpoint no tiene nada
+    que filtrar mal.
+    """
+    try:
+        vector = embeddings.embeber_consulta(peticion.texto)
+    except embeddings.EmbeddingsDesactivados as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RouterError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    return {"vector": vector, "dimensiones": len(vector)}
 
 
 @app.get("/ready")

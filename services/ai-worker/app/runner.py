@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, List, Optional
 
-from . import parsers
+from . import embeddings, parsers
 from .parsers.base import Fragment, ParseError
 
 logger = logging.getLogger("ai-worker.runner")
@@ -217,11 +217,23 @@ def procesar(conn: Any, job: Job) -> bool:
     try:
         _guardar_fragmentos(conn, job.source_id, fragmentos)
         conn.commit()
-    except Exception:
+    except Exception:  # noqa: BLE001 — se reencola abajo
         conn.rollback()
         logger.exception("No se pudieron guardar los fragmentos de %s", job.filename)
         marcar_fallo(conn, job, "No se pudieron guardar los fragmentos extraídos.")
         return False
+
+    # Indexación vectorial (E5-2). Va después del commit de los fragmentos y a
+    # propósito no puede fallar el job: el parseo ya quedó bien, y un documento
+    # sin índice sigue siendo un documento procesado y consultable. Si el
+    # proveedor está caído, se reindexa después sin volver a parsear.
+    try:
+        resultado = embeddings.indexar_documento(conn, job.source_id)
+        if resultado.motivo and not resultado.se_indexo:
+            logger.info("%s sin índice vectorial: %s", job.filename, resultado.motivo)
+    except Exception:  # noqa: BLE001
+        conn.rollback()
+        logger.exception("Falló la indexación vectorial de %s; el documento queda procesado", job.filename)
 
     marcar_exito(conn, job, len(fragmentos))
     return True

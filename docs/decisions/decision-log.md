@@ -279,6 +279,41 @@ El material operativo entregado por el product owner (ver [D0-14](../product/D0-
   **El nivel avanzado no aporta con la evidencia actual**: sonnet-5 empata con haiku por 3,4 veces el costo. Se configura porque `resolver_ambiguedad` lo declara, pero conviene revisarlo cuando el gold set tenga casos más difíciles.
 - **Responsable de aprobación:** Gerardo Calambás.
 
+### DEC-020 — Ajuste de §9.2: el nivel lo decide la intervención real del modelo
+
+- **Fecha:** 12 de agosto de 2026
+- **Estado:** **aprobada** — modifica la tabla §9.2 del documento maestro
+- **Origen:** observación del product owner. La medición de DEC-019 produjo un ranking de modelos, pero un ranking responde *"¿cuál es mejor?"* cuando la pregunta útil es *"¿cuánto modelo necesita cada tarea?"*.
+- **Análisis:** se descompuso cada tarea en la parte determinista y la parte que realmente requiere modelo (evidencia completa en [D0-13 · intervención del modelo](../product/D0-13-intervencion-del-modelo.md)). Resultado: **la mayor parte del trabajo del brief no es una tarea de lenguaje**, sino estructura, mapeo y validación — lo que el §5 principio 4 ya exigía resolver con software determinístico.
+- **Cambios sobre §9.2:**
+
+  | Tarea | §9.2 original | DEC-020 | Por qué |
+  |---|---|---|---|
+  | `detectar_vacios` | equilibrado | **eficiente** | ~85% determinista: un campo obligatorio vacío es un vacío, no hace falta un modelo para saberlo |
+  | `redactar_brief` | equilibrado | **eficiente** | ~75% determinista: el mapeo bloque → sección ya está definido en D0-05 §2.2. El modelo redacta, no decide |
+  | `resolver_ambiguedad` | avanzado | **equilibrado** | La medición no encontró diferencia entre haiku y sonnet en el gold set actual |
+
+  El nivel **avanzado queda declarado pero sin uso**, listo para cuando exista evidencia que lo justifique.
+
+- **Principio que se establece — medir por MVP:** el costo total proyectado con volumen real muestra que **el 67% del gasto está en la revisión de guiones (MVP 2), no en el brief**. Del material real: 124 guiones en dos campañas, es decir **62 guiones por campaña frente a 1 brief**.
+
+  La medición de DEC-019 se hizo sobre la tarea de **menor volumen de todo el sistema**, así que su conclusión —"el costo es irrelevante"— no se extiende automáticamente a las demás. Por eso: **cada MVP mide sus propios casos antes de elegir modelo.** El criterio se mantiene: no fabricar primero, latencia después, costo al final salvo que el volumen lo suba de categoría.
+
+- **Proyección con 10 campañas/mes** (órdenes de magnitud, no presupuesto — el alcance de MVP 2–6 no está cerrado):
+
+  | | gemini | haiku | sonnet |
+  |---|---:|---:|---:|
+  | MVP 1 · brief | $0.07 | $0.86 | $1.72 |
+  | MVP 2 · guiones | $0.68 | $7.75 | $15.50 |
+  | MVP 5 · perfiles | $0.19 | $2.10 | $4.20 |
+  | MVP 6 · reportes | $0.07 | $0.80 | $1.60 |
+  | **Total** | **$1.01** | **$11.51** | **$23.02** |
+
+  MVP 7 (video) queda fuera del cuadro: se cobra por minuto de audio, no por token, y es el único que puede cambiar el orden de magnitud. §21 ya le pone una puerta de decisión económica.
+
+- **Consecuencia para MVP 1:** la configuración de DEC-019 no cambia. Lo que cambia es el argumento: gemini-flash-lite se elige por **latencia** (2,5 s) y por no fabricar, no por los $0.07 mensuales.
+- **Responsable de aprobación:** Gerardo Calambás.
+
 ---
 
 ## Decisiones pendientes que no bloquean MVP 0

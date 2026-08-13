@@ -22,13 +22,14 @@ NIVELES = ("eficiente", "equilibrado", "avanzado")
 
 #: Tarea → nivel. Espejo de `packages/domain/src/ai-tasks.ts`.
 #: Si cambia allá, cambia aquí: la fuente de verdad es el dominio.
+#: Ajustado por DEC-020 según la intervención real del modelo en cada tarea.
 TAREA_A_NIVEL: Dict[str, str] = {
     "extraer_campos": "eficiente",
-    "detectar_vacios": "equilibrado",
+    "detectar_vacios": "eficiente",      # DEC-020: ~85% determinista
     "traducir": "eficiente",
-    "redactar_brief": "equilibrado",
+    "redactar_brief": "eficiente",       # DEC-020: ~75% determinista
     "buscar_evidencia": "eficiente",
-    "resolver_ambiguedad": "avanzado",
+    "resolver_ambiguedad": "equilibrado",  # DEC-020: avanzado no aporta hoy
     "generar_embedding": "eficiente",
 }
 
