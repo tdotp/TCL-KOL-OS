@@ -7,14 +7,13 @@
 
 import {
   FORMATOS_CON_EXTRACCION,
-  roleCan,
   validarArchivo,
-  type Action,
   type Result,
   type User,
   err,
   ok,
 } from '@tcl-kol-os/domain';
+import { assertCapability } from './authz.ts';
 import { getPool, transaction } from './client.ts';
 import { recordAudit } from './audit.ts';
 import { guardarOriginal, rutaAbsoluta } from './storage.ts';
@@ -48,19 +47,6 @@ export interface FragmentRow {
   readonly linea: number | null;
   readonly text: string;
   readonly metadata: Record<string, unknown>;
-}
-
-function assertCapability(actor: User, action: Action): Result<true> {
-  if (actor.status !== 'activo') {
-    return err({ code: 'FORBIDDEN_ROLE', message: 'El usuario no está activo.' });
-  }
-  if (!roleCan(actor.role, action)) {
-    return err({
-      code: 'FORBIDDEN_ROLE',
-      message: `El rol ${actor.role} no puede ejecutar la acción ${action}.`,
-    });
-  }
-  return ok(true);
 }
 
 /** Comprueba que la campaña pertenece a la organización del actor. */

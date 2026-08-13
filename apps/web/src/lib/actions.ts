@@ -11,7 +11,14 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
-import { archiveCampaign, createCampaign, findUserByEmail, retrySource, uploadSource } from '@tcl-kol-os/db';
+import {
+  archiveCampaign,
+  createCampaign,
+  extraerBrief,
+  findUserByEmail,
+  retrySource,
+  uploadSource,
+} from '@tcl-kol-os/db';
 import type { SourceType } from '@tcl-kol-os/db';
 import { SESSION_COOKIE, SESSION_MAX_AGE, authProvider, buildSessionValue, currentUser } from './session.ts';
 
@@ -156,4 +163,32 @@ export async function reintentarFuente(formData: FormData): Promise<void> {
   await retrySource(user, sourceId);
   revalidatePath(`/campanas/${campaignId}/fuentes`);
   redirect(`/campanas/${campaignId}/fuentes`);
+}
+
+/**
+ * Lanza la extracción asistida de una campaña (UI-08).
+ *
+ * Es una acción cara —tarda ~12 s y cuesta dinero— así que no se dispara sola
+ * al abrir la pantalla: la pide una persona cuando decide que ya cargó las
+ * fuentes que quería.
+ */
+export async function extraerBriefDeCampana(
+  _previo: unknown,
+  formData: FormData,
+): Promise<{ error?: string; ok?: string }> {
+  const user = await currentUser();
+  if (user === undefined) return { error: 'Sesión no válida.' };
+
+  const campaignId = String(formData.get('campaignId') ?? '');
+  if (campaignId === '') return { error: 'Falta la campaña.' };
+
+  const resultado = await extraerBrief(user, campaignId);
+  if (!resultado.ok) return { error: resultado.error.message };
+
+  revalidatePath(`/campanas/${campaignId}/brief`);
+  return {
+    ok:
+      `Se extrajeron ${resultado.value.campos} campos con ${resultado.value.evidencias} ` +
+      `evidencias verificadas (USD ${resultado.value.costoUsd.toFixed(4)}).`,
+  };
 }

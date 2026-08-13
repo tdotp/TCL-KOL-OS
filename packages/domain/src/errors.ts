@@ -14,6 +14,16 @@ export type DomainErrorCode =
   | 'BRIEF_MISSING_CRITICAL_FIELD'
   | 'BRIEF_PENDING_QUESTIONS'
   | 'TRANSLATION_MISSING_ORIGIN'
+  /**
+   * La extracción asistida no pudo completarse: el proveedor no respondió, o
+   * respondió algo que no cumple el contrato (E5-3).
+   *
+   * Es un código aparte y no un error genérico porque el camino de salida es
+   * distinto: no se reintenta a ciegas ni se bloquea el trabajo. El brief se
+   * puede seguir llenando a mano —principio 9 de §5, la IA nunca es requisito—
+   * y la interfaz necesita poder decirlo.
+   */
+  | 'AI_EXTRACTION_FAILED'
   | 'FORBIDDEN_ROLE'
   | 'RESOURCE_NOT_FOUND';
 

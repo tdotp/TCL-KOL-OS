@@ -17,6 +17,8 @@
  * un campo escrito a mano. La IA no tiene una puerta propia.
  */
 
+import { type Result, type User, err, ok } from '@tcl-kol-os/domain';
+import { assertCapability } from './authz.ts';
 import { query, transaction } from './client.ts';
 
 export interface EvidenciaExtraida {
@@ -345,4 +347,122 @@ export async function camposDeVersion(versionId: string): Promise<
       linea: number | null;
     }>,
   }));
+}
+
+// ═══════════════════ Capa autorizada, la que usa la interfaz ══════════════════
+
+/**
+ * Extrae y persiste en un solo paso, comprobando permisos primero.
+ *
+ * Es lo que llama la pantalla. Las funciones de arriba son las piezas, y se
+ * dejan expuestas porque las pruebas necesitan separar el "qué devolvió el
+ * modelo" del "qué se guardó".
+ */
+export async function extraerBrief(
+  actor: User,
+  campaignId: string,
+): Promise<Result<{ versionId: string; campos: number; evidencias: number; costoUsd: number }>> {
+  const permitido = assertCapability(actor, 'brief:edit');
+  if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
+
+  const propias = await query<{ id: string }>(
+    `SELECT id FROM campaigns WHERE id = $1 AND organization_id = $2`,
+    [campaignId, actor.organizationId],
+  );
+  if (propias.length === 0) {
+    return err({ code: 'RESOURCE_NOT_FOUND', message: 'El recurso no existe o no está disponible.' });
+  }
+
+  try {
+    const resultado = await extraerCampos(actor.organizationId, campaignId);
+    const guardado = await persistirExtraccion({
+      organizationId: actor.organizationId,
+      campaignId,
+      createdBy: actor.id,
+      resultado,
+    });
+    return ok({
+      versionId: guardado.versionId,
+      campos: guardado.campos,
+      evidencias: guardado.evidencias,
+      costoUsd: resultado.costoUsd,
+    });
+  } catch (error) {
+    // El detalle técnico va al log, no a la pantalla (§11.6). Lo que llega al
+    // consultor es qué pasó y qué puede hacer.
+    console.error('[extraccion]', error);
+    return err({
+      code: 'AI_EXTRACTION_FAILED',
+      message:
+        error instanceof Error && error.message.includes('fuentes procesadas')
+          ? error.message
+          : 'La extracción no pudo completarse. Vuelva a intentarlo o continúe en modo manual.',
+    });
+  }
+}
+
+export interface VersionDelBrief {
+  readonly id: string;
+  readonly version: number;
+  readonly status: string;
+  readonly createdAt: Date;
+  readonly modelo: string | null;
+  readonly costoUsd: number | null;
+}
+
+/** Versiones del brief de una campaña, con el costo de haberlas producido. */
+export async function versionesDelBrief(
+  actor: User,
+  campaignId: string,
+): Promise<Result<VersionDelBrief[]>> {
+  const permitido = assertCapability(actor, 'brief:read');
+  if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
+
+  const filas = await query<{
+    id: string;
+    version: number;
+    status: string;
+    created_at: Date;
+    modelo: string | null;
+    costo: string | null;
+  }>(
+    `SELECT v.id, v.version, v.status::text, v.created_at,
+            r.model AS modelo, r.cost_usd::text AS costo
+       FROM brief_versions v
+       JOIN briefs b ON b.id = v.brief_id
+       LEFT JOIN ai_runs r ON r.brief_version_id = v.id AND r.task = 'extraer_campos'
+      WHERE b.campaign_id = $1 AND v.organization_id = $2
+      ORDER BY v.version DESC`,
+    [campaignId, actor.organizationId],
+  );
+
+  return ok(
+    filas.map((f) => ({
+      id: f.id,
+      version: f.version,
+      status: f.status,
+      createdAt: f.created_at,
+      modelo: f.modelo,
+      costoUsd: f.costo === null ? null : Number(f.costo),
+    })),
+  );
+}
+
+/** Campos de una versión, ya comprobado que la versión es de la organización. */
+export async function verCamposDeVersion(
+  actor: User,
+  versionId: string,
+): Promise<Result<Awaited<ReturnType<typeof camposDeVersion>>>> {
+  const permitido = assertCapability(actor, 'brief:read');
+  if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
+
+  const propias = await query<{ id: string }>(
+    `SELECT id FROM brief_versions WHERE id = $1 AND organization_id = $2`,
+    [versionId, actor.organizationId],
+  );
+  if (propias.length === 0) {
+    return err({ code: 'RESOURCE_NOT_FOUND', message: 'El recurso no existe o no está disponible.' });
+  }
+
+  return ok(await camposDeVersion(versionId));
 }

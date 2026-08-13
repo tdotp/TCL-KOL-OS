@@ -11,4 +11,6 @@ export * from './campaigns.ts';
 export * from './users.ts';
 export * from './storage.ts';
 export * from './sources.ts';
+export * from './search.ts';
+export * from './extraction.ts';
 export { migrate } from './migrate.ts';

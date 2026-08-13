@@ -10,7 +10,8 @@
  * nueva, el filtro de SQL sigue impidiendo el acceso cruzado (caso S-01).
  */
 
-import { authorize, roleCan, type Action, type Result, type User, err, ok } from '@tcl-kol-os/domain';
+import { authorize, type Result, type User, err, ok } from '@tcl-kol-os/domain';
+import { assertCapability } from './authz.ts';
 import { getPool, transaction } from './client.ts';
 import { recordAudit } from './audit.ts';
 
@@ -25,20 +26,6 @@ import { recordAudit } from './audit.ts';
  * `authorize()` sigue usándose para recursos concretos, donde sí hay que
  * ocultar la existencia (caso S-01).
  */
-function assertCapability(actor: User, action: Action): Result<true> {
-  if (actor.status !== 'activo') {
-    return err({ code: 'FORBIDDEN_ROLE', message: 'El usuario no está activo.' });
-  }
-  if (!roleCan(actor.role, action)) {
-    return err({
-      code: 'FORBIDDEN_ROLE',
-      message: `El rol ${actor.role} no puede ejecutar la acción ${action}.`,
-      details: { action, role: actor.role },
-    });
-  }
-  return ok(true);
-}
-
 // ─────────────────────────── Tipos ────────────────────────────────────────────
 
 export interface CampaignProductInput {
