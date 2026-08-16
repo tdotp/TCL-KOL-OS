@@ -81,6 +81,47 @@ services:
       timeout: 5s
       retries: 5
 
+  # Consumidor de la cola documental.
+  #
+  # Va aparte del servicio `worker` porque son dos procesos distintos: aquel
+  # atiende HTTP, este consume `processing_jobs` en bucle. Comparten imagen a
+  # propósito —los parsers de PPTX y DOCX viven ahí—, y esa es justamente la
+  # razón de que exista este servicio: correr el consumidor fuera del
+  # contenedor, con un intérprete que no tiene esas librerías, marca los
+  # documentos como fallidos sin que el código tenga nada malo.
+  consumidor:
+    # Reutiliza la imagen que construye `worker`: es el mismo código y las
+    # mismas dependencias, solo cambia el proceso que arranca. Construirla dos
+    # veces solo duplicaría el tiempo de arranque y el riesgo de que las dos
+    # copias se desincronicen.
+    image: tcl-kol-os-worker:latest
+    container_name: tclkolos-consumidor
+    command: ['python', 'worker.py', '--intervalo', '2']
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tclkolos}:${POSTGRES_PASSWORD:-devpassword}@db:5432/${POSTGRES_DB:-tclkolos}
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      AI_ENABLED: ${AI_ENABLED:-false}
+      AI_PROVIDER: ${AI_PROVIDER:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_APP_URL: ${AI_APP_URL:-}
+      AI_MODEL_EFICIENTE: ${AI_MODEL_EFICIENTE:-}
+      AI_MODEL_EQUILIBRADO: ${AI_MODEL_EQUILIBRADO:-}
+      AI_MODEL_EMBEDDINGS: ${AI_MODEL_EMBEDDINGS:-}
+      BRIEF_SCHEMA_PATH: /esquema/brief.schema.json
+      # Los originales que guardó la web. Sin esto el consumidor arranca bien y
+      # falla en cada job con «no se pudo leer el archivo».
+      STORAGE_LOCAL_PATH: /almacen
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./services/ai-worker:/app
+      - ./docs/product/brief-schema:/esquema:ro
+      - ./.storage:/almacen
+    restart: unless-stopped
+
   web:
     build:
       context: .

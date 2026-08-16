@@ -43,6 +43,17 @@ FRAGMENTOS = [
         section="Audiencia",
         linea=23,
     ),
+    FragmentoDeEntrada(
+        id="frag-c",
+        source_id="src-1",
+        filename="Brief P80.md",
+        texto=(
+            "FECHA | Lanzamiento: Septiembre-Octubre 2026 · Sostenimiento: "
+            "Octubre-Noviembre 2026. IFA Berlín: 4 de septiembre 2026."
+        ),
+        section="Hitos clave",
+        linea=5,
+    ),
 ]
 
 
@@ -365,3 +376,267 @@ def test_el_prompt_marca_los_campos_que_exigen_evidencia() -> None:
     prompt = extraction._instrucciones(brief_schema.campos_extraibles())
     assert "objetivo.negocio [CRÍTICO]" in prompt
     assert "[CLAIM — exige evidencia]" in prompt
+
+
+# ═══════════════ Campos de lista cerrada (el fallo de contexto.situacion) ═════
+
+
+def test_un_valor_fuera_del_enum_no_se_persiste() -> None:
+    """`objetivo.tipo` solo admite cinco valores. Lo demás no es aproximado: es inválido.
+
+    Aceptarlo trasladaría el fallo al esquema, más tarde y más lejos de su
+    causa: el campo pasaría la extracción y reventaría al validar el brief.
+    """
+    campos, descartes = validar_y_anclar(
+        _respuesta(
+            [
+                {
+                    "key": "objetivo.tipo",
+                    "value": "vender muchos teléfonos",
+                    "status": "found",
+                    "evidence": [],
+                }
+            ]
+        ),
+        FRAGMENTOS,
+    )
+    campo = _buscar(campos, "objetivo.tipo")
+    assert campo.status == "not_found"
+    assert campo.value is None
+    assert any("no está entre los valores permitidos" in d for d in descartes)
+
+
+def test_el_enum_se_normaliza_en_vez_de_perderse_por_mayusculas() -> None:
+    """«Awareness» y «awareness» son el mismo valor. Perder uno por la caja sería absurdo."""
+    campos, _ = validar_y_anclar(
+        _respuesta(
+            [
+                {
+                    "key": "objetivo.tipo",
+                    "value": "Awareness",
+                    "status": "found",
+                    "evidence": [
+                        {"fragment_id": "frag-a", "quote": "El Reto", "relation": "soporta"}
+                    ],
+                }
+            ]
+        ),
+        FRAGMENTOS,
+    )
+    campo = _buscar(campos, "objetivo.tipo")
+    assert campo.status == "found"
+    assert campo.value == "awareness"
+
+
+def test_el_prompt_nombra_los_valores_permitidos() -> None:
+    """Sin la lista, el campo es inadivinable — fue la causa real del not_found."""
+    prompt = extraction._instrucciones(brief_schema.campos_extraibles())
+    assert "Valores permitidos (use exactamente uno): awareness, consideration" in prompt
+
+
+def test_el_prompt_lleva_la_descripcion_de_cada_campo() -> None:
+    """Una clave con puntos no dice qué se busca.
+
+    `contexto.situacion` a secas hizo que el modelo archivara «El Reto» bajo
+    `practico.restricciones`, que desde el nombre es una lectura razonable.
+    """
+    campos = brief_schema.campos_extraibles()
+    assert all(c.descripcion for c in campos), "Hay campos que llegan al prompt sin descripción"
+
+    prompt = extraction._instrucciones(campos)
+    assert "Situación de mercado y reto que enfrenta la marca" in prompt
+    # Y la que separa los dos campos que se confundían:
+    assert "NO confundir con la situación de mercado" in prompt
+
+
+def test_una_respuesta_vacia_no_se_confunde_con_una_truncada() -> None:
+    """Dos fallos distintos con remedios opuestos: reintentar vs. subir max_tokens.
+
+    Un mensaje que culpa al tope de tokens cuando el proveedor devolvió nada
+    manda a quien lo lea a agrandar un presupuesto que no era el problema.
+    """
+    with pytest.raises(ExtraccionInvalida, match="vacía o casi vacía"):
+        validar_y_anclar('{"', FRAGMENTOS)
+
+    with pytest.raises(ExtraccionInvalida, match="cortada a mitad"):
+        validar_y_anclar('{"campos": [{"key": "contexto.situacion", "value": "algo sin cerrar', FRAGMENTOS)
+
+
+# ═════════════ La forma del valor: 15 de 41 campos no son texto ═══════════════
+
+
+def test_una_lista_no_se_guarda_como_texto_con_comas() -> None:
+    """`marca_producto[].rtbs` es una lista en el esquema.
+
+    Guardar «uno, dos, tres» como cadena pasa la extracción y revienta al
+    ensamblar el brief, lejos de aquí y sin rastro de su causa.
+    """
+    campos, _ = validar_y_anclar(
+        _respuesta(
+            [
+                {
+                    "key": "marca_producto[].rtbs",
+                    "value": ["Pantalla AMOLED 1.5K", "Batería de 5000 mAh"],
+                    "status": "found",
+                    "evidence": [
+                        {"fragment_id": "frag-a", "quote": "El Reto", "relation": "soporta"}
+                    ],
+                }
+            ]
+        ),
+        FRAGMENTOS,
+    )
+    campo = _buscar(campos, "marca_producto[].rtbs")
+    assert campo.value == ["Pantalla AMOLED 1.5K", "Batería de 5000 mAh"]
+
+
+def test_un_texto_donde_va_una_lista_se_recupera_como_lista_de_uno() -> None:
+    """Es un desliz de forma, no de contenido: no vale la pena perder el dato."""
+    campos, _ = validar_y_anclar(
+        _respuesta(
+            [
+                {
+                    "key": "accion_kpis.kpis",
+                    "value": "Cobertura en medios Tier 1",
+                    "status": "found",
+                    "evidence": [],
+                }
+            ]
+        ),
+        FRAGMENTOS,
+    )
+    assert _buscar(campos, "accion_kpis.kpis").value == ["Cobertura en medios Tier 1"]
+
+
+def test_un_mes_no_es_una_fecha() -> None:
+    """`practico.fecha_inicio` exige AAAA-MM-DD.
+
+    Convertir «Septiembre 2026» a una fecha exigiría elegir un día que nadie
+    escribió — exactamente lo que §9.4 prohíbe. El hueco se declara y se
+    convierte en pregunta.
+    """
+    campos, descartes = validar_y_anclar(
+        _respuesta(
+            [
+                {
+                    "key": "practico.fecha_inicio",
+                    "value": "Septiembre 2026",
+                    "status": "found",
+                    "evidence": [
+                        {"fragment_id": "frag-a", "quote": "El Reto", "relation": "soporta"}
+                    ],
+                }
+            ]
+        ),
+        FRAGMENTOS,
+    )
+    campo = _buscar(campos, "practico.fecha_inicio")
+    assert campo.status == "not_found"
+    assert campo.value is None
+    assert any("no es una fecha exacta" in d for d in descartes)
+
+
+def test_una_fecha_iso_respaldada_por_su_cita_se_acepta() -> None:
+    """El día tiene que estar escrito en la cita, no solo el mes."""
+    campos, _ = validar_y_anclar(
+        _respuesta(
+            [
+                {
+                    "key": "practico.fecha_inicio",
+                    "value": "2026-09-04",
+                    "status": "found",
+                    "evidence": [
+                        {"fragment_id": "frag-c", "quote": "4 de septiembre 2026", "relation": "soporta"}
+                    ],
+                }
+            ]
+        ),
+        FRAGMENTOS,
+    )
+    campo = _buscar(campos, "practico.fecha_inicio")
+    assert campo.status == "found"
+    assert campo.value == "2026-09-04"
+
+
+def test_una_fecha_con_dia_inventado_se_rechaza_aunque_la_cita_sea_real() -> None:
+    """El hueco que dejaba verificar solo la cita.
+
+    «Sostenimiento: Octubre-Noviembre 2026» es una cita literal y verificable, y
+    aun así `2026-11-30` es un día que nadie escribió. Comprobar que la cita
+    existe no comprueba que el valor se desprenda de ella; para una fecha sí se
+    puede comprobar, y se comprueba.
+
+    Ocurrió de verdad contra el material de la campaña P80.
+    """
+    campos, descartes = validar_y_anclar(
+        _respuesta(
+            [
+                {
+                    "key": "practico.fecha_fin",
+                    "value": "2026-11-30",
+                    "status": "found",
+                    "evidence": [
+                        {
+                            "fragment_id": "frag-c",
+                            "quote": "Sostenimiento: Octubre-Noviembre 2026",
+                            "relation": "soporta",
+                        }
+                    ],
+                }
+            ]
+        ),
+        FRAGMENTOS,
+    )
+    campo = _buscar(campos, "practico.fecha_fin")
+    assert campo.status == "not_found"
+    assert campo.value is None
+    assert any("no está escrita en ninguna cita" in d for d in descartes)
+
+
+def test_mandatorios_exige_su_estructura_de_objetos() -> None:
+    """El esquema pide {categoria, descripcion}; un texto suelto no sirve."""
+    campos, descartes = validar_y_anclar(
+        _respuesta(
+            [
+                {
+                    "key": "mandatorios",
+                    "value": "Usar el logo oficial",
+                    "status": "found",
+                    "evidence": [
+                        {"fragment_id": "frag-a", "quote": "El Reto", "relation": "soporta"}
+                    ],
+                }
+            ]
+        ),
+        FRAGMENTOS,
+    )
+    assert _buscar(campos, "mandatorios").status == "not_found"
+    assert any("lista de objetos" in d for d in descartes)
+
+
+def test_mandatorios_con_la_estructura_correcta_se_acepta() -> None:
+    campos, _ = validar_y_anclar(
+        _respuesta(
+            [
+                {
+                    "key": "mandatorios",
+                    "value": [{"categoria": "identidad", "descripcion": "Usar el logo oficial"}],
+                    "status": "found",
+                    "evidence": [
+                        {"fragment_id": "frag-a", "quote": "El Reto", "relation": "soporta"}
+                    ],
+                }
+            ]
+        ),
+        FRAGMENTOS,
+    )
+    campo = _buscar(campos, "mandatorios")
+    assert campo.status == "found"
+    assert campo.value == [{"categoria": "identidad", "descripcion": "Usar el logo oficial"}]
+
+
+def test_toda_forma_del_esquema_tiene_traduccion_al_prompt() -> None:
+    """Una forma nueva en el esquema no puede quedarse muda en el prompt."""
+    formas = {c.forma for c in brief_schema.campos_extraibles()}
+    sin_explicar = formas - set(extraction._FORMA_EN_PALABRAS) - {"texto", "enum"}
+    assert not sin_explicar, f"Formas sin explicación en el prompt: {sin_explicar}"

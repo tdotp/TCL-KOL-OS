@@ -33,8 +33,18 @@ logger = logging.getLogger("ai-worker.runner")
 #: Espera entre reintentos: 1 min, 5 min, 15 min.
 BACKOFF_SEGUNDOS = [60, 300, 900]
 
-#: Raíz del monorepo, derivada de la ubicación de este módulo.
-_RAIZ_MONOREPO = Path(__file__).resolve().parents[3]
+def _raiz_probable() -> Path:
+    """Raíz desde la que resolver rutas relativas.
+
+    En el monorepo son tres niveles hacia arriba; dentro del contenedor el
+    código vive en `/app` y esos tres niveles no existen. Contarlos a ciegas
+    —y encima al importar el módulo— hacía que el consumidor **ni siquiera
+    arrancara** en Docker, con un IndexError que no menciona rutas ni
+    almacenamiento.
+    """
+    aqui = Path(__file__).resolve()
+    padres = aqui.parents
+    return padres[3] if len(padres) > 3 else padres[len(padres) - 1]
 
 
 def ruta_de_almacenamiento() -> Path:
@@ -46,9 +56,9 @@ def ruta_de_almacenamiento() -> Path:
     """
     configurada = os.environ.get("STORAGE_LOCAL_PATH", "").strip()
     if not configurada:
-        return _RAIZ_MONOREPO / ".storage"
+        return _raiz_probable() / ".storage"
     ruta = Path(configurada)
-    return ruta if ruta.is_absolute() else (_RAIZ_MONOREPO / ruta).resolve()
+    return ruta if ruta.is_absolute() else (_raiz_probable() / ruta).resolve()
 
 
 @dataclass(frozen=True)

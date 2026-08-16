@@ -330,11 +330,49 @@ El material operativo entregado por el product owner (ver [D0-14](../product/D0-
   | `claim` | Afirmación sobre el producto; exige evidencia siempre (§15, umbral del 100%) | `marca_producto[].beneficio_principal`, `marca_producto[].diferenciales`, `marca_producto[].rtbs`, `marca_producto[].especificaciones`, `mensaje_principal.beneficio_diferencial` |
   | `informativo` | Todo lo demás; no bloquea | (25 campos, valor implícito) |
 
-- **Confirmación con material real:** la primera extracción sobre la campaña P80 dejó `contexto.situacion` y `objetivo.tipo` en `not_found`. Se consultó si eran de verdad críticos o si la exigencia estaba mal calibrada, y el product owner confirmó que **sí lo son**. Es el resultado correcto: el brief del cliente no trae esos dos datos, y el sistema lo dice en vez de rellenarlos. Cada campaña arrancará con esas dos preguntas al cliente, y eso es información, no una falla de la extracción.
+- **Confirmación con material real:** la primera extracción sobre la campaña P80 dejó `contexto.situacion` y `objetivo.tipo` en `not_found`. Se consultó si eran de verdad críticos o si la exigencia estaba mal calibrada, y el product owner confirmó que **sí lo son**. La criticidad queda así.
+
+- **Corrección posterior — por qué salían `not_found`:** al revisar la fuente se comprobó que **el brief sí traía los dos datos**. «El Reto › Desafío» y «El Reto › El Contexto» son exactamente `contexto.situacion`, y la extracción los había archivado bajo `practico.restricciones`. No era material faltante: era un defecto de extracción disfrazado de dato ausente, que es el peor modo de fallar porque genera preguntas al cliente por algo que él ya respondió. Las causas y su arreglo quedan en [DEC-022](#dec-022--el-prompt-de-extracción-debe-describir-lo-que-pide). La lección que deja para este registro: **un `not_found` no prueba que el dato no exista mientras no se haya mirado la fuente.**
 
 - **Dónde vive:** una sola tabla, `CRITICIDAD_POR_DEFECTO` en `services/ai-worker/app/brief_schema.py`. La *forma* del brief se sigue leyendo del JSON Schema de D0-05 —nunca se copia—; solo la criticidad se declara aparte, porque el esquema no la tiene. Una prueba verifica que toda clave de la tabla exista en el esquema, para que no se desvíen.
 
 - **Por qué por defecto y no fijo:** `criticidad` sigue siendo una columna por campo en `brief_fields`. Una campaña puede subir o bajar la exigencia de un campo concreto; lo que fija esta decisión es con qué valor empieza. Cambiarlo es editar una lista, no perseguir criterios repartidos por el código.
+
+- **Responsable de aprobación:** Gerardo Calambás.
+
+---
+
+### DEC-022 — El prompt de extracción debe describir lo que pide
+
+- **Fecha:** 16 de agosto de 2026
+- **Estado:** **aprobada** — corrige la implementación de E5-3, no el diseño
+- **Origen:** un `not_found` que parecía dato faltante y era un defecto de extracción. Al revisar la fuente, el brief P80 **sí** traía `contexto.situacion` («El Reto › Desafío») y permitía deducir `objetivo.tipo`. El sistema iba a preguntarle al cliente por algo que ya había respondido.
+
+- **Las cuatro causas, todas de implementación:**
+
+  | # | Falla | Efecto medido |
+  |---|---|---|
+  | 1 | La descripción de cada campo se leía **después** de resolver el `$ref`. En JSON Schema vive como hermana del `$ref`, en la propiedad concreta, así que se perdía | Los 41 campos llegaban al prompt como claves con puntos y nada más. `contexto.situacion` no dice qué se busca; el modelo lo archivó donde el nombre sonaba parecido |
+  | 2 | Solo 4 de 41 campos tenían descripción en el esquema | Se escribieron las 37 restantes, ancladas al vocabulario real de cada formato de cliente (D0-05 §2.1) |
+  | 3 | `objetivo.tipo` es un enum y el prompt no nombraba sus valores | Un campo inadivinable. Además, un texto libre habría pasado la extracción para reventar después contra el esquema |
+  | 4 | **15 de 41 campos no son texto** —11 listas, 2 fechas ISO, 1 enum, 1 lista de objetos— y el contrato solo producía cadenas | Varios campos daban `found` con valores que el esquema habría rechazado al ensamblar el brief. No se veía porque nada ensambla el documento todavía |
+
+- **Un hueco de fondo que esto destapó:** verificar que la cita existe **no** verifica que el valor se desprenda de ella. El modelo devolvió `practico.fecha_fin = 2026-11-30` citando *«Sostenimiento: Octubre-Noviembre 2026»* — cita literal, verificable, y un día que nadie escribió. Para texto libre esto no se decide sin juicio; para una fecha sí, y ahora se comprueba que el día aparezca en alguna cita. El resto de formas queda como riesgo conocido.
+
+- **Resultado sobre el mismo material, estable en 3 corridas:**
+
+  | | Antes | Después |
+  |---|---:|---:|
+  | Críticos encontrados | 9/11 *(varios con valores inválidos)* | **9/11** *(todos válidos contra el esquema)* |
+  | Claims con evidencia verificada | 4/5 | **5/5** |
+  | Fechas en formato ISO | 0 | 1 de 2 (la otra no existe en la fuente) |
+  | Listas con la forma correcta | 0 de 11 | 11 de 11 |
+
+  El conteo de críticos no sube, y esa es la lectura honesta: **antes estaba inflado.** Lo que cambió es que ahora cada `found` es defendible.
+
+- **Los dos críticos que siguen sin dato son legítimos:** `practico.fecha_fin` —la fuente da «Octubre-Noviembre 2026», un rango, y el día exacto lo fija una persona— y `practico.restricciones`, cuyo contenido el modelo asigna a `mandatorios`. Este segundo es una **ambigüedad de producto**, no un defecto: los dos campos compiten por el mismo material y el esquema no dice cuál manda. Queda para decidir antes de cerrar E6.
+
+- **Fiabilidad del proveedor:** medido sobre una decena de llamadas idénticas, **2 volvieron con el JSON partido o vacío y `finish_reason: stop`** — OpenRouter enrutando a un upstream que devolvió un payload incompleto. Se añadió **un** reintento. Sin él, la herramienta «a veces no funciona», que es la peor forma de fallar.
 
 - **Responsable de aprobación:** Gerardo Calambás.
 

@@ -17,17 +17,18 @@
     "practico"
   ],
   "additionalProperties": false,
-
   "properties": {
-    "meta": { "$ref": "#/$defs/meta" },
-
+    "meta": {
+      "$ref": "#/$defs/meta"
+    },
     "productos": {
       "description": "Productos que cubre la campaña, con su rol y prioridad (DEC-016). Una campaña puede tener uno (lanzamiento simple), varios de una misma línea (P80 / Pro / Ultra) o varios sin relación entre sí (campaña de temporada).",
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/$defs/productoDeCampana" }
+      "items": {
+        "$ref": "#/$defs/productoDeCampana"
+      }
     },
-
     "contexto": {
       "description": "Nivel campaña. Único y compartido por todos los productos.",
       "$ref": "#/$defs/bloqueContexto"
@@ -42,16 +43,25 @@
     },
     "problema_insight": {
       "description": "Opcional y compartido con excepción. Un brief puramente operativo no contempla trabajo estratégico-creativo; no se obliga a rellenarlo cuando su fuente no lo contiene.",
-      "oneOf": [{ "$ref": "#/$defs/bloqueProblemaInsight" }, { "type": "null" }]
+      "oneOf": [
+        {
+          "$ref": "#/$defs/bloqueProblemaInsight"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "marca_producto": {
       "description": "Nivel producto: se repite, uno por cada entrada de `productos`. Ficha técnica, precio, diferenciales y RTBs SIEMPRE difieren entre productos.",
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/$defs/bloqueMarcaProducto" }
+      "items": {
+        "$ref": "#/$defs/bloqueMarcaProducto"
+      }
     },
     "mandatorios": {
-      "description": "Compartido con excepción.",
+      "description": "Obligaciones y lineamientos que la campaña debe respetar sí o sí: legales, de identidad de marca, de mensaje, de canal o de timing. En el Brief Estratégico, «07. Mandatorios»; en THE BRIEF, «PRACTICAL STUFF (Must)». Compartido con excepción entre productos (DEC-016).",
       "$ref": "#/$defs/campoListaMandatorios"
     },
     "mensaje_principal": {
@@ -64,168 +74,394 @@
     },
     "entregable_creativo": {
       "description": "Opcional, nivel campaña. Presente cuando el brief abre trabajo creativo a una agencia.",
-      "oneOf": [{ "$ref": "#/$defs/bloqueEntregable" }, { "type": "null" }]
+      "oneOf": [
+        {
+          "$ref": "#/$defs/bloqueEntregable"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "practico": {
       "description": "Nivel campaña: fechas, hitos y presupuesto total. El reparto por producto vive en `productos[].participacionPresupuesto`.",
       "$ref": "#/$defs/bloquePractico"
     },
-
     "overrides": {
       "description": "Excepciones por producto sobre los bloques compartidos-con-excepción (DEC-016). Ausente o vacío = todos los productos comparten. Un bloque no declarado aquí se hereda del nivel campaña.",
       "type": "array",
-      "items": { "$ref": "#/$defs/overrideDeProducto" }
+      "items": {
+        "$ref": "#/$defs/overrideDeProducto"
+      }
     }
   },
-
   "$defs": {
     "status": {
       "description": "found: el dato aparece en las fuentes. not_found: no aparece y NO se completa por conocimiento general. conflict: dos fuentes se contradicen. manual: lo aportó una persona.",
-      "enum": ["found", "not_found", "conflict", "manual"]
+      "enum": [
+        "found",
+        "not_found",
+        "conflict",
+        "manual"
+      ]
     },
-
     "provenanceType": {
       "description": "Distingue hecho, inferencia y aporte local, según §9.4 del documento maestro.",
-      "enum": ["extracted", "inferred", "manual_local", "translated"]
+      "enum": [
+        "extracted",
+        "inferred",
+        "manual_local",
+        "translated"
+      ]
     },
-
     "criticidad": {
       "description": "informativo: no exige evidencia. critico: campo obligatorio del brief. claim: afirmación verificable sobre el producto — exige evidencia sin excepción.",
-      "enum": ["informativo", "critico", "claim"]
+      "enum": [
+        "informativo",
+        "critico",
+        "claim"
+      ]
     },
-
     "evidencia": {
       "type": "object",
-      "required": ["sourceId", "quote", "relation"],
+      "required": [
+        "sourceId",
+        "quote",
+        "relation"
+      ],
       "additionalProperties": false,
       "properties": {
-        "sourceId": { "type": "string", "description": "SourceDocument.id" },
-        "fragmentId": { "type": ["string", "null"], "description": "SourceFragment.id" },
-        "page": { "type": ["integer", "null"], "minimum": 1 },
-        "slide": { "type": ["integer", "null"], "minimum": 1 },
+        "sourceId": {
+          "type": "string",
+          "description": "SourceDocument.id"
+        },
+        "fragmentId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "SourceFragment.id"
+        },
+        "page": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "slide": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
         "quote": {
           "type": "string",
           "minLength": 1,
           "description": "Cita literal. Permite verificar sin abrir el original."
         },
-        "relation": { "enum": ["soporta", "contradice", "contexto"] }
+        "relation": {
+          "enum": [
+            "soporta",
+            "contradice",
+            "contexto"
+          ]
+        }
       }
     },
-
     "reglasCampo": {
       "description": "Reglas transversales derivadas de §9.4.",
       "allOf": [
         {
           "if": {
-            "required": ["status", "criticidad"],
+            "required": [
+              "status",
+              "criticidad"
+            ],
             "properties": {
-              "status": { "const": "found" },
-              "criticidad": { "enum": ["critico", "claim"] }
+              "status": {
+                "const": "found"
+              },
+              "criticidad": {
+                "enum": [
+                  "critico",
+                  "claim"
+                ]
+              }
             }
           },
           "then": {
-            "properties": { "evidence": { "minItems": 1 } },
+            "properties": {
+              "evidence": {
+                "minItems": 1
+              }
+            },
             "description": "Un campo crítico o un claim con valor encontrado debe citar al menos una evidencia."
           }
         },
         {
           "if": {
-            "required": ["status"],
-            "properties": { "status": { "const": "not_found" } }
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "const": "not_found"
+              }
+            }
           },
           "then": {
-            "properties": { "value": { "const": null } },
+            "properties": {
+              "value": {
+                "const": null
+              }
+            },
             "description": "not_found nunca lleva valor: es la alternativa explícita a inventarlo."
           }
         },
         {
           "if": {
-            "required": ["status"],
-            "properties": { "status": { "const": "conflict" } }
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "const": "conflict"
+              }
+            }
           },
           "then": {
-            "properties": { "evidence": { "minItems": 2 } },
+            "properties": {
+              "evidence": {
+                "minItems": 2
+              }
+            },
             "description": "Un conflicto exige mostrar las dos fuentes que se contradicen."
           }
         }
       ]
     },
-
     "campoTexto": {
       "type": "object",
-      "required": ["value", "status", "provenanceType", "criticidad", "evidence"],
+      "required": [
+        "value",
+        "status",
+        "provenanceType",
+        "criticidad",
+        "evidence"
+      ],
       "additionalProperties": false,
       "properties": {
-        "value": { "type": ["string", "null"] },
-        "status": { "$ref": "#/$defs/status" },
-        "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
-        "provenanceType": { "$ref": "#/$defs/provenanceType" },
-        "criticidad": { "$ref": "#/$defs/criticidad" },
-        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidencia" } }
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "confidence": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "provenanceType": {
+          "$ref": "#/$defs/provenanceType"
+        },
+        "criticidad": {
+          "$ref": "#/$defs/criticidad"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidencia"
+          }
+        }
       },
-      "allOf": [{ "$ref": "#/$defs/reglasCampo" }]
+      "allOf": [
+        {
+          "$ref": "#/$defs/reglasCampo"
+        }
+      ]
     },
-
     "campoListaTexto": {
       "type": "object",
-      "required": ["value", "status", "provenanceType", "criticidad", "evidence"],
+      "required": [
+        "value",
+        "status",
+        "provenanceType",
+        "criticidad",
+        "evidence"
+      ],
       "additionalProperties": false,
       "properties": {
         "value": {
           "oneOf": [
-            { "type": "array", "items": { "type": "string", "minLength": 1 } },
-            { "type": "null" }
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            {
+              "type": "null"
+            }
           ]
         },
-        "status": { "$ref": "#/$defs/status" },
-        "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
-        "provenanceType": { "$ref": "#/$defs/provenanceType" },
-        "criticidad": { "$ref": "#/$defs/criticidad" },
-        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidencia" } }
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "confidence": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "provenanceType": {
+          "$ref": "#/$defs/provenanceType"
+        },
+        "criticidad": {
+          "$ref": "#/$defs/criticidad"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidencia"
+          }
+        }
       },
-      "allOf": [{ "$ref": "#/$defs/reglasCampo" }]
+      "allOf": [
+        {
+          "$ref": "#/$defs/reglasCampo"
+        }
+      ]
     },
-
     "campoFecha": {
       "type": "object",
-      "required": ["value", "status", "provenanceType", "criticidad", "evidence"],
-      "additionalProperties": false,
-      "properties": {
-        "value": {
-          "oneOf": [{ "type": "string", "format": "date" }, { "type": "null" }]
-        },
-        "status": { "$ref": "#/$defs/status" },
-        "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
-        "provenanceType": { "$ref": "#/$defs/provenanceType" },
-        "criticidad": { "$ref": "#/$defs/criticidad" },
-        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidencia" } }
-      },
-      "allOf": [{ "$ref": "#/$defs/reglasCampo" }]
-    },
-
-    "campoObjetivoTipo": {
-      "type": "object",
-      "required": ["value", "status", "provenanceType", "criticidad", "evidence"],
+      "required": [
+        "value",
+        "status",
+        "provenanceType",
+        "criticidad",
+        "evidence"
+      ],
       "additionalProperties": false,
       "properties": {
         "value": {
           "oneOf": [
-            { "enum": ["awareness", "consideration", "conversion", "loyalty", "otro"] },
-            { "type": "null" }
+            {
+              "type": "string",
+              "format": "date"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
-        "status": { "$ref": "#/$defs/status" },
-        "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
-        "provenanceType": { "$ref": "#/$defs/provenanceType" },
-        "criticidad": { "$ref": "#/$defs/criticidad" },
-        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidencia" } }
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "confidence": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "provenanceType": {
+          "$ref": "#/$defs/provenanceType"
+        },
+        "criticidad": {
+          "$ref": "#/$defs/criticidad"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidencia"
+          }
+        }
       },
-      "allOf": [{ "$ref": "#/$defs/reglasCampo" }]
+      "allOf": [
+        {
+          "$ref": "#/$defs/reglasCampo"
+        }
+      ]
     },
-
+    "campoObjetivoTipo": {
+      "type": "object",
+      "required": [
+        "value",
+        "status",
+        "provenanceType",
+        "criticidad",
+        "evidence"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "oneOf": [
+            {
+              "enum": [
+                "awareness",
+                "consideration",
+                "conversion",
+                "loyalty",
+                "otro"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "confidence": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "provenanceType": {
+          "$ref": "#/$defs/provenanceType"
+        },
+        "criticidad": {
+          "$ref": "#/$defs/criticidad"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidencia"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "$ref": "#/$defs/reglasCampo"
+        }
+      ]
+    },
     "campoListaMandatorios": {
       "type": "object",
-      "required": ["value", "status", "provenanceType", "criticidad", "evidence"],
+      "required": [
+        "value",
+        "status",
+        "provenanceType",
+        "criticidad",
+        "evidence"
+      ],
       "additionalProperties": false,
       "properties": {
         "value": {
@@ -234,7 +470,10 @@
               "type": "array",
               "items": {
                 "type": "object",
-                "required": ["categoria", "descripcion"],
+                "required": [
+                  "categoria",
+                  "descripcion"
+                ],
                 "additionalProperties": false,
                 "properties": {
                   "categoria": {
@@ -248,22 +487,48 @@
                       "negocio"
                     ]
                   },
-                  "descripcion": { "type": "string", "minLength": 1 }
+                  "descripcion": {
+                    "type": "string",
+                    "minLength": 1
+                  }
                 }
               }
             },
-            { "type": "null" }
+            {
+              "type": "null"
+            }
           ]
         },
-        "status": { "$ref": "#/$defs/status" },
-        "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
-        "provenanceType": { "$ref": "#/$defs/provenanceType" },
-        "criticidad": { "$ref": "#/$defs/criticidad" },
-        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidencia" } }
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "confidence": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "provenanceType": {
+          "$ref": "#/$defs/provenanceType"
+        },
+        "criticidad": {
+          "$ref": "#/$defs/criticidad"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidencia"
+          }
+        }
       },
-      "allOf": [{ "$ref": "#/$defs/reglasCampo" }]
+      "allOf": [
+        {
+          "$ref": "#/$defs/reglasCampo"
+        }
+      ]
     },
-
     "meta": {
       "type": "object",
       "required": [
@@ -277,14 +542,39 @@
       ],
       "additionalProperties": false,
       "properties": {
-        "briefVersionId": { "type": "string" },
-        "briefId": { "type": ["string", "null"] },
-        "campaignId": { "type": "string" },
-        "language": { "enum": ["es", "en"] },
-        "version": { "type": "integer", "minimum": 1 },
-        "parentVersionId": { "type": ["string", "null"] },
+        "briefVersionId": {
+          "type": "string"
+        },
+        "briefId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "campaignId": {
+          "type": "string"
+        },
+        "language": {
+          "enum": [
+            "es",
+            "en"
+          ]
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "parentVersionId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "translationOfId": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "description": "Obligatorio cuando language distinto de 'es' — regla de integridad §10.3."
         },
         "status": {
@@ -303,85 +593,168 @@
             "processing_failed"
           ]
         },
-        "createdBy": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "templateVersion": { "type": ["string", "null"] }
+        "createdBy": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "templateVersion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       },
       "allOf": [
         {
           "if": {
-            "required": ["language"],
-            "properties": { "language": { "const": "en" } }
+            "required": [
+              "language"
+            ],
+            "properties": {
+              "language": {
+                "const": "en"
+              }
+            }
           },
           "then": {
-            "required": ["translationOfId"],
-            "properties": { "translationOfId": { "type": "string" } }
+            "required": [
+              "translationOfId"
+            ],
+            "properties": {
+              "translationOfId": {
+                "type": "string"
+              }
+            }
           }
         }
       ]
     },
-
     "bloqueContexto": {
       "type": "object",
-      "required": ["situacion"],
+      "required": [
+        "situacion"
+      ],
       "additionalProperties": false,
       "properties": {
-        "situacion": { "$ref": "#/$defs/campoTexto" },
-        "categoria": { "$ref": "#/$defs/campoTexto" },
+        "situacion": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "Situación de mercado y reto que enfrenta la marca. En el Brief P80 aparece bajo «El Reto» y «El Contexto»; en el Brief Estratégico, «01. Contexto». Incluye competencia, saturación de categoría y canal de venta."
+        },
+        "categoria": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "Categoría de producto a la que pertenece la campaña (p. ej. smartphones, televisores, audio)."
+        },
         "contexto_global": {
           "$ref": "#/$defs/campoTexto",
           "description": "Qué dice el material de TCL China sobre el contexto de lanzamiento."
         }
       }
     },
-
     "bloqueObjetivo": {
       "type": "object",
-      "required": ["tipo", "negocio"],
+      "required": [
+        "tipo",
+        "negocio"
+      ],
       "additionalProperties": false,
       "properties": {
-        "tipo": { "$ref": "#/$defs/campoObjetivoTipo" },
-        "negocio": { "$ref": "#/$defs/campoTexto" },
-        "marca_comunicacion": { "$ref": "#/$defs/campoTexto" },
-        "comportamiento_esperado": { "$ref": "#/$defs/campoTexto" }
+        "tipo": {
+          "$ref": "#/$defs/campoObjetivoTipo",
+          "description": "Etapa del embudo que persigue la campaña. Elija exactamente uno de los valores permitidos: awareness (dar a conocer), consideration (que evalúen), conversion (que compren), loyalty (que repitan), otro. Dedúzcalo de los objetivos y KPI declarados aunque la fuente no use estas palabras."
+        },
+        "negocio": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "Qué debe lograr la campaña para el negocio: participación de mercado, ventas, posicionamiento. En el Brief P80, «Objetivos (PR / KOL)»."
+        },
+        "marca_comunicacion": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "Qué debe lograr en percepción de marca, distinto del resultado comercial."
+        },
+        "comportamiento_esperado": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "Qué debe hacer distinto la audiencia después de ver la campaña."
+        }
       }
     },
-
     "bloqueTarget": {
       "type": "object",
-      "required": ["descripcion"],
+      "required": [
+        "descripcion"
+      ],
       "additionalProperties": false,
       "properties": {
-        "descripcion": { "$ref": "#/$defs/campoTexto" },
-        "rango_edad": { "$ref": "#/$defs/campoTexto" },
-        "ubicacion": { "$ref": "#/$defs/campoListaTexto" },
-        "comportamiento": { "$ref": "#/$defs/campoTexto" },
-        "relacion_categoria": { "$ref": "#/$defs/campoTexto" }
+        "descripcion": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "A quién le habla la campaña, en una frase. En el Brief P80, «Audiencia» (primaria y secundaria); en THE BRIEF, «WHO»."
+        },
+        "rango_edad": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "Franja de edad de la audiencia, tal como la declare la fuente."
+        },
+        "ubicacion": {
+          "$ref": "#/$defs/campoListaTexto",
+          "description": "Ciudades, regiones o país de la audiencia."
+        },
+        "comportamiento": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "Hábitos de consumo, medios y compra de la audiencia."
+        },
+        "relacion_categoria": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "Qué relación tiene hoy la audiencia con la categoría: si ya compra, si compara, si desconoce la marca."
+        }
       }
     },
-
     "bloqueProblemaInsight": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "problema": { "$ref": "#/$defs/campoTexto" },
-        "tension": { "$ref": "#/$defs/campoTexto" },
-        "insight": { "$ref": "#/$defs/campoTexto" },
-        "cambio_comportamiento": { "$ref": "#/$defs/campoTexto" }
+        "problema": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "El problema real que la campaña intenta resolver. En el Brief P80, «Desafío»."
+        },
+        "tension": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "La contradicción o fricción que vive la audiencia."
+        },
+        "insight": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "La verdad sobre la audiencia que hace que el mensaje funcione. En THE BRIEF, «INSIGHT»."
+        },
+        "cambio_comportamiento": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "Qué creencia o conducta se busca mover. En THE BRIEF, «BEHAVIOR CHANGE»."
+        }
       }
     },
-
     "productoDeCampana": {
       "description": "Un producto dentro de la campaña, con el papel que juega en ella.",
       "type": "object",
-      "required": ["productId", "nombre"],
+      "required": [
+        "productId",
+        "nombre"
+      ],
       "additionalProperties": false,
       "properties": {
-        "productId": { "type": "string", "minLength": 1 },
-        "nombre": { "type": "string", "minLength": 1 },
+        "productId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "nombre": {
+          "type": "string",
+          "minLength": 1
+        },
         "rol": {
           "description": "flagship: el producto que lidera la campaña. secundario: acompaña. entrada: gama de acceso. unico: campaña de un solo producto.",
-          "enum": ["flagship", "secundario", "entrada", "unico"]
+          "enum": [
+            "flagship",
+            "secundario",
+            "entrada",
+            "unico"
+          ]
         },
         "prioridad": {
           "description": "1 = mayor prioridad. Ordena el esfuerzo de contenidos (P80: Ultra > Pro > básico).",
@@ -390,35 +763,52 @@
         },
         "participacionPresupuesto": {
           "description": "Fracción del presupuesto destinada a este producto (0–1). El brief P80 declara 0.6 / 0.2 / 0.1.",
-          "type": ["number", "null"],
+          "type": [
+            "number",
+            "null"
+          ],
           "minimum": 0,
           "maximum": 1
         }
       }
     },
-
     "overrideDeProducto": {
       "description": "Excepción declarada por un producto sobre un bloque compartido. Solo los cuatro bloques compartidos-con-excepción admiten override (DEC-016).",
       "type": "object",
-      "required": ["productId"],
+      "required": [
+        "productId"
+      ],
       "additionalProperties": false,
       "minProperties": 2,
       "properties": {
-        "productId": { "type": "string", "minLength": 1 },
+        "productId": {
+          "type": "string",
+          "minLength": 1
+        },
         "motivo": {
           "description": "Por qué este producto no comparte el bloque. Obliga a justificar la divergencia en vez de crearla por descuido.",
           "type": "string"
         },
-        "target_audiencia": { "$ref": "#/$defs/bloqueTarget" },
-        "problema_insight": { "$ref": "#/$defs/bloqueProblemaInsight" },
-        "mensaje_principal": { "$ref": "#/$defs/bloqueMensaje" },
-        "mandatorios": { "$ref": "#/$defs/campoListaMandatorios" }
+        "target_audiencia": {
+          "$ref": "#/$defs/bloqueTarget"
+        },
+        "problema_insight": {
+          "$ref": "#/$defs/bloqueProblemaInsight"
+        },
+        "mensaje_principal": {
+          "$ref": "#/$defs/bloqueMensaje"
+        },
+        "mandatorios": {
+          "$ref": "#/$defs/campoListaMandatorios"
+        }
       }
     },
-
     "bloqueMarcaProducto": {
       "type": "object",
-      "required": ["productId", "nombre_producto"],
+      "required": [
+        "productId",
+        "nombre_producto"
+      ],
       "additionalProperties": false,
       "properties": {
         "productId": {
@@ -426,67 +816,136 @@
           "type": "string",
           "minLength": 1
         },
-        "nombre_producto": { "$ref": "#/$defs/campoTexto" },
-        "rol_marca": { "$ref": "#/$defs/campoTexto" },
-        "beneficio_principal": { "$ref": "#/$defs/campoTexto" },
-        "diferenciales": { "$ref": "#/$defs/campoListaTexto" },
-        "rtbs": { "$ref": "#/$defs/campoListaTexto" },
-        "especificaciones": { "$ref": "#/$defs/campoListaTexto" },
-        "activos_marca": { "$ref": "#/$defs/campoListaTexto" }
+        "nombre_producto": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "Nombre comercial exacto del producto o modelo, tal como se vende."
+        },
+        "rol_marca": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "Qué papel juega la marca en la historia: protagonista, facilitador, experto."
+        },
+        "beneficio_principal": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "El beneficio central para el usuario, en términos de lo que gana, no de la especificación técnica."
+        },
+        "diferenciales": {
+          "$ref": "#/$defs/campoListaTexto",
+          "description": "Qué tiene este producto que la competencia no. Es una afirmación verificable: exige cita."
+        },
+        "rtbs": {
+          "$ref": "#/$defs/campoListaTexto",
+          "description": "Razones para creer (reason to believe): la prueba concreta que sostiene el beneficio."
+        },
+        "especificaciones": {
+          "$ref": "#/$defs/campoListaTexto",
+          "description": "Datos técnicos del producto: pantalla, cámara, batería, procesador. Copie las cifras tal como aparecen."
+        },
+        "activos_marca": {
+          "$ref": "#/$defs/campoListaTexto",
+          "description": "Piezas, logos, guías o material gráfico que la marca aporta."
+        }
       }
     },
-
     "bloqueMensaje": {
       "type": "object",
-      "required": ["one_line"],
+      "required": [
+        "one_line"
+      ],
       "additionalProperties": false,
       "properties": {
         "one_line": {
           "$ref": "#/$defs/campoTexto",
           "description": "Equivalente al ONE LINE BRIEF del one-pager."
         },
-        "mensaje_clave": { "$ref": "#/$defs/campoTexto" },
-        "beneficio_diferencial": { "$ref": "#/$defs/campoTexto" },
-        "tono": { "$ref": "#/$defs/campoTexto" }
+        "mensaje_clave": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "El mensaje que la campaña debe dejar instalado, en las palabras de la fuente. En el Brief P80, «La Idea» y sus taglines."
+        },
+        "beneficio_diferencial": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "El beneficio que distingue a este producto, expresado como se le diría al consumidor. Es una afirmación: exige cita."
+        },
+        "tono": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "Registro y personalidad con que se debe hablar."
+        }
       }
     },
-
     "bloqueAccionKpis": {
       "type": "object",
-      "required": ["accion_esperada"],
+      "required": [
+        "accion_esperada"
+      ],
       "additionalProperties": false,
       "properties": {
-        "accion_esperada": { "$ref": "#/$defs/campoTexto" },
-        "criterio_exito": { "$ref": "#/$defs/campoTexto" },
-        "kpis": { "$ref": "#/$defs/campoListaTexto" }
+        "accion_esperada": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "Qué se espera que haga la audiencia: comprar, visitar, registrarse, recomendar. En THE BRIEF, «WE WILL BE HAPPY IF»."
+        },
+        "criterio_exito": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "Cómo se sabrá que la campaña funcionó, en términos cualitativos."
+        },
+        "kpis": {
+          "$ref": "#/$defs/campoListaTexto",
+          "description": "Indicadores y metas numéricas. En el Brief P80, «Resultados esperados»."
+        }
       }
     },
-
     "bloqueEntregable": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "entregables": { "$ref": "#/$defs/campoListaTexto" },
-        "canales": { "$ref": "#/$defs/campoListaTexto" },
-        "formatos": { "$ref": "#/$defs/campoListaTexto" },
-        "alcance": { "$ref": "#/$defs/campoTexto" },
-        "desafio_creativo": { "$ref": "#/$defs/campoTexto" }
+        "entregables": {
+          "$ref": "#/$defs/campoListaTexto",
+          "description": "Piezas concretas que se deben producir."
+        },
+        "canales": {
+          "$ref": "#/$defs/campoListaTexto",
+          "description": "Dónde se publica: medios, redes, retail, punto de venta."
+        },
+        "formatos": {
+          "$ref": "#/$defs/campoListaTexto",
+          "description": "Formatos técnicos de las piezas (video vertical, reel, nota de prensa)."
+        },
+        "alcance": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "Cobertura esperada en volumen o audiencia."
+        },
+        "desafio_creativo": {
+          "$ref": "#/$defs/campoTexto",
+          "description": "La dificultad creativa que hay que resolver. En el Brief Estratégico, «10. Desafío»."
+        }
       }
     },
-
     "bloquePractico": {
       "type": "object",
-      "required": ["fecha_inicio", "fecha_fin"],
+      "required": [
+        "fecha_inicio",
+        "fecha_fin"
+      ],
       "additionalProperties": false,
       "properties": {
-        "fecha_inicio": { "$ref": "#/$defs/campoFecha" },
-        "fecha_fin": { "$ref": "#/$defs/campoFecha" },
-        "hitos": { "$ref": "#/$defs/campoListaTexto" },
+        "fecha_inicio": {
+          "$ref": "#/$defs/campoFecha",
+          "description": "Cuándo arranca la ejecución. Copie la fecha como la declare la fuente, sin normalizar."
+        },
+        "fecha_fin": {
+          "$ref": "#/$defs/campoFecha",
+          "description": "Cuándo termina la ejecución o el sostenimiento."
+        },
+        "hitos": {
+          "$ref": "#/$defs/campoListaTexto",
+          "description": "Fechas clave intermedias: lanzamientos, ferias, cortes de reporte. En el Brief P80, «Hitos clave»."
+        },
         "presupuesto": {
           "$ref": "#/$defs/campoTexto",
           "description": "Nivel de confidencialidad heredado del recurso. Ver §12.2."
         },
-        "restricciones": { "$ref": "#/$defs/campoListaTexto" }
+        "restricciones": {
+          "$ref": "#/$defs/campoListaTexto",
+          "description": "Límites operativos de la ejecución: qué no se puede hacer, plazos rígidos, condiciones de canal. NO confundir con la situación de mercado, que va en contexto.situacion."
+        }
       }
     }
   }

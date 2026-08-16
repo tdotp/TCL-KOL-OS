@@ -15,11 +15,13 @@ El valor por defecto que se usa aquí es el del ejemplo validado
 es una invención de este módulo: es la asignación que ya se revisó.
 
 Esa asignación quedó confirmada en DEC-021, que cierra el pendiente de D0-05
-§8 —*"¿qué campos exactos son obligatorios para aprobar?"*—. Se probó contra
-material real: `contexto.situacion` y `objetivo.tipo` salieron `not_found` en
-la campaña P80, se preguntó si la exigencia estaba mal calibrada, y la
-respuesta fue que no. El brief del cliente no trae esos dos datos y el sistema
-lo dice, que es exactamente lo que debe hacer.
+§8 —*"¿qué campos exactos son obligatorios para aprobar?"*—.
+
+Nota de un error que costó entender: esos dos campos salieron `not_found` en la
+campaña P80 y se leyó como «el cliente no mandó el dato». Era falso. El brief
+sí lo traía, y la extracción lo archivaba en otro campo porque este módulo
+perdía las descripciones del esquema (DEC-022). **Un `not_found` no prueba que
+el dato no exista mientras nadie haya mirado la fuente.**
 
 Sigue siendo un **valor por defecto**, no una constante: `criticidad` es una
 columna por campo en `brief_fields`, y una campaña puede subir o bajar la
@@ -93,6 +95,49 @@ CRITICIDAD_POR_DEFECTO: Dict[str, str] = {
 }
 
 
+def _forma_de(nodo: dict) -> str:
+    """Qué tipo de valor admite el campo.
+
+    El esquema no acepta texto en todos lados: hay listas, fechas ISO y un enum.
+    Un contrato de extracción que solo produce cadenas las mete igual, y el
+    problema no aparece hasta que alguien ensambla el brief y el esquema lo
+    rechaza — lejos, tarde y sin rastro de dónde vino.
+    """
+    valor = nodo.get("properties", {}).get("value", {})
+    alternativas = valor.get("oneOf", []) or valor.get("anyOf", [])
+
+    for alt in alternativas:
+        if not isinstance(alt, dict) or alt.get("type") == "null":
+            continue
+        if "enum" in alt:
+            return "enum"
+        if alt.get("type") == "array":
+            return "lista_objetos" if alt.get("items", {}).get("type") == "object" else "lista"
+        if alt.get("format") == "date":
+            return "fecha"
+
+    if valor.get("type") == "array":
+        return "lista"
+    return "texto"
+
+
+def _valores_permitidos(nodo: dict) -> tuple[str, ...]:
+    """Enum del campo, si lo tiene.
+
+    Un campo con valores cerrados y un prompt que no los nombra es una trampa:
+    el modelo no puede acertar una lista que nunca vio, y lo que devuelva —texto
+    libre razonable— pasaría la extracción para reventar después contra el
+    esquema. Los valores viajan al prompt y se validan a la vuelta.
+    """
+    valor = nodo.get("properties", {}).get("value", {})
+    if isinstance(valor.get("enum"), list):
+        return tuple(str(v) for v in valor["enum"])
+    for alternativa in valor.get("oneOf", []) + valor.get("anyOf", []):
+        if isinstance(alternativa, dict) and isinstance(alternativa.get("enum"), list):
+            return tuple(str(v) for v in alternativa["enum"])
+    return ()
+
+
 @dataclass(frozen=True)
 class CampoDelBrief:
     """Un campo hoja: lo que la extracción puede intentar llenar."""
@@ -100,6 +145,10 @@ class CampoDelBrief:
     key: str
     criticidad: str
     descripcion: str
+    #: Valores cerrados, si el campo es un enum. Vacío si admite texto libre.
+    valores: tuple[str, ...]
+    #: texto | lista | lista_objetos | fecha | enum. Lo que el esquema admite.
+    forma: str
     #: True si el campo se ancla a un producto concreto (DEC-016).
     por_producto: bool
 
@@ -124,6 +173,12 @@ def catalogo() -> List[CampoDelBrief]:
         return nodo
 
     def recorrer(nodo: dict, ruta: str) -> None:
+        # La descripción se lee ANTES de resolver el `$ref`. En JSON Schema vive
+        # como hermana del `$ref`, en la propiedad concreta —`contexto.situacion`
+        # describe la situación, no describe «campoTexto»—, así que resolver
+        # primero la pierde y deja el prompt con la clave pelada. Fue exactamente
+        # lo que hizo que el modelo archivara «El Reto» bajo otro campo.
+        descripcion = str(nodo.get("description", "") or "")
         nodo = resolver(nodo)
 
         if _CLAVES_DE_HOJA.issubset(set(nodo.get("required", []))):
@@ -131,7 +186,9 @@ def catalogo() -> List[CampoDelBrief]:
                 CampoDelBrief(
                     key=ruta,
                     criticidad=CRITICIDAD_POR_DEFECTO.get(ruta, "informativo"),
-                    descripcion=nodo.get("description", ""),
+                    descripcion=descripcion or str(nodo.get("description", "") or ""),
+                    valores=_valores_permitidos(nodo),
+                    forma=_forma_de(nodo),
                     por_producto="marca_producto" in ruta or ruta.startswith("overrides"),
                 )
             )
