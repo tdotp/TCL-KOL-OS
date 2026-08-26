@@ -34,6 +34,20 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      # `pipeline.test.ts` y `end-to-end.test.ts` necesitan un worker real
+      # (nunca uno simulado en el código de prueba) procesando la cola real
+      # — Redis es la cola de trabajo del worker (ADR-009 la deja solo para
+      # trabajo en tránsito, nunca estado de negocio, así que perderla entre
+      # corridas no arriesga nada).
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -70,12 +84,64 @@ jobs:
           npm run migrate --workspace @tcl-kol-os/db
           npm run seed --workspace @tcl-kol-os/db
 
+      # Worker real (HTTP + consumidor), con AI_PROVIDER=fake — determinístico,
+      # sin red, sin costo, sin depender de ninguna clave (corrección posterior
+      # al checkpoint 516de31: la suite automatizada nunca necesita una clave
+      # real de OpenRouter). Habilita en CI las mismas pruebas que antes solo
+      # corrían completas en local con un worker levantado a mano:
+      # `pipeline.test.ts` (parseo real de un PPTX, cola real) y
+      # `end-to-end.test.ts` (recorrido HTTP real con el proveedor falso).
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: services/ai-worker/requirements.txt
+
+      - name: Instalar dependencias del worker
+        working-directory: services/ai-worker
+        run: pip install -r requirements.txt
+
+      - name: Levantar worker + consumidor (AI_PROVIDER=fake)
+        working-directory: services/ai-worker
+        env:
+          DATABASE_URL: postgresql://tclkolos:devpassword@localhost:5432/tclkolos_test
+          REDIS_URL: redis://localhost:6379/0
+          ENVIRONMENT: development
+          AI_ENABLED: 'true'
+          AI_PROVIDER: fake
+          AI_MODEL_EFICIENTE: google/gemini-2.5-flash-lite
+          AI_MODEL_EQUILIBRADO: anthropic/claude-haiku-4.5
+          AI_MODEL_AVANZADO: anthropic/claude-sonnet-5
+          AI_MODEL_EMBEDDINGS: openai/text-embedding-3-small
+          AI_APP_URL: https://smartpr.co
+          BRIEF_SCHEMA_PATH: ${{ github.workspace }}/docs/product/brief-schema/brief.schema.json
+          BRIEF_CATALOG_PATH: ${{ github.workspace }}/docs/product/brief-schema/brief-catalog.json
+          STORAGE_LOCAL_PATH: ${{ github.workspace }}/.storage
+          LOG_LEVEL: INFO
+        run: |
+          mkdir -p "$STORAGE_LOCAL_PATH"
+          PYTHONPATH=. nohup .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 \
+            > /tmp/worker-http.log 2>&1 &
+          PYTHONPATH=. nohup python worker.py --intervalo 2 > /tmp/worker-consumidor.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/ready > /dev/null && break
+            sleep 1
+          done
+          curl -sf http://localhost:8000/ready || (cat /tmp/worker-http.log; exit 1)
+
       # E13-1, E13-2, E13-3: transiciones, aislamiento e inmutabilidad.
       # Estas pruebas bloquean el merge sin excepción (D0-12 §8).
       - name: Pruebas del dominio
         env:
           TEST_DATABASE_URL: postgresql://tclkolos:devpassword@localhost:5432/tclkolos_test
+          AI_WORKER_URL: http://localhost:8000
         run: npm test
+
+      - name: Logs del worker (si algo falló arriba)
+        if: failure()
+        run: |
+          echo "--- worker HTTP ---"; cat /tmp/worker-http.log || true
+          echo "--- consumidor ---"; cat /tmp/worker-consumidor.log || true
 
       - name: Build
         run: npm run build

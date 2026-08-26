@@ -14,7 +14,6 @@ import pytest
 from app import parsers
 from app.parsers.base import Fragment, ParseError
 
-
 # ─────────────────────────── Contrato de Fragment ─────────────────────────────
 
 
@@ -165,7 +164,9 @@ def test_docx_registra_los_saltos_como_metadato_informativo(tmp_path: Path) -> N
     ruta = crear_docx(tmp_path / "brief.docx", con_salto=True)
     frags = parsers.parse(str(ruta), parsers.DOCX)
 
-    saltos = {f.metadata.get("tras_saltos_de_pagina") for f in frags if f.metadata.get("origen") == "parrafos"}
+    saltos = {
+        f.metadata.get("tras_saltos_de_pagina") for f in frags if f.metadata.get("origen") == "parrafos"
+    }
     assert saltos == {0, 1}
 
 

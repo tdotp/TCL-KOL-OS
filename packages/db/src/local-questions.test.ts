@@ -30,7 +30,14 @@ beforeAll(async () => {
   );
   userId = admin!.id;
   orgId = admin!.organization_id;
-  actor = { id: userId, email: 'gerardo@smartpr.co', name: 'Gerardo', organizationId: orgId, role: 'admin', status: 'activo' };
+  actor = {
+    id: userId,
+    email: 'gerardo@smartpr.co',
+    name: 'Gerardo',
+    organizationId: orgId,
+    role: 'admin',
+    status: 'activo',
+  };
 
   const campana = await query<{ id: string }>(
     `INSERT INTO campaigns (organization_id, name, owner_id, created_by)
@@ -127,7 +134,11 @@ describe('responder y descartar (pruebas 6, 7, 8)', () => {
     const [pregunta] = await listarPreguntas(actor, campanaPropia, { status: 'pendiente' }).then((r) =>
       r.ok ? r.value.filter((p) => p.key === 'objetivo.negocio') : [],
     );
-    const resultado = await descartarPregunta(actor, pregunta!.id, 'El cliente no lo definió aún; se retoma después.');
+    const resultado = await descartarPregunta(
+      actor,
+      pregunta!.id,
+      'El cliente no lo definió aún; se retoma después.',
+    );
     expect(resultado.ok).toBe(true);
 
     const [fila] = await query<{ status: string; answered_by: string; answered_at: Date | null }>(

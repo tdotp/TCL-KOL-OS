@@ -15,7 +15,12 @@ import type { User } from '@tcl-kol-os/domain';
 import { closePool, query } from './client.ts';
 import { crearBriefManual } from './manual.ts';
 import { confirmarCampo, corregirCampo } from './brief-fields.ts';
-import { generarPreguntas, responderPregunta, descartarPregunta, listarPreguntas } from './local-questions.ts';
+import {
+  generarPreguntas,
+  responderPregunta,
+  descartarPregunta,
+  listarPreguntas,
+} from './local-questions.ts';
 import { transicionarBrief } from './transitions.ts';
 
 let orgId: string;
@@ -49,7 +54,14 @@ beforeAll(async () => {
   );
   userId = admin!.id;
   orgId = admin!.organization_id;
-  actor = { id: userId, email: 'gerardo@smartpr.co', name: 'Gerardo', organizationId: orgId, role: 'admin', status: 'activo' };
+  actor = {
+    id: userId,
+    email: 'gerardo@smartpr.co',
+    name: 'Gerardo',
+    organizationId: orgId,
+    role: 'admin',
+    status: 'activo',
+  };
 
   const [ajena] = await query<{ organization_id: string }>(
     `SELECT organization_id FROM campaigns WHERE organization_id <> $1 LIMIT 1`,
@@ -93,7 +105,11 @@ async function completarTodosLosCriticos(versionId: string, campaignId: string):
         await descartarPregunta(actor, p.id, 'No se pudo responder automáticamente en esta prueba.');
       }
     } else {
-      await descartarPregunta(actor, p.id, 'No aplica para esta prueba automatizada: sin evidencia real disponible.');
+      await descartarPregunta(
+        actor,
+        p.id,
+        'No aplica para esta prueba automatizada: sin evidencia real disponible.',
+      );
     }
   }
 }
@@ -151,10 +167,9 @@ describe('conflicto resuelto deja de bloquear (prueba 14)', () => {
     });
     expect(corregido.ok).toBe(true);
 
-    const [despues] = await query<{ status: string }>(
-      `SELECT status::text FROM brief_fields WHERE id = $1`,
-      [antes!.id],
-    );
+    const [despues] = await query<{ status: string }>(`SELECT status::text FROM brief_fields WHERE id = $1`, [
+      antes!.id,
+    ]);
     expect(despues!.status).toBe('found');
   });
 });

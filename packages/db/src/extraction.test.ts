@@ -10,6 +10,14 @@
  * de `obtenerOCrearVersionDeTrabajo` (DEC-024). Estas pruebas siembran su
  * propia versión de trabajo antes de persistir, igual que haría `extraerBrief`.
  *
+ * Reproducibilidad desde cero (corrección posterior al cierre): esta suite ya
+ * NO depende de ningún documento procesado previamente en ninguna campaña —
+ * siembra sus propios `source_documents`/`source_fragments` sintéticos dentro
+ * de su propia campaña desechable. Solo depende de lo que `npm run seed` deja
+ * de forma determinística (usuario `gerardo@smartpr.co` y la campaña fija
+ * `Campaña confidencial de otra agencia`, igual que ya hace `isolation.test.ts`)
+ * — nunca de la campaña P80 ni de una subida real anterior.
+ *
  * Las que llaman al modelo de verdad están marcadas y cuestan unos centavos de
  * dólar por corrida; se saltan solas si el worker no responde, para que una
  * suite completa no dependa de tener todo levantado.
@@ -20,6 +28,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { closePool, query, transaction } from './client.ts';
 import { obtenerOCrearVersionDeTrabajo } from './brief-version.ts';
+import { findUserByEmail } from './users.ts';
 import {
   camposDeVersion,
   extraerCampos,
@@ -29,8 +38,6 @@ import {
 } from './extraction.ts';
 
 let orgId: string;
-/** Campaña real, de solo lectura: se usa únicamente para leer fragmentos ya procesados. */
-let campaignId: string;
 let userId: string;
 let orgAjena: string;
 let campanaAjena: string;
@@ -41,37 +48,53 @@ let campanaAjena: string;
  * cualquier versión `es` no terminal que encuentre. Sobre una campaña
  * compartida como la P80 del seed, eso significa reutilizar (y luego borrar
  * en la limpieza) una versión real que alguien más pudo haber dejado ahí.
- * Aquí nunca se toca la campaña compartida más que para LEER sus fragmentos.
+ * También trae sus propios `source_documents`/`source_fragments` sintéticos
+ * (ver `sembrarFuentePropia`) — nunca lee fragmentos de otra campaña.
  */
 let campanaDePrueba: string;
+/** Alias legible: los fragmentos sintéticos viven en `campanaDePrueba`. */
+let campaignId: string;
 let campaignProductId: string | undefined;
 let campaignProductIdAjeno: string | undefined;
 
 let hayWorker = false;
 const versionesCreadas: string[] = [];
 
-beforeAll(async () => {
-  const [propia] = await query<{ org: string; camp: string; usr: string }>(
-    `SELECT c.organization_id AS org, c.id AS camp, u.id AS usr
-       FROM campaigns c
-       JOIN users u ON u.organization_id = c.organization_id AND u.email = 'gerardo@smartpr.co'
-      WHERE EXISTS (
-              SELECT 1 FROM source_documents s
-               WHERE s.campaign_id = c.id AND s.status = 'procesado')
-      LIMIT 1`,
+/**
+ * Siembra un `source_documents` + 2 `source_fragments` sintéticos dentro de
+ * `campanaDePrueba`, sin pasar por el worker ni por una carga real — esta
+ * suite prueba la persistencia de una extracción, no el parseo de
+ * documentos (eso lo cubren `sources.test.ts`/`pipeline.test.ts`).
+ */
+async function sembrarFuentePropia(): Promise<void> {
+  const [fuente] = await query<{ id: string }>(
+    `INSERT INTO source_documents
+       (campaign_id, organization_id, type, filename, file_id, mime_type, size_bytes, hash, status, created_by)
+     VALUES ($1, $2, 'brief_cliente', 'fuente-de-prueba.md', 'prueba/fuente-de-prueba.md', 'text/markdown', 100,
+             $3, 'procesado', $4)
+     RETURNING id`,
+    [campanaDePrueba, orgId, `hash-de-prueba-${campanaDePrueba}`, userId],
   );
-  if (!propia) throw new Error('Se necesita una campaña con al menos una fuente procesada.');
+  await query(
+    `INSERT INTO source_fragments (source_id, ordinal, section, text)
+     VALUES ($1, 1, 'Sección de prueba', 'Fragmento sintético uno, para pruebas de persistencia.'),
+            ($1, 2, 'Sección de prueba', 'Fragmento sintético dos, para pruebas de persistencia.')`,
+    [fuente!.id],
+  );
+}
 
-  orgId = propia.org;
-  campaignId = propia.camp;
-  userId = propia.usr;
+beforeAll(async () => {
+  const admin = await findUserByEmail('gerardo@smartpr.co');
+  if (!admin) throw new Error('Falta el seed: corra npm run seed antes de esta suite.');
+  orgId = admin.organizationId;
+  userId = admin.id;
 
   const [ajena] = await query<{ org: string; camp: string }>(
-    `SELECT organization_id AS org, id AS camp FROM campaigns WHERE organization_id <> $1 LIMIT 1`,
-    [orgId],
+    `SELECT organization_id AS org, id AS camp FROM campaigns WHERE name = 'Campaña confidencial de otra agencia'`,
   );
-  orgAjena = ajena!.org;
-  campanaAjena = ajena!.camp;
+  if (!ajena) throw new Error('Falta el seed: corra npm run seed antes de esta suite.');
+  orgAjena = ajena.org;
+  campanaAjena = ajena.camp;
 
   // Campaña propia y desechable, con dos productos reales del catálogo
   // (nunca los de la campaña compartida) para las pruebas de anclaje.
@@ -81,6 +104,7 @@ beforeAll(async () => {
     [orgId, `Extracción · corrida de prueba ${Date.now()}`, userId],
   );
   campanaDePrueba = campana[0]!.id;
+  campaignId = campanaDePrueba;
 
   const productosCatalogo = await query<{ id: string }>(`SELECT id FROM products LIMIT 2`);
   for (const [i, p] of productosCatalogo.entries()) {
@@ -102,6 +126,8 @@ beforeAll(async () => {
   );
   campaignProductIdAjeno = productoAjeno?.id;
 
+  await sembrarFuentePropia();
+
   hayWorker = await workerVivo();
 });
 
@@ -112,19 +138,26 @@ afterAll(async () => {
     await query(`DELETE FROM brief_versions WHERE id = ANY($1::uuid[])`, [versionesCreadas]);
   }
   if (campanaDePrueba) {
-    // Arrastra en cascada el brief, versiones y campaign_products propios —
-    // nunca toca la campaña compartida.
+    // Arrastra en cascada el brief, versiones, campaign_products, fuentes y
+    // fragmentos propios — nunca toca la campaña compartida.
     await query(`DELETE FROM campaigns WHERE id = $1`, [campanaDePrueba]);
   }
   await closePool();
 });
 
+/**
+ * Esta prueba mide un costo real, así que exige un proveedor real — nunca
+ * `AI_PROVIDER=fake` (que reporta costo 0 a propósito). `/ready` expone qué
+ * adaptador está activo justamente para que esta distinción no dependa de
+ * adivinar por el resultado.
+ */
 async function workerVivo(): Promise<boolean> {
   try {
     const url = (process.env['AI_WORKER_URL'] ?? 'http://localhost:8000').replace(/\/+$/, '');
     const r = await fetch(`${url}/ready`, { signal: AbortSignal.timeout(3000) });
     if (!r.ok) return false;
-    return ((await r.json()) as { ai_enabled?: boolean }).ai_enabled === true;
+    const cuerpo = (await r.json()) as { ai_enabled?: boolean; ai_provider?: string | null };
+    return cuerpo.ai_enabled === true && cuerpo.ai_provider !== 'fake';
   } catch {
     return false;
   }
@@ -158,16 +191,12 @@ describe('el worker solo ve fragmentos ya autorizados', () => {
 
   it('una campaña sin fuentes procesadas no llega a llamar al modelo', async () => {
     // Falla antes de gastar una llamada, y lo dice en términos accionables.
-    await expect(extraerCampos(orgAjena, campanaAjena)).rejects.toThrow(
-      /no tiene fuentes procesadas/,
-    );
+    await expect(extraerCampos(orgAjena, campanaAjena)).rejects.toThrow(/no tiene fuentes procesadas/);
   });
 
   it('la organización equivocada no puede extraer de una campaña ajena', async () => {
     // Mismo campaignId, organización distinta: no hay fragmentos que entregar.
-    await expect(extraerCampos(orgAjena, campaignId)).rejects.toThrow(
-      /no tiene fuentes procesadas/,
-    );
+    await expect(extraerCampos(orgAjena, campaignId)).rejects.toThrow(/no tiene fuentes procesadas/);
   });
 });
 
@@ -483,23 +512,23 @@ describe('extracción contra el modelo real', () => {
       expect(claimsSinRespaldo).toEqual([]);
 
       // Y ningún not_found conserva valor.
-      const ausentesConValor = resultado.campos.filter(
-        (c) => c.status === 'not_found' && c.value !== null,
-      );
+      const ausentesConValor = resultado.campos.filter((c) => c.status === 'not_found' && c.value !== null);
       expect(ausentesConValor).toEqual([]);
 
-      // Esta prueba persiste sobre la campaña COMPARTIDA a propósito: es la
-      // única que valida el flujo real de punta a punta contra el material
-      // real de P80. Por eso, a diferencia de todo lo demás en este archivo,
-      // su versión NUNCA se agrega a `versionesCreadas` — un incidente real
-      // de este mismo cierre (ver HANDOFF) confirmó que reutilizar-y-luego-
-      // borrar en `afterAll` puede destruir una versión de trabajo genuina de
-      // otra sesión. Terminar en `approved` dentro de la misma prueba es la
-      // manera segura de dejar constancia sin necesitar borrarla después.
+      // `campaignId` es la campaña propia y desechable de esta suite (nunca
+      // P80): la versión se registra en `versionesCreadas` como cualquier
+      // otra, y el `afterAll` la limpia al borrar `campanaDePrueba` en
+      // cascada — sin el riesgo que motivó INC-001.
       const version = await transaction((client) =>
         obtenerOCrearVersionDeTrabajo(client, { campaignId, organizationId: orgId, createdBy: userId }),
       );
-      await persistirExtraccion({ organizationId: orgId, campaignId, versionId: version.versionId, resultado });
+      versionesCreadas.push(version.versionId);
+      await persistirExtraccion({
+        organizationId: orgId,
+        campaignId,
+        versionId: version.versionId,
+        resultado,
+      });
 
       // La prueba de fuego: la base la deja aprobar, porque todo claim cita.
       await expect(

@@ -17,6 +17,7 @@ import {
   corregirCampo,
   createCampaign,
   crearBriefManual,
+  declararExcepcionProducto,
   descartarPregunta,
   extraerBrief,
   findUserByEmail,
@@ -25,6 +26,7 @@ import {
   resolverConflicto,
   responderPregunta,
   retrySource,
+  revertirExcepcionProducto,
   transicionarBrief,
   uploadSource,
 } from '@tcl-kol-os/db';
@@ -328,10 +330,76 @@ export async function resolverConflictoDeBrief(
     value = valorCrudo;
   }
 
-  const resultado = await resolverConflicto(user, versionId, fieldId, { value, keepEvidenceIds, revisionEsperada });
+  const resultado = await resolverConflicto(user, versionId, fieldId, {
+    value,
+    keepEvidenceIds,
+    revisionEsperada,
+  });
   if (!resultado.ok) return { error: resultado.error.message };
 
   revalidatePath(`/campanas/[id]/brief`);
+  return { ok: true };
+}
+
+// ────────── E7-8 · Excepción por producto en un campo compartido ──────────────
+
+export async function declararExcepcionDeCampo(
+  _previo: unknown,
+  formData: FormData,
+): Promise<{ error?: string; ok?: boolean }> {
+  const user = await currentUser();
+  if (user === undefined) return { error: 'Sesión no válida.' };
+
+  const versionId = String(formData.get('versionId') ?? '');
+  const key = String(formData.get('key') ?? '');
+  const campaignProductId = String(formData.get('campaignProductId') ?? '');
+  const valorCrudo = String(formData.get('value') ?? '');
+  const motivo = String(formData.get('motivo') ?? '').trim();
+  const revisionCrudo = formData.get('revision');
+  const revisionEsperada = revisionCrudo === null || revisionCrudo === '' ? undefined : Number(revisionCrudo);
+
+  if (versionId === '' || key === '' || campaignProductId === '') {
+    return { error: 'Faltan datos para declarar la excepción.' };
+  }
+  if (motivo === '') {
+    return { error: 'Declarar una excepción por producto exige un motivo (E7-8).' };
+  }
+
+  let value: unknown;
+  try {
+    value = JSON.parse(valorCrudo);
+  } catch {
+    value = valorCrudo;
+  }
+
+  const resultado = await declararExcepcionProducto(user, versionId, {
+    key,
+    campaignProductId,
+    value,
+    motivo,
+    revisionEsperada,
+  });
+  if (!resultado.ok) return { error: resultado.error.message };
+
+  revalidatePath(`/campanas/[id]/brief/editar`);
+  return { ok: true };
+}
+
+export async function revertirExcepcionDeCampo(
+  _previo: unknown,
+  formData: FormData,
+): Promise<{ error?: string; ok?: boolean }> {
+  const user = await currentUser();
+  if (user === undefined) return { error: 'Sesión no válida.' };
+
+  const versionId = String(formData.get('versionId') ?? '');
+  const fieldId = String(formData.get('fieldId') ?? '');
+  if (versionId === '' || fieldId === '') return { error: 'Falta la excepción a revertir.' };
+
+  const resultado = await revertirExcepcionProducto(user, versionId, fieldId);
+  if (!resultado.ok) return { error: resultado.error.message };
+
+  revalidatePath(`/campanas/[id]/brief/editar`);
   return { ok: true };
 }
 

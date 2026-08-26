@@ -81,7 +81,7 @@ _FORMA_EN_PALABRAS = {
 }
 
 
-class ExtraccionInvalida(RuntimeError):
+class ExtraccionInvalidaError(RuntimeError):
     """El modelo devolvió algo que no cumple el contrato. No se persiste (E5-3)."""
 
 
@@ -328,7 +328,7 @@ def _parsear_json(bruto: str) -> Any:
         # remedio es opuesto —reintentar, no agrandar el presupuesto—, y un
         # mensaje que culpa a max_tokens manda a quien lo lea al sitio
         # equivocado.
-        raise ExtraccionInvalida(
+        raise ExtraccionInvalidaError(
             f"El proveedor devolvió una respuesta vacía o casi vacía "
             f"({len(texto)} caracteres). Suele ser un fallo transitorio: reintente."
         )
@@ -346,11 +346,11 @@ def _parsear_json(bruto: str) -> Any:
             except json.JSONDecodeError:
                 pass
         if "Unterminated" in str(exc) or "Expecting" in str(exc):
-            raise ExtraccionInvalida(
+            raise ExtraccionInvalidaError(
                 "La respuesta quedó cortada a mitad de camino "
                 f"({len(texto)} caracteres). Suele ser el tope de max_tokens: {exc}"
             ) from exc
-        raise ExtraccionInvalida(f"La respuesta no es JSON válido: {exc}") from exc
+        raise ExtraccionInvalidaError(f"La respuesta no es JSON válido: {exc}") from exc
 
 
 def validar_y_anclar(
@@ -370,7 +370,7 @@ def validar_y_anclar(
     """
     datos = _parsear_json(bruto)
     if not isinstance(datos, dict) or not isinstance(datos.get("campos"), list):
-        raise ExtraccionInvalida("Se esperaba un objeto con la lista 'campos'.")
+        raise ExtraccionInvalidaError("Se esperaba un objeto con la lista 'campos'.")
 
     por_id = {f.id: f for f in fragmentos}
     normalizados = {f.id: _normalizar(f.texto) for f in fragmentos}
@@ -838,7 +838,7 @@ def _llamar_con_reintento(
     devolvio un payload incompleto. Sin reintento, esa loteria se convierte en
     "la herramienta a veces no funciona", que es la peor forma de fallar.
     """
-    ultimo: ExtraccionInvalida | None = None
+    ultimo: ExtraccionInvalidaError | None = None
 
     for intento in range(_REINTENTOS + 1):
         respuesta = provider.completar(
@@ -851,7 +851,7 @@ def _llamar_con_reintento(
         try:
             campos, descartes = validar_y_anclar(respuesta.contenido, fragmentos, productos)
             return respuesta, campos, descartes
-        except ExtraccionInvalida as exc:
+        except ExtraccionInvalidaError as exc:
             ultimo = exc
             if intento < _REINTENTOS:
                 logger.warning(
@@ -911,7 +911,7 @@ def extraer(
                 model=destino.modelo,
                 prompt_version=VERSION_PROMPT,
                 input_hash=huella,
-                output_status="invalido" if isinstance(exc, ExtraccionInvalida) else "error",
+                output_status="invalido" if isinstance(exc, ExtraccionInvalidaError) else "error",
                 latency_ms=int((time.monotonic() - comenzo) * 1000),
                 error=f"{type(exc).__name__}: {exc}"[:500],
             )

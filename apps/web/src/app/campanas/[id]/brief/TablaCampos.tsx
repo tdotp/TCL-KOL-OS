@@ -62,7 +62,8 @@ const ETIQUETA_REVISION: Record<string, { texto: string; clase: string }> = {
 function valorLegible(value: unknown): string {
   if (value === null || value === undefined) return '';
   if (typeof value === 'string') return value;
-  if (Array.isArray(value)) return value.map((v) => (typeof v === 'string' ? v : JSON.stringify(v))).join(', ');
+  if (Array.isArray(value))
+    return value.map((v) => (typeof v === 'string' ? v : JSON.stringify(v))).join(', ');
   if (typeof value === 'object' && 'textoOriginal' in (value as Record<string, unknown>)) {
     return String((value as Record<string, unknown>)['textoOriginal']);
   }
@@ -74,7 +75,15 @@ function valorLegible(value: unknown): string {
  * el servidor devuelve `FIELD_REVISION_CONFLICT`, la fila avisa y recarga en
  * vez de reintentar en silencio — nunca "el último que escribe gana".
  */
-function BotonConfirmar({ versionId, fieldId, revision }: { versionId: string; fieldId: string; revision: number }) {
+function BotonConfirmar({
+  versionId,
+  fieldId,
+  revision,
+}: {
+  versionId: string;
+  fieldId: string;
+  revision: number;
+}) {
   const [estado, accion, pendiente] = useActionState(confirmarCampoDeBrief, {});
 
   useEffect(() => {
@@ -94,7 +103,12 @@ function BotonConfirmar({ versionId, fieldId, revision }: { versionId: string; f
       <input type="hidden" name="versionId" value={versionId} />
       <input type="hidden" name="fieldId" value={fieldId} />
       <input type="hidden" name="revision" value={revision} />
-      <button className="btn" type="submit" disabled={pendiente} style={{ padding: '4px 10px', fontSize: 12 }}>
+      <button
+        className="btn"
+        type="submit"
+        disabled={pendiente}
+        style={{ padding: '4px 10px', fontSize: 12 }}
+      >
         {pendiente ? 'Confirmando…' : 'Confirmar'}
       </button>
       {estado.error !== undefined && (
@@ -135,7 +149,12 @@ function FormularioCorregir({
         <input type="hidden" name="versionId" value={versionId} />
         <input type="hidden" name="fieldId" value={fieldId} />
         <input type="hidden" name="revision" value={revision} />
-        <input name="value" defaultValue={valorInicial} style={{ flex: 1, padding: '4px 6px', fontSize: 13 }} autoFocus />
+        <input
+          name="value"
+          defaultValue={valorInicial}
+          style={{ flex: 1, padding: '4px 6px', fontSize: 13 }}
+          autoFocus
+        />
         <button className="btn" type="submit" disabled={pendiente} style={{ padding: '4px 10px' }}>
           {pendiente ? 'Guardando…' : 'Guardar'}
         </button>
@@ -231,7 +250,9 @@ export function TablaCampos({
                       <td style={{ fontFamily: 'monospace', fontSize: 12 }}>
                         {c.key}
                         {c.campaignProductId !== null && (
-                          <div style={{ color: 'var(--muted)', fontSize: 11 }}>producto {c.campaignProductId.slice(0, 8)}</div>
+                          <div style={{ color: 'var(--muted)', fontSize: 11 }}>
+                            producto {c.campaignProductId.slice(0, 8)}
+                          </div>
                         )}
                       </td>
                       <td>
@@ -262,7 +283,9 @@ export function TablaCampos({
                           valorLegible(c.value)
                         )}
                       </td>
-                      <td style={{ fontSize: 12 }}>{ETIQUETA_PROCEDENCIA[c.provenanceType] ?? c.provenanceType}</td>
+                      <td style={{ fontSize: 12 }}>
+                        {ETIQUETA_PROCEDENCIA[c.provenanceType] ?? c.provenanceType}
+                      </td>
                       <td>
                         <span className={`pill ${revision.clase}`}>{revision.texto}</span>
                       </td>

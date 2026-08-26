@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -30,16 +31,26 @@ class ConsultaEntrada(BaseModel):
 
 
 class FragmentoEntrada(BaseModel):
-    """Un fragmento ya autorizado por la capa que sabe quién pregunta."""
+    """Un fragmento ya autorizado por la capa que sabe quién pregunta.
+
+    Los campos opcionales usan `Optional[X]` de `typing`, no `X | None`: a
+    diferencia de una anotación de función normal, Pydantic v2 evalúa las
+    anotaciones de un `BaseModel` en el momento de definir la clase para
+    construir su esquema de validación — `from __future__ import annotations`
+    no lo protege. `X | None` sin eso revienta en el Python 3.9 declarado
+    como mínimo (`requires-python = ">=3.9"` en pyproject.toml); `Optional[X]`
+    es la única forma segura aquí. Ver HANDOFF.md §8 para el incidente real
+    que dejó esta nota — un `ruff check --fix` mecánico lo rompió una vez.
+    """
 
     id: str
     source_id: str
     filename: str
     texto: str
-    page: int | None = None
-    slide: int | None = None
-    section: str | None = None
-    linea: int | None = None
+    page: Optional[int] = None  # noqa: UP007 — ver docstring de la clase
+    slide: Optional[int] = None  # noqa: UP007
+    section: Optional[str] = None  # noqa: UP007
+    linea: Optional[int] = None  # noqa: UP007
 
 
 class ProductoEntrada(BaseModel):
@@ -117,7 +128,7 @@ async def embeber_consulta(peticion: ConsultaEntrada) -> dict[str, object]:
     """
     try:
         vector = embeddings.embeber_consulta(peticion.texto)
-    except embeddings.EmbeddingsDesactivados as exc:
+    except embeddings.EmbeddingsDesactivadosError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -159,7 +170,7 @@ async def extraccion(peticion: ExtraccionEntrada) -> dict[str, object]:
 
     try:
         resultado = extraction.extraer(fragmentos, productos=productos)
-    except extraction.ExtraccionInvalida as exc:
+    except extraction.ExtraccionInvalidaError as exc:
         # E5-3: una salida que no cumple el contrato no se persiste como versión
         # aprobable. Se dice qué pasó, en vez de devolver campos a medias.
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -211,6 +222,10 @@ async def ready() -> dict[str, object]:
         "status": "ready",
         "environment": settings.environment,
         "ai_enabled": settings.ai_enabled,
+        # Nunca la clave: solo qué adaptador está activo. Lo necesita
+        # `extraction.test.ts` para no confundir el proveedor falso (solo de
+        # pruebas) con uno real al decidir si corre su prueba de costo real.
+        "ai_provider": settings.ai_provider,
         "supported_formats": sorted(parsers.tipos_soportados()),
         "max_upload_mb": settings.max_upload_mb,
     }

@@ -514,10 +514,7 @@ export interface VersionDelBrief {
 }
 
 /** Versiones del brief de una campaña, con el costo de haberlas producido. */
-export async function versionesDelBrief(
-  actor: User,
-  campaignId: string,
-): Promise<Result<VersionDelBrief[]>> {
+export async function versionesDelBrief(actor: User, campaignId: string): Promise<Result<VersionDelBrief[]>> {
   const permitido = assertCapability(actor, 'brief:read');
   if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
 

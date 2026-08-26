@@ -11,14 +11,7 @@
  * siempre por las mismas guardas, sin excepción y sin reimplementarlas.
  */
 
-import {
-  type Actor,
-  type BriefStatus,
-  type Result,
-  err,
-  ok,
-  transition,
-} from '@tcl-kol-os/domain';
+import { type Actor, type BriefStatus, type Result, err, ok, transition } from '@tcl-kol-os/domain';
 import { assertCapability } from './authz.ts';
 import { recordAudit } from './audit.ts';
 import { getPool, transaction } from './client.ts';

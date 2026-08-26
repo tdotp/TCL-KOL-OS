@@ -200,7 +200,7 @@ def test_la_consulta_vacia_se_rechaza(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_sin_ia_no_hay_vector_de_consulta(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AI_ENABLED", "false")
-    with pytest.raises(embeddings.EmbeddingsDesactivados):
+    with pytest.raises(embeddings.EmbeddingsDesactivadosError):
         embeddings.embeber_consulta("público objetivo")
 
 

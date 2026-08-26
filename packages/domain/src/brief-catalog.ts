@@ -49,9 +49,7 @@ function rutaCatalogo(): string {
     }
   }
 
-  throw new Error(
-    `No se encontró brief-catalog.json. Defina BRIEF_CATALOG_PATH o monte ${_RELATIVA}.`,
-  );
+  throw new Error(`No se encontró brief-catalog.json. Defina BRIEF_CATALOG_PATH o monte ${_RELATIVA}.`);
 }
 
 export type CampoNivel = 'campana' | 'producto' | 'compartido_con_excepcion';

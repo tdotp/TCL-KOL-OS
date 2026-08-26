@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import zipfile
 from dataclasses import dataclass
-from typing import Optional
 
 PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -28,11 +27,11 @@ PERMITIDOS = frozenset({PPTX, DOCX, PDF, PNG, JPEG, MARKDOWN})
 @dataclass(frozen=True)
 class ResultadoValidacion:
     valido: bool
-    mime_type: Optional[str] = None
-    motivo: Optional[str] = None
+    mime_type: str | None = None
+    motivo: str | None = None
 
 
-def _tipo_ooxml(path: str) -> Optional[str]:
+def _tipo_ooxml(path: str) -> str | None:
     """Un OOXML es un ZIP; el tipo real está en su contenido interno."""
     try:
         with zipfile.ZipFile(path) as archivo:
@@ -72,7 +71,7 @@ def _es_texto_utf8(muestra: bytes) -> bool:
 _EXTENSIONES_TEXTO = (".md", ".markdown", ".txt")
 
 
-def detectar_tipo(path: str, nombre: Optional[str] = None) -> Optional[str]:
+def detectar_tipo(path: str, nombre: str | None = None) -> str | None:
     """Tipo real del archivo según su contenido.
 
     Los formatos binarios se reconocen por su firma, y esa firma manda sobre
@@ -110,8 +109,8 @@ def validar(
     path: str,
     tamano_bytes: int,
     max_bytes: int,
-    declarado: Optional[str] = None,
-    nombre: Optional[str] = None,
+    declarado: str | None = None,
+    nombre: str | None = None,
 ) -> ResultadoValidacion:
     """Valida tamaño y tipo real. `declarado` es informativo salvo en texto plano."""
     if tamano_bytes <= 0:
@@ -129,7 +128,10 @@ def validar(
     if real is None:
         return ResultadoValidacion(
             False,
-            motivo="No se reconoce el tipo de archivo. Formatos aceptados: Markdown, PDF, PPTX, DOCX, PNG y JPG.",
+            motivo=(
+                "No se reconoce el tipo de archivo. "
+                "Formatos aceptados: Markdown, PDF, PPTX, DOCX, PNG y JPG."
+            ),
         )
 
     if real not in PERMITIDOS:

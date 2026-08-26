@@ -23,7 +23,14 @@ beforeAll(async () => {
   );
   userId = admin!.id;
   orgId = admin!.organization_id;
-  actor = { id: userId, email: 'gerardo@smartpr.co', name: 'Gerardo', organizationId: orgId, role: 'admin', status: 'activo' };
+  actor = {
+    id: userId,
+    email: 'gerardo@smartpr.co',
+    name: 'Gerardo',
+    organizationId: orgId,
+    role: 'admin',
+    status: 'activo',
+  };
 
   const campana = await query<{ id: string }>(
     `INSERT INTO campaigns (organization_id, name, owner_id, created_by)
@@ -52,7 +59,12 @@ describe('crear y completar un brief sin IA (prueba 15)', () => {
     expect(resultado.ok).toBe(true);
     if (!resultado.ok) return;
 
-    const campos = await query<{ key: string; campaign_product_id: string | null; status: string; provenance_type: string }>(
+    const campos = await query<{
+      key: string;
+      campaign_product_id: string | null;
+      status: string;
+      provenance_type: string;
+    }>(
       `SELECT key, campaign_product_id, status::text, provenance_type::text
          FROM brief_fields WHERE brief_version_id = $1`,
       [resultado.value.versionId],
@@ -110,7 +122,11 @@ describe('crear y completar un brief sin IA (prueba 15)', () => {
     const deClaim = preguntas.value.find((p) => p.criticidad === 'claim');
     expect(deClaim, 'se esperaba al menos una pregunta de tipo claim').toBeDefined();
 
-    const descartada = await descartarPregunta(actor, deClaim!.id, 'No aplica para este producto en esta campaña.');
+    const descartada = await descartarPregunta(
+      actor,
+      deClaim!.id,
+      'No aplica para este producto en esta campaña.',
+    );
     expect(descartada.ok).toBe(true);
 
     // El campo sigue not_found — un descarte nunca inventa un valor.

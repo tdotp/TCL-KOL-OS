@@ -77,11 +77,13 @@ export default async function EditorBriefPage({ params }: { params: Promise<{ id
     };
   });
 
-  const secciones = ORDEN_DE_SECCIONES.filter((s) => camposConCatalogo.some((c) => c.section === s)).map((s) => ({
-    id: s,
-    titulo: TITULO_SECCION[s] ?? s,
-    campos: camposConCatalogo.filter((c) => c.section === s),
-  }));
+  const secciones = ORDEN_DE_SECCIONES.filter((s) => camposConCatalogo.some((c) => c.section === s)).map(
+    (s) => ({
+      id: s,
+      titulo: TITULO_SECCION[s] ?? s,
+      campos: camposConCatalogo.filter((c) => c.section === s),
+    }),
+  );
 
   return (
     <>

@@ -1,21 +1,35 @@
 /**
  * Verificación de punta a punta del procesamiento documental (Épica E4).
  *
- * Es la demo del Sprint 2: cargar un PPT real y comprobar que
+ * Es la demo del Sprint 2: cargar un PPT y comprobar que
  *  1. la carga responde de inmediato — la interfaz no se bloquea;
  *  2. el worker procesa en segundo plano;
  *  3. cada fragmento conserva su número de diapositiva.
  *
- * Requiere el worker en marcha:
- *     cd services/ai-worker && PYTHONPATH=. .venv/bin/python worker.py
+ * Corrección posterior al cierre de Sprint 4: esta prueba dependía de rutas
+ * absolutas de una máquina de desarrollo concreta
+ * (`/Users/.../Downloads/*.pptx`), así que nunca corría en CI ni en ninguna
+ * otra máquina — se omitía en silencio, sin que nadie lo notara, exactamente
+ * el tipo de falla silenciosa que este proyecto existe para evitar. Ahora usa
+ * un fixture sintético versionado (`fixtures/pipeline/documento-de-prueba.pptx`,
+ * generado una vez con `python-pptx`, 3 diapositivas con texto real): la
+ * misma propiedad que verificaba con material real de una campaña —parseo,
+ * cola, localizador por diapositiva—, sin depender de que exista en disco
+ * nada fuera del repositorio ni de una clave de proveedor de IA.
  *
- * Si no hay material real disponible, se genera un PPTX de prueba: la propiedad
- * que se verifica es la misma, solo cambia el tamaño.
+ * Requiere un worker real procesando la cola —el parseo no llama a ningún
+ * proveedor de IA, `AI_ENABLED`/`AI_PROVIDER` no le afectan—:
+ *     cd services/ai-worker && PYTHONPATH=. .venv/bin/python worker.py
+ * En CI lo levanta el propio workflow (`ci.yml`, job `web`) con
+ * `AI_PROVIDER=fake`. Si no hay ningún worker alcanzable ni siquiera así, la
+ * prueba se omite con un mensaje explícito en vez de fallar por timeout —
+ * nunca en silencio.
  */
 
 import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { User } from '@tcl-kol-os/domain';
 import { closePool, query } from './client.ts';
@@ -24,22 +38,29 @@ import { getFragments, listSources, uploadSource } from './sources.ts';
 
 const MIME_PPTX = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 
-/** Material real, si está disponible en la máquina de desarrollo. */
-const CANDIDATOS = [
-  '/Users/gerardocalambasposada/Downloads/Del-boceto-a-la-IA.pptx',
-  '/Users/gerardocalambasposada/Downloads/Clase_Conciencia_e_IA.pptx',
-  '/Users/gerardocalambasposada/Downloads/IMC MNT Plan 2Half.pptx',
-];
-
-const rutaReal = CANDIDATOS.find((r) => existsSync(r));
+/** Fixture sintético versionado — nunca una ruta personal (ver docstring). */
+const RAIZ_DEL_REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const RUTA_FIXTURE = join(RAIZ_DEL_REPO, 'fixtures', 'pipeline', 'documento-de-prueba.pptx');
 
 let admin: User;
 let campanaId: string;
+let hayWorker = false;
+
+async function workerVivo(): Promise<boolean> {
+  try {
+    const url = (process.env['AI_WORKER_URL'] ?? 'http://localhost:8000').replace(/\/+$/, '');
+    const r = await fetch(`${url}/ready`, { signal: AbortSignal.timeout(3000) });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
 
 beforeAll(async () => {
   admin = (await findUserByEmail('gerardo@smartpr.co'))!;
   const filas = await query<{ id: string }>(`SELECT id FROM campaigns WHERE name = 'Lanzamiento línea P80'`);
   campanaId = filas[0]!.id;
+  hayWorker = await workerVivo();
 });
 
 afterAll(async () => {
@@ -61,11 +82,24 @@ async function esperarProcesamiento(sourceId: string, segundos = 45) {
   return undefined;
 }
 
-describe.skipIf(rutaReal === undefined)('procesamiento de un PPT real', () => {
+describe('procesamiento de un PPT (fixture sintético versionado)', () => {
   it(
     'la carga responde rápido y el procesamiento ocurre en segundo plano',
     async () => {
-      const contenido = new Uint8Array(await readFile(rutaReal!));
+      if (!hayWorker) {
+        // Nunca en silencio: se declara explícitamente por qué se omite, y
+        // qué hace falta para que corra. En CI (`ci.yml`, job `web`) siempre
+        // hay un worker con AI_PROVIDER=fake — esta rama solo se toma en un
+        // entorno local sin `docker compose up -d worker` ni
+        // `python worker.py` corriendo.
+        console.warn(
+          'No hay worker en AI_WORKER_URL; se omite. ' +
+            'El parseo no depende de AI_ENABLED/AI_PROVIDER — solo hace falta el worker corriendo.',
+        );
+        return;
+      }
+
+      const contenido = new Uint8Array(await readFile(RUTA_FIXTURE));
       const mb = contenido.byteLength / 1024 / 1024;
 
       // La detección de duplicados por hash es correcta y funciona; para que
@@ -77,7 +111,7 @@ describe.skipIf(rutaReal === undefined)('procesamiento de un PPT real', () => {
       const t0 = Date.now();
       const resultado = await uploadSource(admin, {
         campaignId: campanaId,
-        filename: `e2e-${rutaReal!.split('/').pop()}`,
+        filename: 'e2e-documento-de-prueba.pptx',
         contenido,
         tipoDeclarado: MIME_PPTX,
         type: 'ppt_global',

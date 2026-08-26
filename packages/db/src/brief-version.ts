@@ -10,7 +10,14 @@
  */
 
 import type pg from 'pg';
-import type { BriefField, BriefVersion, ReviewStatus, FieldStatus, ProvenanceType, Criticality } from '@tcl-kol-os/domain';
+import type {
+  BriefField,
+  BriefVersion,
+  ReviewStatus,
+  FieldStatus,
+  ProvenanceType,
+  Criticality,
+} from '@tcl-kol-os/domain';
 import { getPool } from './client.ts';
 
 type Ejecutor = pg.Pool | pg.PoolClient;

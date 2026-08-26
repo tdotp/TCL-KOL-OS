@@ -23,7 +23,7 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any
 
 from . import embeddings, parsers
 from .parsers.base import Fragment, ParseError
@@ -77,7 +77,7 @@ def _backoff(intentos: int) -> int:
     return BACKOFF_SEGUNDOS[indice]
 
 
-def tomar_job(conn: Any) -> Optional[Job]:
+def tomar_job(conn: Any) -> Job | None:
     """Toma un job disponible y lo marca como ejecutando, de forma atómica."""
     with conn.cursor() as cur:
         cur.execute(
@@ -125,7 +125,7 @@ def tomar_job(conn: Any) -> Optional[Job]:
     )
 
 
-def _guardar_fragmentos(conn: Any, source_id: str, fragmentos: List[Fragment]) -> None:
+def _guardar_fragmentos(conn: Any, source_id: str, fragmentos: list[Fragment]) -> None:
     with conn.cursor() as cur:
         # Idempotencia: se parte de cero para este documento.
         cur.execute("DELETE FROM source_fragments WHERE source_id = %s", (source_id,))
@@ -249,7 +249,7 @@ def procesar(conn: Any, job: Job) -> bool:
     return True
 
 
-def ciclo(conn: Any, intervalo: float = 2.0, max_jobs: Optional[int] = None) -> int:
+def ciclo(conn: Any, intervalo: float = 2.0, max_jobs: int | None = None) -> int:
     """Bucle principal. `max_jobs` acota la ejecución, útil en pruebas."""
     procesados = 0
     while max_jobs is None or procesados < max_jobs:

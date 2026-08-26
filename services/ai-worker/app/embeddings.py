@@ -43,7 +43,7 @@ TAMANO_LOTE = 64
 VERSION_INDEXADO = "emb-1"
 
 
-class EmbeddingsDesactivados(RuntimeError):
+class EmbeddingsDesactivadosError(RuntimeError):
     """`AI_ENABLED` está en falso: no se llama al proveedor."""
 
 
@@ -76,7 +76,7 @@ def embeber_consulta(texto: str) -> list[float]:
     búsqueda —el filtro y el orden por distancia— es SQL.
     """
     if not _ia_activa():
-        raise EmbeddingsDesactivados(
+        raise EmbeddingsDesactivadosError(
             "AI_ENABLED está en falso: no se puede convertir la consulta en vector."
         )
 

@@ -20,7 +20,7 @@ ubicación es ruta de encabezados más número de línea, sin ambigüedad alguna
 
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any
 
 from .base import Fragment, ParseError, normalizar
 
@@ -49,7 +49,7 @@ def _texto_de_tabla(tabla: Any) -> str:
     return "\n".join(filas)
 
 
-def parse(path: str) -> List[Fragment]:
+def parse(path: str) -> list[Fragment]:
     try:
         import docx
     except ImportError as exc:  # pragma: no cover
@@ -60,11 +60,11 @@ def parse(path: str) -> List[Fragment]:
     except Exception as exc:
         raise ParseError("No se pudo abrir el documento de Word. Puede estar dañado.") from exc
 
-    fragmentos: List[Fragment] = []
+    fragmentos: list[Fragment] = []
     ordinal = 0
     saltos = 0
-    seccion: Optional[str] = None
-    acumulado: List[str] = []
+    seccion: str | None = None
+    acumulado: list[str] = []
 
     def volcar() -> None:
         nonlocal ordinal, acumulado

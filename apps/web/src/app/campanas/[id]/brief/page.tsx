@@ -3,7 +3,11 @@ import { getCampaign, listarPreguntas, verCamposDeVersion, versionesDelBrief } f
 import { allowedTransitions, type BriefStatus } from '@tcl-kol-os/domain';
 import { Encabezado } from '@/components/Encabezado';
 import { currentUser } from '@/lib/session';
-import { crearBriefManualDeCampana, reintentarExtraccionDeBrief, transicionarBriefDeCampana } from '@/lib/actions';
+import {
+  crearBriefManualDeCampana,
+  reintentarExtraccionDeBrief,
+  transicionarBriefDeCampana,
+} from '@/lib/actions';
 import { BotonExtraer } from './BotonExtraer';
 import { TablaCampos } from './TablaCampos';
 
@@ -70,21 +74,22 @@ export default async function BriefPage({
   const campos = ultima === undefined ? null : await verCamposDeVersion(user, ultima.id);
   const listaCampos = campos !== null && campos.ok ? campos.value : [];
 
-  const criticosFaltantes = listaCampos.filter(
-    (c) => c.criticidad === 'critico' && c.status !== 'found',
-  );
+  const criticosFaltantes = listaCampos.filter((c) => c.criticidad === 'critico' && c.status !== 'found');
   const conflictos = listaCampos.filter((c) => c.status === 'conflict');
   const encontrados = listaCampos.filter((c) => c.status === 'found');
   const sinRevisar = listaCampos.filter((c) => c.status === 'found' && c.reviewStatus === 'pending');
 
-  const preguntas = ultima === undefined ? undefined : await listarPreguntas(user, id, { status: 'pendiente' });
+  const preguntas =
+    ultima === undefined ? undefined : await listarPreguntas(user, id, { status: 'pendiente' });
   const preguntasPendientes = preguntas?.ok ? preguntas.value.length : 0;
   const preguntasCriticasPendientes = preguntas?.ok
     ? preguntas.value.filter((p) => p.criticidad === 'critico').length
     : 0;
 
   const transicionesPosibles =
-    ultima !== undefined ? allowedTransitions(ultima.status as BriefStatus, user).filter((t) => t !== 'cancelled') : [];
+    ultima !== undefined
+      ? allowedTransitions(ultima.status as BriefStatus, user).filter((t) => t !== 'cancelled')
+      : [];
 
   return (
     <>
@@ -95,8 +100,8 @@ export default async function BriefPage({
         </p>
         <h1>Brief</h1>
         <p className="sub">
-          Campos propuestos a partir de las fuentes cargadas. Cada afirmación abre el documento,
-          la ubicación y la frase exacta de donde salió.
+          Campos propuestos a partir de las fuentes cargadas. Cada afirmación abre el documento, la ubicación
+          y la frase exacta de donde salió.
         </p>
 
         {error !== undefined && (
@@ -117,8 +122,8 @@ export default async function BriefPage({
           <div className="card">
             <h2>Todavía no hay ninguna versión</h2>
             <p className="sub">
-              Cargue fuentes en la campaña y ejecute la extracción, o empiece el brief a mano: la
-              asistencia de IA nunca es requisito para avanzar.
+              Cargue fuentes en la campaña y ejecute la extracción, o empiece el brief a mano: la asistencia
+              de IA nunca es requisito para avanzar.
             </p>
             <div className="row" style={{ gap: 8, marginTop: 12 }}>
               <a className="btn" href={`/campanas/${id}/fuentes`}>
@@ -140,15 +145,17 @@ export default async function BriefPage({
               <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <h2 style={{ margin: 0 }}>
                   Versión {ultima.version}{' '}
-                  <span className={`pill ${ultima.status === 'approved' ? 'ok' : ultima.status === 'processing_failed' ? 'bad' : 'info'}`}>
+                  <span
+                    className={`pill ${ultima.status === 'approved' ? 'ok' : ultima.status === 'processing_failed' ? 'bad' : 'info'}`}
+                  >
                     {ESTADO_EN_ESPANOL[ultima.status as BriefStatus] ?? ultima.status}
                   </span>
                 </h2>
                 {user.role !== 'cliente' && <BotonExtraer campaignId={id} />}
               </div>
               <p className="sub">
-                {encontrados.length} campo(s) con dato · {criticosFaltantes.length} crítico(s)
-                pendiente(s) · {conflictos.length} conflicto(s) · {sinRevisar.length} sin confirmar
+                {encontrados.length} campo(s) con dato · {criticosFaltantes.length} crítico(s) pendiente(s) ·{' '}
+                {conflictos.length} conflicto(s) · {sinRevisar.length} sin confirmar
                 {ultima.modelo !== null && (
                   <>
                     {' '}
@@ -201,7 +208,12 @@ export default async function BriefPage({
               </div>
             </div>
 
-            <TablaCampos campos={listaCampos} campaignId={id} versionId={ultima.id} editable={user.role !== 'cliente'} />
+            <TablaCampos
+              campos={listaCampos}
+              campaignId={id}
+              versionId={ultima.id}
+              editable={user.role !== 'cliente'}
+            />
           </>
         )}
 

@@ -26,13 +26,14 @@ nadie la desmarque por error.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger("ai-worker.openrouter")
 
@@ -55,7 +56,7 @@ class Uso:
     completion_tokens: int = 0
     total_tokens: int = 0
     #: Costo real en USD según OpenRouter. No una estimación nuestra.
-    costo_usd: Optional[float] = None
+    costo_usd: float | None = None
 
 
 @dataclass(frozen=True)
@@ -65,8 +66,8 @@ class Respuesta:
     uso: Uso
     latencia_ms: int
     #: Identificador de OpenRouter, consultable después para auditoría.
-    generacion_id: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    generacion_id: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 def _clave() -> str:
@@ -81,7 +82,7 @@ def _clave() -> str:
     return valor
 
 
-def _cabeceras() -> Dict[str, str]:
+def _cabeceras() -> dict[str, str]:
     import os
 
     return {
@@ -93,7 +94,7 @@ def _cabeceras() -> Dict[str, str]:
     }
 
 
-def _politica_de_proveedor() -> Dict[str, Any]:
+def _politica_de_proveedor() -> dict[str, Any]:
     """Preferencias de enrutamiento aplicadas a cada petición.
 
     `data_collection: deny` excluye a los proveedores que entrenan con los datos
@@ -103,23 +104,28 @@ def _politica_de_proveedor() -> Dict[str, Any]:
     return {"data_collection": "deny", "allow_fallbacks": True}
 
 
-def _post(ruta: str, cuerpo: Dict[str, Any], timeout: int) -> Dict[str, Any]:
+def _post(ruta: str, cuerpo: dict[str, Any], timeout: int) -> dict[str, Any]:
     datos = json.dumps(cuerpo).encode("utf-8")
-    peticion = urllib.request.Request(
+    # `ruta` es siempre un literal interno (nunca entrada de usuario) sobre
+    # BASE_URL, un https:// fijo — no hay esquema arbitrario que auditar.
+    # Se usa urllib de la librería estándar a propósito, para no sumar una
+    # dependencia (`requests`) solo por esta llamada.
+    peticion = urllib.request.Request(  # noqa: S310
         f"{BASE_URL}{ruta}", data=datos, headers=_cabeceras(), method="POST"
     )
 
     try:
-        with urllib.request.urlopen(peticion, timeout=timeout) as respuesta:
-            cuerpo_json: Dict[str, Any] = json.loads(respuesta.read().decode("utf-8"))
+        with urllib.request.urlopen(peticion, timeout=timeout) as respuesta:  # noqa: S310
+            cuerpo_json: dict[str, Any] = json.loads(respuesta.read().decode("utf-8"))
             return cuerpo_json
 
     except urllib.error.HTTPError as exc:
         detalle = ""
-        try:
+        # El detalle es una mejora del mensaje de error, no algo de lo que
+        # dependa la lógica: si el cuerpo del error no es el JSON esperado,
+        # se sigue con el mensaje genérico de abajo en vez de fallar aquí.
+        with contextlib.suppress(Exception):
             detalle = json.loads(exc.read().decode("utf-8")).get("error", {}).get("message", "")
-        except Exception:
-            pass
 
         if exc.code == 401:
             raise AIError("La clave de OpenRouter no es válida o expiró.") from exc
@@ -140,7 +146,7 @@ def _post(ruta: str, cuerpo: Dict[str, Any], timeout: int) -> Dict[str, Any]:
         raise AIError(f"OpenRouter no respondió en {timeout} s.") from exc
 
 
-def _uso_de(payload: Dict[str, Any]) -> Uso:
+def _uso_de(payload: dict[str, Any]) -> Uso:
     bruto = payload.get("usage") or {}
     return Uso(
         prompt_tokens=int(bruto.get("prompt_tokens", 0)),
@@ -153,10 +159,10 @@ def _uso_de(payload: Dict[str, Any]) -> Uso:
 
 def completar(
     modelo: str,
-    mensajes: List[Dict[str, str]],
+    mensajes: list[dict[str, str]],
     *,
     temperatura: float = 0.0,
-    max_tokens: Optional[int] = None,
+    max_tokens: int | None = None,
     formato_json: bool = False,
     timeout: int = 120,
 ) -> Respuesta:
@@ -166,7 +172,7 @@ def completar(
     variedad. Una extracción que cambia entre ejecuciones no se puede evaluar
     contra un gold set (métrica IA-05).
     """
-    cuerpo: Dict[str, Any] = {
+    cuerpo: dict[str, Any] = {
         "model": modelo,
         "messages": mensajes,
         "temperature": temperatura,
@@ -201,7 +207,7 @@ def completar(
     )
 
 
-def embeddings(modelo: str, textos: List[str], *, timeout: int = 120) -> tuple[List[List[float]], Uso]:
+def embeddings(modelo: str, textos: list[str], *, timeout: int = 120) -> tuple[list[list[float]], Uso]:
     """Genera embeddings para varios textos en una sola llamada.
 
     El lote importa: procesar un PPT de 42 fragmentos con 42 peticiones sería

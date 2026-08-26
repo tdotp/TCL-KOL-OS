@@ -11,7 +11,8 @@ Se extrae, por diapositiva:
 
 from __future__ import annotations
 
-from typing import Any, Iterator, List
+from collections.abc import Iterator
+from typing import Any
 
 from .base import Fragment, ParseError, normalizar
 
@@ -36,7 +37,7 @@ def _texto_de_tabla(shape: Any) -> str:
 
 def _texto_de_diapositiva(slide: Any) -> tuple[str, str]:
     """Devuelve (cuerpo, título) de una diapositiva."""
-    partes: List[str] = []
+    partes: list[str] = []
     titulo = ""
 
     for shape in _formas(slide.shapes):
@@ -70,7 +71,7 @@ def _notas(slide: Any) -> str:
     return frame.text.strip() if frame is not None else ""
 
 
-def parse(path: str) -> List[Fragment]:
+def parse(path: str) -> list[Fragment]:
     try:
         from pptx import Presentation
     except ImportError as exc:  # pragma: no cover
@@ -83,7 +84,7 @@ def parse(path: str) -> List[Fragment]:
             "No se pudo abrir el archivo de PowerPoint. Puede estar dañado o protegido."
         ) from exc
 
-    fragmentos: List[Fragment] = []
+    fragmentos: list[Fragment] = []
     ordinal = 0
 
     for numero, slide in enumerate(presentacion.slides, start=1):

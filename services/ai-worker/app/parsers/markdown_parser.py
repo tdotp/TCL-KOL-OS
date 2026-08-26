@@ -19,7 +19,6 @@ pueden comparar línea a línea (Épica E8, comparador de versiones).
 from __future__ import annotations
 
 import re
-from typing import List, Optional, Tuple
 
 from .base import Fragment, ParseError, normalizar
 
@@ -28,16 +27,16 @@ _CERCA_CODIGO = re.compile(r"^\s*(```|~~~)")
 _SEPARADOR = " › "
 
 
-def _ruta(pila: List[Tuple[int, str]]) -> Optional[str]:
+def _ruta(pila: list[tuple[int, str]]) -> str | None:
     """Ruta jerárquica de encabezados: 'El Reto › Audiencia › Primaria'."""
     if not pila:
         return None
     return _SEPARADOR.join(titulo for _, titulo in pila)
 
 
-def parse(path: str) -> List[Fragment]:
+def parse(path: str) -> list[Fragment]:
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             contenido = f.read()
     except UnicodeDecodeError as exc:
         raise ParseError(
@@ -47,11 +46,11 @@ def parse(path: str) -> List[Fragment]:
     except OSError as exc:
         raise ParseError("No se pudo leer el archivo.") from exc
 
-    fragmentos: List[Fragment] = []
+    fragmentos: list[Fragment] = []
     ordinal = 0
 
-    pila: List[Tuple[int, str]] = []
-    bloque: List[str] = []
+    pila: list[tuple[int, str]] = []
+    bloque: list[str] = []
     linea_inicio = 1
     en_codigo = False
 

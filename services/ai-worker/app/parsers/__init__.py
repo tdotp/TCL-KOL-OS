@@ -7,10 +7,10 @@ aceptan y se conservan, pero requieren OCR y se atienden en E4-7.
 
 from __future__ import annotations
 
-from typing import Callable, Dict, List
+from collections.abc import Callable
 
-from .base import Fragment, ParseError, normalizar
 from . import docx_parser, markdown_parser, pdf_parser, pptx_parser
+from .base import Fragment, ParseError, normalizar
 
 PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -18,7 +18,7 @@ PDF = "application/pdf"
 #: Formato preferido para los briefs de SmartPR (DEC-018).
 MARKDOWN = "text/markdown"
 
-_REGISTRO: Dict[str, Callable[[str], List[Fragment]]] = {
+_REGISTRO: dict[str, Callable[[str], list[Fragment]]] = {
     PPTX: pptx_parser.parse,
     PDF: pdf_parser.parse,
     DOCX: docx_parser.parse,
@@ -26,7 +26,7 @@ _REGISTRO: Dict[str, Callable[[str], List[Fragment]]] = {
 }
 
 
-def parse(path: str, mime_type: str) -> List[Fragment]:
+def parse(path: str, mime_type: str) -> list[Fragment]:
     """Procesa un archivo según su tipo real de contenido."""
     parser = _REGISTRO.get(mime_type)
     if parser is None:

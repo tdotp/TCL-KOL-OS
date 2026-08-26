@@ -91,10 +91,7 @@ function preguntaParaCampo(campo: {
  * duplique nada (prueba 2). Si crea al menos una y el estado es
  * `extraction_review`, dispara `extraction_review → local_questions`.
  */
-export async function generarPreguntas(
-  actor: User,
-  versionId: string,
-): Promise<Result<{ creadas: number }>> {
+export async function generarPreguntas(actor: User, versionId: string): Promise<Result<{ creadas: number }>> {
   const permitido = assertCapability(actor, 'question:create');
   if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
 
@@ -294,7 +291,11 @@ function validarValorEstructurado(
         !Array.isArray(valor) ||
         valor.length === 0 ||
         !valor.every(
-          (v) => typeof v === 'object' && v !== null && 'descripcion' in v && typeof (v as { descripcion: unknown }).descripcion === 'string',
+          (v) =>
+            typeof v === 'object' &&
+            v !== null &&
+            'descripcion' in v &&
+            typeof (v as { descripcion: unknown }).descripcion === 'string',
         )
       ) {
         return { ok: false, mensaje: `«${campo.label}» espera una lista de objetos con "descripcion".` };
@@ -343,15 +344,21 @@ export async function responderPregunta(
     brief_version_id: string | null;
     key: string;
     status: string;
-  }>(`SELECT lq.id, lq.campaign_id, lq.brief_version_id, lq.key, lq.status::text FROM local_questions lq
+  }>(
+    `SELECT lq.id, lq.campaign_id, lq.brief_version_id, lq.key, lq.status::text FROM local_questions lq
         JOIN campaigns c ON c.id = lq.campaign_id
-       WHERE lq.id = $1 AND c.organization_id = $2`, [questionId, actor.organizationId]);
+       WHERE lq.id = $1 AND c.organization_id = $2`,
+    [questionId, actor.organizationId],
+  );
   const fila = pregunta.rows[0];
   if (!fila) {
     return err({ code: 'RESOURCE_NOT_FOUND', message: 'El recurso no existe o no está disponible.' });
   }
   if (!fila.brief_version_id) {
-    return err({ code: 'BRIEF_FIELD_INVALID', message: 'Esta pregunta no está ligada a una versión del brief.' });
+    return err({
+      code: 'BRIEF_FIELD_INVALID',
+      message: 'Esta pregunta no está ligada a una versión del brief.',
+    });
   }
 
   const validacion = validarValorEstructurado(fila.key, opciones.answerValue);

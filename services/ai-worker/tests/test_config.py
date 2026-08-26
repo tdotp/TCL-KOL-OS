@@ -66,4 +66,5 @@ def test_formatos_soportados_son_los_de_dec_010(monkeypatch: pytest.MonkeyPatch)
     assert "application/pdf" in settings.supported_mime_types
     assert "image/png" in settings.supported_mime_types
     # XLSX no está soportado: entra como excepción manual, no automática.
-    assert "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" not in settings.supported_mime_types
+    xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert xlsx not in settings.supported_mime_types

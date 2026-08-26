@@ -17,7 +17,7 @@ import json
 import pytest
 
 from app import brief_schema, extraction
-from app.extraction import ExtraccionInvalida, FragmentoDeEntrada, validar_y_anclar
+from app.extraction import ExtraccionInvalidaError, FragmentoDeEntrada, validar_y_anclar
 
 TEXTO_A = (
     "El Reto | Posicionar la línea TCL P80 como la decisión inteligente del "
@@ -262,7 +262,11 @@ def test_conflicto_con_dos_evidencias_verificadas_se_conserva() -> None:
                     "status": "conflict",
                     "evidence": [
                         {"fragment_id": "frag-a", "quote": "segmento medio-alto", "relation": "soporta"},
-                        {"fragment_id": "frag-b", "quote": "Adultos de 25 a 40 años", "relation": "contradice"},
+                        {
+                            "fragment_id": "frag-b",
+                            "quote": "Adultos de 25 a 40 años",
+                            "relation": "contradice",
+                        },
                     ],
                 }
             ]
@@ -308,7 +312,11 @@ def test_conflicto_pierde_una_evidencia_por_cita_falsa_y_deja_de_serlo() -> None
                     "status": "conflict",
                     "evidence": [
                         {"fragment_id": "frag-a", "quote": "segmento medio-alto", "relation": "soporta"},
-                        {"fragment_id": "frag-b", "quote": "esto nunca se escribió", "relation": "contradice"},
+                        {
+                            "fragment_id": "frag-b",
+                            "quote": "esto nunca se escribió",
+                            "relation": "contradice",
+                        },
                     ],
                 }
             ]
@@ -322,7 +330,7 @@ def test_conflicto_pierde_una_evidencia_por_cita_falsa_y_deja_de_serlo() -> None
 
 
 def test_una_respuesta_que_no_es_json_se_rechaza() -> None:
-    with pytest.raises(ExtraccionInvalida):
+    with pytest.raises(ExtraccionInvalidaError):
         validar_y_anclar("Claro, aquí tienes el brief que me pediste.", FRAGMENTOS)
 
 
@@ -454,10 +462,10 @@ def test_una_respuesta_vacia_no_se_confunde_con_una_truncada() -> None:
     Un mensaje que culpa al tope de tokens cuando el proveedor devolvió nada
     manda a quien lo lea a agrandar un presupuesto que no era el problema.
     """
-    with pytest.raises(ExtraccionInvalida, match="vacía o casi vacía"):
+    with pytest.raises(ExtraccionInvalidaError, match="vacía o casi vacía"):
         validar_y_anclar('{"', FRAGMENTOS)
 
-    with pytest.raises(ExtraccionInvalida, match="cortada a mitad"):
+    with pytest.raises(ExtraccionInvalidaError, match="cortada a mitad"):
         validar_y_anclar('{"campos": [{"key": "contexto.situacion", "value": "algo sin cerrar', FRAGMENTOS)
 
 

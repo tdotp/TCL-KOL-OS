@@ -6,12 +6,10 @@ especificaciones citables.
 
 from __future__ import annotations
 
-from typing import List
-
 from .base import Fragment, ParseError, normalizar
 
 
-def parse(path: str) -> List[Fragment]:
+def parse(path: str) -> list[Fragment]:
     try:
         from pypdf import PdfReader
     except ImportError as exc:  # pragma: no cover
@@ -32,7 +30,7 @@ def parse(path: str) -> List[Fragment]:
                 "El PDF está protegido con contraseña y no se puede procesar."
             ) from exc
 
-    fragmentos: List[Fragment] = []
+    fragmentos: list[Fragment] = []
     ordinal = 0
     paginas_sin_texto = 0
 

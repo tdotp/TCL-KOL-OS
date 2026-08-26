@@ -5,14 +5,7 @@
  * aplica, y toda consulta filtra además por organización en el propio SQL.
  */
 
-import {
-  FORMATOS_CON_EXTRACCION,
-  validarArchivo,
-  type Result,
-  type User,
-  err,
-  ok,
-} from '@tcl-kol-os/domain';
+import { FORMATOS_CON_EXTRACCION, validarArchivo, type Result, type User, err, ok } from '@tcl-kol-os/domain';
 import { assertCapability } from './authz.ts';
 import { getPool, transaction } from './client.ts';
 import { recordAudit } from './audit.ts';

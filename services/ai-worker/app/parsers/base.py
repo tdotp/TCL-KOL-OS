@@ -18,7 +18,7 @@ fabricar una precisión falsa, que es peor que no tenerla.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Any, Protocol
 
 
 @dataclass(frozen=True)
@@ -27,11 +27,11 @@ class Fragment:
 
     ordinal: int
     text: str
-    page: Optional[int] = None
-    slide: Optional[int] = None
-    section: Optional[str] = None
-    linea: Optional[int] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    page: int | None = None
+    slide: int | None = None
+    section: str | None = None
+    linea: int | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         tiene_seccion = self.section is not None and self.section.strip() != ""
@@ -55,7 +55,7 @@ class ParseError(RuntimeError):
 class Parser(Protocol):
     """Todo parser recibe una ruta y devuelve fragmentos localizados."""
 
-    def parse(self, path: str) -> List[Fragment]: ...
+    def parse(self, path: str) -> list[Fragment]: ...
 
 
 def normalizar(texto: str) -> str:

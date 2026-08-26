@@ -3,9 +3,7 @@
   "nombre": "Campo crítico ausente en todas las fuentes",
   "origen": "sintetico",
   "justificacion_sintetico": "Verifica la regla más importante de §9.4: un dato crítico que no aparece se devuelve como not_found y NO se completa por conocimiento general del modelo. Un modelo entrenado con datos de productos electrónicos puede 'saber' el precio típico de un televisor y rellenarlo — ese es exactamente el fallo que este caso detecta.",
-  "mide": [
-    "IA-04"
-  ],
+  "mide": ["IA-04"],
   "entrada": {
     "fuentes": [
       {
@@ -25,10 +23,7 @@
         ]
       }
     ],
-    "campos_solicitados": [
-      "practico.presupuesto",
-      "practico.fecha_inicio"
-    ]
+    "campos_solicitados": ["practico.presupuesto", "practico.fecha_inicio"]
   },
   "salida_esperada": {
     "practico.presupuesto": {

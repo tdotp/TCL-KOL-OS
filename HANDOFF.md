@@ -1,7 +1,10 @@
 # Handoff — TCL KOL OS
 
-Estado a **26 de agosto de 2026**. Base de este cierre: `10788d9`. Trae el cierre de
-Sprint 3 + Sprint 4 (brief funcional de punta a punta) sin commitear todavía.
+Estado a **26 de agosto de 2026**. Base de este cierre: `10788d9`. **Checkpoint
+técnico commiteado en `516de31`** — preserva lo construido, no es el cierre
+definitivo de Sprint 4: falta Demo A y Gate INC-001B, bloqueados por una clave
+de OpenRouter inválida (§7). Detalle completo y matriz de estado en
+[D0-17](docs/product/D0-17-cierre-sprint4.md).
 
 Este archivo existe para que una sesión nueva pueda continuar sin releer el
 historial. No repite lo que ya está en otros documentos: los enlaza.
@@ -34,14 +37,20 @@ consecuencia de eso.
 | Sprint 1 — identidad, campañas multiproducto, aislamiento | ✅ |
 | Sprint 2 — fuentes documentales, cola, parsers | ✅ |
 | Sprint 3 — índice vectorial, extracción con evidencia, UI-08/UI-11 | ✅ |
-| **Sprint 4 — ciclo de estados real, anclaje de producto, Épica E6 (preguntas locales), E7 (editor)** | ✅ **con reservas — ver §5** |
-| Ciclo de aprobación final, exportación, traducción, Drive/OIDC/OCR | ⬅️ **siguiente** |
+| **Sprint 4 — ciclo de estados real, anclaje de producto, Épica E6 (preguntas locales), E7 (editor, incl. E7-8)** | 🟡 **checkpoint técnico, no cierre definitivo — ver §5 y D0-17** |
+| Demo A + Gate INC-001B (P80 real) | ⬅️ **bloqueado por clave de OpenRouter — único pendiente antes del cierre** |
+| Ciclo de aprobación final, exportación, traducción, Drive/OIDC/OCR | ⬅️ siguiente incremento |
 
-**Pruebas al cierre de este incremento:** 61 dominio (vitest) · 101 integración
-`packages/db` (vitest, contra Postgres real, dos corridas consecutivas
-estables — INC-001A) · 97 worker (pytest) · verificación cruzada de catálogo
-TS/Python en verde · `npm run lint` y `mypy app` limpios · `next build`
-compila, incluidas las dos rutas nuevas (`/brief/editar`, `/preguntas`).
+**Pruebas al cierre de este checkpoint:** 61 dominio (vitest) · 110 integración
+`packages/db` (vitest, contra Postgres real, sin ningún dato acumulado) · 97
+worker (pytest) · `ruff check .` y `mypy app` limpios sobre todo
+`services/ai-worker` · verificación cruzada de catálogo TS/Python en verde ·
+`npm run lint`, `npm run typecheck` y `npm run format:check` limpios ·
+`next build` compila, incluidas las tres rutas nuevas (`/brief/editar` con
+E7-8, `/preguntas`). **La receta literal de `ci.yml` (Postgres + Redis +
+worker/consumidor con `AI_PROVIDER=fake`, todos efímeros y recién creados)
+se corrió completa: cero fallas** — la primera vez que se declaró esto
+"corregido" fue apresurado (§8, punto 11); esta vez está reproducido.
 
 ### Lo que cambia respecto al HANDOFF anterior
 
@@ -71,6 +80,11 @@ manual. Este incremento cierra esa brecha:
   historial propio (`brief_field_revisions`) — confirmar, corregir y
   resolver un conflicto quedan trazados sin usar `audit_events.metadata`
   como bitácora de contenido.
+- **E7-8** (excepción por producto en un campo `compartido_con_excepcion`,
+  DEC-016): declararla exige motivo, crea una fila nueva anclada a un
+  producto sin tocar la compartida, y se puede revertir. Verificado con 9
+  pruebas y en vivo en el navegador (dos productos, uno con excepción, otro
+  sin ella, viendo cada uno lo que le corresponde).
 
 ---
 
@@ -175,10 +189,9 @@ próxima sesión no los redescubra por accidente:
 | Qué | Por qué queda fuera |
 |---|---|
 | **Ciclo de aprobación final** (crear versión hija al editar una `approved`, marcar la anterior `superseded`) | DEC-027 lo documenta pero no lo implementa. Este incremento llega hasta `internal_review`. Protegido igual por ADR-003/triggers de inmutabilidad. |
-| **E7-6 — comentarios internos en el editor** | Prioridad `should`, explícitamente diferida. El editor (E7/UI-10) cubre navegación por sección, selector de producto, edición con autoguardado, confirmación y evidencia inline. |
-| **"Desenganchar producto" en un campo `compartido_con_excepcion`** | Crear una fila de excepción nueva para un producto (distinto de `corregirCampo`, que solo actualiza filas existentes) no tiene función de repositorio propia. El editor muestra estos campos como fila única compartida. |
+| **E7-6 — comentarios internos en el editor** | Prioridad `should`, explícitamente diferida. El editor (E7/UI-10) cubre navegación por sección, selector de producto, edición con autoguardado, confirmación y evidencia inline, y ahora también excepción por producto (E7-8, ver más abajo). |
+| **Fechas con precisión real (DEC-026) en el editor manual** | El modelo de dominio (`PrecisedDate`) existe y `responderPregunta` lo valida; `corregirCampo` (el editor, `CampoEditable.tsx`) todavía guarda `practico.fecha_inicio`/`fecha_fin` como texto plano. Verificado en vivo en Demo B. |
 | **Exportación, traducción, vista de cliente, CRM de influencers, métricas de campaña** | Excluidos por el alcance original de este incremento (§2 del pedido). |
-| **CI ejecutando el worker real** | Ver §8 — tres archivos de prueba preexistentes (`brief-rules.test.ts`, `extraction.test.ts`, `search.test.ts`) necesitan una fuente ya procesada/indexada que ni el seed ni Postgres solos proveen. |
 
 ---
 
@@ -187,8 +200,7 @@ próxima sesión no los redescubra por accidente:
 | # | Asunto | Por qué importa |
 |---|---|---|
 | 1 | **¿Cuándo se acomete el ciclo de aprobación final?** | DEC-027 lo deja documentado; falta decidir si es el siguiente incremento o si hay algo más urgente primero. |
-| 2 | **"Desenganchar producto" en campos compartidos** | ¿Vale la pena una función de repositorio dedicada, o el flujo real nunca necesita declarar una excepción sin partir de una corrección existente? |
-| 3 | **CI sin worker real** | ¿Se justifica levantar el worker (con `AI_PROVIDER=fake`) dentro de CI para que las tres pruebas de §8 corran ahí, o se documentan como "solo local" de forma permanente? |
+| 2 | **Fechas con precisión real (DEC-026) en el editor manual** | El modelo de dominio existe; falta decidir si vale la pena llevarlo también a `corregirCampo`/`CampoEditable.tsx`, o si el texto plano es aceptable para el editor manual mientras el camino de preguntas locales sí sea preciso. |
 
 ## 7. Bloqueos externos (no dependen del código)
 
@@ -249,27 +261,65 @@ Están documentados porque cada uno costó tiempo y ninguno era obvio:
    P80 (Gate INC-001B): pendiente** — ver el propio documento del incidente
    para el estado exacto.
 8. **CI nunca tuvo Postgres.** El job `web` corría `npm test` en la raíz sin
-   ningún servicio de base de datos: `packages/db` fallaba (o, antes de
-   INC-001A, se arriesgaba a correr contra lo que hubiera en `DATABASE_URL`)
-   en cada PR, sin que nadie lo notara porque nadie miraba ese paso en
-   detalle. Corregido: `web` job ahora levanta `pgvector/pgvector:pg16`,
-   migra y siembra `tclkolos_test` antes de las pruebas. **Aun así, tres
-   archivos preexistentes (`brief-rules.test.ts`, `extraction.test.ts`,
-   `search.test.ts`) siguen fallando en una base recién creada** porque
-   asumen al menos una fuente ya procesada e indexada — algo que solo existe
-   hoy por acumulación de uso real en una base de desarrollo, nunca por
-   `npm run seed`. Verificado corriendo la suite completa contra un
-   contenedor de Postgres efímero, igual al que usa CI: 55/101 pasan «en
-   frío», el resto exige ese material. No se tocó esos tres archivos —
-   quedan fuera de alcance de este incremento (§2) y registrados en la
-   tabla de §5/§6.
-9. **La imagen Docker del worker (`tcl-kol-os-worker:latest`) no trae
+   ningún servicio de base de datos. Corregido: `web` job ahora levanta
+   `pgvector/pgvector:pg16`, migra y siembra `tclkolos_test` antes de las
+   pruebas. **Primer reporte de este arreglo se declaró apresuradamente
+   "corregido" sin haber corrido la suite contra una base realmente
+   recién creada** — al hacerlo, tres archivos fallaban («55/101 en frío»):
+   `extraction.test.ts` y `brief-rules.test.ts` leían fragmentos o una
+   fuente de una campaña ajena a la prueba (**y estos dos sí son de este
+   incremento — decir que eran "preexistentes, sin tocar" fue un error de
+   reporte, no solo de alcance**); `search.test.ts` (sí preexistente,
+   Sprint 3) necesitaba un fragmento ya indexado por un worker real. Los
+   tres se corrigieron: cada uno siembra ahora sus propios documentos y
+   fragmentos sintéticos dentro de su propia campaña desechable. Verificado
+   dos veces, cada vez contra un contenedor Postgres efímero **distinto**,
+   recién migrado y sembrado: **110/110 ambas corridas**, sin residuo.
+   Detalle completo en
+   [D0-17 §6](docs/product/D0-17-cierre-sprint4.md#6-ci-y-reproducibilidad-desde-cero).
+9. **`ruff check .` sobre `services/ai-worker` también se declaró
+   "preexistente, sin tocar" cuando dos de los archivos con más errores sí
+   se habían modificado esta sesión (`openrouter.py`, `embeddings.py`,
+   `extraction.py`).** Se corrigieron los 116 errores reales en vez de
+   excluir archivos o relajar reglas: renombrar dos excepciones con sufijo
+   `Error` (N818), dos `# noqa: S310` justificados sobre `urllib` (uso
+   deliberado de la librería estándar, sin URL variable), un
+   `try/except/pass` reemplazado por `contextlib.suppress`, el resto
+   mecánico (`ruff check --fix`, seguro porque todo el paquete ya usa
+   `from __future__ import annotations`). `ruff check .` queda limpio de
+   verdad — no hay ninguna exclusión nueva en `pyproject.toml`.
+10. **La imagen Docker del worker (`tcl-kol-os-worker:latest`) no trae
    `worker.py` — depende por completo del bind mount de
    `docker-compose.yml`.** Un contenedor de repuesto lanzado con `docker run`
-   directo (para apuntar el consumidor a `tclkolos_test` durante la
-   verificación de este cierre) falló hasta replicar exactamente esos tres
-   montajes (`./services/ai-worker:/app`, `./docs/product/brief-schema:/esquema:ro`,
-   `./.storage:/almacen`).
+   directo (usado varias veces durante la verificación de este cierre, para
+   apuntar un worker+consumidor con `AI_PROVIDER=fake` a una base efímera)
+   falló hasta replicar exactamente esos tres montajes
+   (`./services/ai-worker:/app`, `./docs/product/brief-schema:/esquema:ro`,
+   `./.storage:/almacen`) y las variables `AI_MODEL_*` — sin ellas, el
+   proveedor falso igual falla con "No hay modelo configurado para el nivel
+   'eficiente'", porque `ai/router.py` resuelve el nombre del modelo antes
+   de decidir si la llamada real ocurre o no.
+11. **Un `PASS` declarado sin la corrida que lo prueba no es un `PASS`.**
+   El primer reporte de "CI corregido" (punto 8) citaba «la receta literal
+   de `ci.yml`» pero esa corrida específica había dado `1 failed | 109
+   passed` — el product owner lo señaló antes de que se declarara cerrado.
+   La falla era `pipeline.test.ts` (Sprint 2) dependiendo de rutas de
+   `/Users/.../Downloads/...` de esta máquina. Corregida de raíz, no
+   explicada como excepción: fixture sintético versionado
+   (`fixtures/pipeline/documento-de-prueba.pptx`) y worker+consumidor reales
+   (`AI_PROVIDER=fake`) ahora levantados por el propio `ci.yml`. Al
+   levantarlos apareció además un bug real sin cobertura de `pytest` —
+   ningún test importa `app.main`, así que nada detectó que el `ruff --fix`
+   del punto 9 había convertido `Optional[int]` en `int | None` dentro de
+   los `pydantic.BaseModel` de `app/main.py`. A diferencia de una anotación
+   de función normal, Pydantic v2 evalúa las anotaciones de un `BaseModel`
+   al definir la clase — `from __future__ import annotations` no protege
+   eso — y esa sintaxis revienta en el Python 3.9 mínimo declarado del
+   proyecto. Corregido con `Optional[int]` de vuelta en esos cuatro campos,
+   documentado en el propio código. **Resultado verificado con la receta
+   literal de `ci.yml` contra servicios efímeros recién creados: cero
+   fallas.** Detalle completo en
+   [D0-17 §6](docs/product/D0-17-cierre-sprint4.md#6-ci-y-reproducibilidad-desde-cero).
 
 ---
 

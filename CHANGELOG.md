@@ -55,13 +55,14 @@ corregir → generar preguntas → responder vacíos → editar el brief → val
   `services/ai-worker/app/ai/fake_provider.py`): permite un recorrido
   end-to-end real por HTTP sin red ni costo. Exclusivo de pruebas
   automatizadas — nunca demos ni producción.
-- **CI levanta Postgres de verdad**: el job `web` nunca había tenido un
-  servicio de base de datos — `packages/db` corría sin nada contra qué
-  conectarse. Ahora migra y siembra `tclkolos_test` antes de las pruebas.
-  Node subido a 22 (`--experimental-strip-types` lo exige).
-- **101 pruebas de integración nuevas o reescritas** en `packages/db`
-  (transiciones, preguntas locales, brief manual, aislamiento, recorrido
-  end-to-end con proveedor falso) y **61 de dominio**.
+- **CI levanta Postgres de verdad, y de verdad corre en frío**: el job `web`
+  nunca había tenido un servicio de base de datos. Migra y siembra
+  `tclkolos_test` antes de las pruebas; Node subido a 22
+  (`--experimental-strip-types` lo exige). Verificado dos veces contra una
+  base Postgres efímera distinta cada vez, sin ningún dato acumulado.
+- **110 pruebas de integración nuevas o reescritas** en `packages/db`
+  (transiciones, preguntas locales, brief manual, aislamiento, excepción por
+  producto, recorrido end-to-end con proveedor falso) y **61 de dominio**.
 
 #### Corregido
 
@@ -101,12 +102,67 @@ corregir → generar preguntas → responder vacíos → editar el brief → val
 
 - **Ciclo de aprobación final** (versión hija al editar una `approved`):
   documentado en DEC-027, no implementado — siguiente incremento.
-- **E7-6** (comentarios internos en el editor) y **"desenganchar producto"**
-  en un campo `compartido_con_excepcion`: diferidos, ver HANDOFF §5.
-- **Tres pruebas preexistentes** (`brief-rules.test.ts`, `extraction.test.ts`,
-  `search.test.ts`) siguen sin poder correr en una base de CI recién creada
-  porque asumen una fuente ya procesada e indexada — algo que solo existe hoy
-  por acumulación de uso local. Ver HANDOFF §8.
+- **E7-6** (comentarios internos en el editor): diferida, ver HANDOFF §5.
+- **Demo A y Gate INC-001B** (extracción real de P80): `BLOCKED_EXTERNAL_INPUT`
+  por una clave de OpenRouter inválida. Ver
+  [D0-17](docs/product/D0-17-cierre-sprint4.md) y
+  [INC-001](docs/incidents/INC-001-test-data-collision.md).
+
+### Corrección posterior al checkpoint (26 de agosto de 2026)
+
+Tras revisión del product owner, tres puntos del reporte de cierre eran
+incorrectos y se corrigieron en el mismo incremento (commit posterior al
+checkpoint `516de31`):
+
+- **E7-8** (excepción por producto en un campo `compartido_con_excepcion`)
+  estaba dentro del alcance aprobado y se había reportado como diferida —
+  implementada ahora de verdad: motivo obligatorio, persistencia (fila nueva
+  anclada al producto, nunca toca la compartida), reversión, 9 pruebas y
+  verificación en vivo en el navegador.
+- **`extraction.test.ts` y `brief-rules.test.ts` se habían descrito como
+  "preexistentes, sin tocar en esta sesión" cuando en realidad sí forman
+  parte de este incremento** (se reescribieron en la Fase D del cierre
+  original). La causa real de que fallaran en frío no era su antigüedad,
+  sino que dependían de datos de otra campaña; corregido — siembran sus
+  propios documentos y fragmentos sintéticos. `search.test.ts` (sí
+  preexistente, Sprint 3) tenía el mismo problema con un fragmento indexado;
+  corregido igual.
+- `ruff check .` sobre `services/ai-worker` tenía 116 errores reales —
+  corregidos de verdad, sin excluir archivos.
+- Verificado con dos corridas completas, cada una contra una base Postgres
+  efímera **distinta**: **110/110 pruebas de `packages/db` en verde ambas
+  veces**, sin residuo.
+
+### Segunda corrección posterior al checkpoint (26 de agosto de 2026)
+
+La corrida citada arriba como "la receta de `ci.yml`" en realidad había dado
+`1 failed | 109 passed` — declarar CI en `PASS` con ese resultado fue
+apresurado, y el product owner lo señaló antes de aceptarlo como cierre:
+
+- **`pipeline.test.ts` (Sprint 2) dependía de rutas de archivo de una máquina
+  de desarrollo específica** (`/Users/.../Downloads/*.pptx`) — nunca corría
+  en CI, se omitía en silencio. Corregido de raíz: `fixtures/pipeline/documento-de-prueba.pptx`,
+  un PPTX sintético de 3 diapositivas, versionado, generado una vez con
+  `python-pptx`.
+- **`ci.yml` ahora levanta un worker y un consumidor reales** (`AI_PROVIDER=fake`,
+  determinístico, sin red, sin costo) antes de las pruebas — nuevo servicio
+  `redis` en el job `web`, instalación de las dependencias de
+  `services/ai-worker`, arranque en segundo plano con espera activa de
+  `/ready`.
+- **Bug real encontrado al levantarlos, sin cobertura de `pytest`** (ningún
+  test importa `app.main`): la corrección anterior de `ruff check .` había
+  convertido `Optional[int]` en `int | None` dentro de los modelos Pydantic
+  de `app/main.py`. Pydantic v2 evalúa esas anotaciones al definir la clase
+  — a diferencia de una anotación de función normal, `from __future__ import
+  annotations` no lo protege ahí — y esa sintaxis rompe en el Python 3.9
+  mínimo declarado del proyecto. Corregido con `Optional[int]`, documentado
+  en el código para que no se repita.
+- **Resultado, verificado con la receta literal de `ci.yml` contra servicios
+  efímeros recién creados: cero fallas.** Única omisión, documentada:
+  `extraction.test.ts › extracción contra el modelo real` (exige un
+  proveedor real, no el falso) — su camino crítico lo cubre
+  `end-to-end.test.ts`, que sí corre y pasa. Detalle completo en
+  [D0-17 §6](docs/product/D0-17-cierre-sprint4.md#6-ci-y-reproducibilidad-desde-cero).
 
 ---
 

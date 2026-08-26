@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Dict, Optional
 
 #: Niveles de §9.2. Deben coincidir con `ModelTier` del dominio.
 NIVELES = ("eficiente", "equilibrado", "avanzado")
@@ -23,7 +22,7 @@ NIVELES = ("eficiente", "equilibrado", "avanzado")
 #: Tarea → nivel. Espejo de `packages/domain/src/ai-tasks.ts`.
 #: Si cambia allá, cambia aquí: la fuente de verdad es el dominio.
 #: Ajustado por DEC-020 según la intervención real del modelo en cada tarea.
-TAREA_A_NIVEL: Dict[str, str] = {
+TAREA_A_NIVEL: dict[str, str] = {
     "extraer_campos": "eficiente",
     "detectar_vacios": "eficiente",      # DEC-020: ~85% determinista
     "traducir": "eficiente",
@@ -78,7 +77,7 @@ def modelo_de_embeddings() -> str:
     return valor
 
 
-def resolver(tarea: str, nivel_forzado: Optional[str] = None) -> Destino:
+def resolver(tarea: str, nivel_forzado: str | None = None) -> Destino:
     """Decide qué modelo atiende una tarea.
 
     `nivel_forzado` existe para el banco de validación: permite correr la misma
@@ -92,9 +91,9 @@ def resolver(tarea: str, nivel_forzado: Optional[str] = None) -> Destino:
     return Destino(tarea=tarea, nivel=nivel, modelo=modelo_de_nivel(nivel))
 
 
-def configuracion_actual() -> Dict[str, Optional[str]]:
+def configuracion_actual() -> dict[str, str | None]:
     """Estado de la configuración, para diagnóstico. Nunca incluye la clave."""
-    estado: Dict[str, Optional[str]] = {}
+    estado: dict[str, str | None] = {}
     for nivel in NIVELES:
         estado[nivel] = os.environ.get(_variable_de(nivel), "").strip() or None
     estado["embeddings"] = os.environ.get("AI_MODEL_EMBEDDINGS", "").strip() or None

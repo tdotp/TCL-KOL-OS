@@ -267,7 +267,9 @@ describe('guarda: preguntas críticas pendientes', () => {
 
 describe('guarda: campos críticos sin revisar, sin resolver o sin anclar (Sprint 4, sección 7 del cierre)', () => {
   it('bloquea internal_review si un crítico sigue sin valor ni descarte justificado', () => {
-    const v = version('extraction_review', { fields: [field({ status: 'not_found', value: null, criticidad: 'critico' })] });
+    const v = version('extraction_review', {
+      fields: [field({ status: 'not_found', value: null, criticidad: 'critico' })],
+    });
     const result = transition(
       { version: v, actor: user('consultor'), unresolvedCriticalFields: ['objetivo.tipo'] },
       'internal_review',
@@ -280,7 +282,9 @@ describe('guarda: campos críticos sin revisar, sin resolver o sin anclar (Sprin
   });
 
   it('un crítico ausente pero con descarte justificado (fuera de la lista del llamador) no bloquea', () => {
-    const v = version('extraction_review', { fields: [field({ status: 'not_found', value: null, criticidad: 'critico' })] });
+    const v = version('extraction_review', {
+      fields: [field({ status: 'not_found', value: null, criticidad: 'critico' })],
+    });
     const result = transition({ version: v, actor: user('consultor') }, 'internal_review');
     expect(result.ok).toBe(true);
   });
@@ -408,12 +412,18 @@ describe('ciclo completo de extracción asistida', () => {
   });
 
   it('un reintento reusa la transición ya definida: processing_failed → processing', () => {
-    const result = transition({ version: version('processing_failed'), actor: user('consultor') }, 'processing');
+    const result = transition(
+      { version: version('processing_failed'), actor: user('consultor') },
+      'processing',
+    );
     expect(result.ok).toBe(true);
   });
 
   it('extraction_review → local_questions no exige guardas: se dispara al detectar vacíos', () => {
-    const result = transition({ version: version('extraction_review'), actor: user('consultor') }, 'local_questions');
+    const result = transition(
+      { version: version('extraction_review'), actor: user('consultor') },
+      'local_questions',
+    );
     expect(result.ok).toBe(true);
   });
 
@@ -428,7 +438,8 @@ describe('ciclo completo de extracción asistida', () => {
     ];
     let actual = camino[0] as BriefStatus;
     for (const siguiente of camino.slice(1)) {
-      const actor = siguiente === 'extraction_review' && actual === 'processing' ? 'system' : user('consultor');
+      const actor =
+        siguiente === 'extraction_review' && actual === 'processing' ? 'system' : user('consultor');
       const ctx = { version: version(actual), actor, pendingQuestionsTotal: 0 } as const;
       const result = transition(ctx, siguiente);
       expect(result.ok, `falló ${actual} → ${siguiente}: ${!result.ok ? result.error.code : ''}`).toBe(true);

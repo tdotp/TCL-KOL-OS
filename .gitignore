@@ -46,4 +46,8 @@ Thumbs.db
 *.xlsx
 *.pptx
 !docs/**/*.xlsx
+# Fixture sintético versionado a propósito (pipeline.test.ts, corrección
+# posterior al cierre de Sprint 4): nunca material real, generado con
+# python-pptx, solo texto de prueba — ver fixtures/pipeline/README.md.
+!fixtures/pipeline/*.pptx
 .storage/

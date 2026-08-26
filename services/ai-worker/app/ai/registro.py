@@ -18,7 +18,8 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from typing import Any, Iterable, Optional
+from collections.abc import Iterable
+from typing import Any
 
 logger = logging.getLogger("ai-worker.registro")
 
@@ -46,15 +47,15 @@ def registrar_ejecucion(
     prompt_version: str,
     input_hash: str,
     output_status: str,
-    campaign_id: Optional[str] = None,
-    brief_version_id: Optional[str] = None,
+    campaign_id: str | None = None,
+    brief_version_id: str | None = None,
     provider: str = "openrouter",
-    latency_ms: Optional[int] = None,
-    prompt_tokens: Optional[int] = None,
-    completion_tokens: Optional[int] = None,
-    cost_usd: Optional[float] = None,
-    generation_id: Optional[str] = None,
-    error: Optional[str] = None,
+    latency_ms: int | None = None,
+    prompt_tokens: int | None = None,
+    completion_tokens: int | None = None,
+    cost_usd: float | None = None,
+    generation_id: str | None = None,
+    error: str | None = None,
 ) -> str:
     """Inserta una fila en `ai_runs` y devuelve su id.
 

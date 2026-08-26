@@ -35,6 +35,10 @@ export type Action =
   | 'question:discard'
   | 'field:confirm'
   | 'field:correct'
+  // E7-8: declarar (o revertir) una excepción por producto en un campo
+  // `compartido_con_excepcion` (DEC-016) es una acción propia — crea una fila
+  // nueva anclada a un producto, no una corrección sobre la fila compartida.
+  | 'field:declare_exception'
   | 'brief:manual_create'
   | 'brief:transition'
   | 'glossary:propose'
@@ -68,6 +72,7 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'question:discard',
     'field:confirm',
     'field:correct',
+    'field:declare_exception',
     'brief:manual_create',
     'brief:transition',
     'glossary:propose',
@@ -100,6 +105,7 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'question:discard',
     'field:confirm',
     'field:correct',
+    'field:declare_exception',
     'brief:manual_create',
     'brief:transition',
     'glossary:propose',
@@ -129,6 +135,7 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'question:discard',
     'field:confirm',
     'field:correct',
+    'field:declare_exception',
     'brief:manual_create',
     'brief:transition',
     'glossary:propose',

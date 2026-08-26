@@ -18,9 +18,8 @@ export function BotonExtraer({ campaignId }: { campaignId: string }) {
       <input type="hidden" name="campaignId" value={campaignId} />
       <h2>Extracción asistida</h2>
       <p className="sub">
-        Lee las fuentes procesadas y propone campos del brief, cada uno con la cita que lo
-        respalda. Nada se aprueba solo: lo que salga de aquí queda en borrador para que usted lo
-        confirme.
+        Lee las fuentes procesadas y propone campos del brief, cada uno con la cita que lo respalda. Nada se
+        aprueba solo: lo que salga de aquí queda en borrador para que usted lo confirme.
       </p>
 
       <button type="submit" disabled={pendiente}>

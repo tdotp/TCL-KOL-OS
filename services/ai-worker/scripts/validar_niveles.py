@@ -36,7 +36,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -58,9 +58,9 @@ Reglas que no puedes romper:
 Respondes solo con JSON válido."""
 
 
-def _con_reintentos(modelo: str, mensajes: List[Dict[str, str]], intentos: int = 3):
+def _con_reintentos(modelo: str, mensajes: list[dict[str, str]], intentos: int = 3):
     """Reintenta ante límites de tasa: un 429 mide la cuota, no el modelo."""
-    ultimo: Optional[AIError] = None
+    ultimo: AIError | None = None
     for intento in range(intentos):
         try:
             return completar(modelo, mensajes, formato_json=True, max_tokens=8000, timeout=180)
@@ -80,11 +80,11 @@ class Resultado:
     correcto: bool
     motivo: str
     latencia_ms: int
-    costo_usd: Optional[float]
+    costo_usd: float | None
     tokens: int
 
 
-def cargar_casos(filtro: Optional[List[str]]) -> List[Dict[str, Any]]:
+def cargar_casos(filtro: list[str] | None) -> list[dict[str, Any]]:
     manifiesto = json.loads((GOLD_SET / "manifest.json").read_text(encoding="utf-8"))
     casos = []
     for entrada in manifiesto["casos"]:
@@ -98,7 +98,7 @@ def cargar_casos(filtro: Optional[List[str]]) -> List[Dict[str, Any]]:
     return casos
 
 
-def construir_prompt(caso: Dict[str, Any]) -> str:
+def construir_prompt(caso: dict[str, Any]) -> str:
     entrada = caso["entrada"]
     partes = ["FUENTES DISPONIBLES:", ""]
 
@@ -127,7 +127,7 @@ def construir_prompt(caso: Dict[str, Any]) -> str:
 _BLOQUE_CODIGO = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
 
 
-def extraer_json(salida: str) -> Optional[Dict[str, Any]]:
+def extraer_json(salida: str) -> dict[str, Any] | None:
     """Saca el JSON de la respuesta, venga como venga.
 
     Varios modelos envuelven el JSON en un bloque de código markdown aunque se
@@ -160,7 +160,7 @@ def extraer_json(salida: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def evaluar(caso: Dict[str, Any], salida: str) -> tuple[bool, str]:
+def evaluar(caso: dict[str, Any], salida: str) -> tuple[bool, str]:
     """Comprueba la salida contra los criterios de fallo declarados en el caso."""
     datos = extraer_json(salida)
     if datos is None:
@@ -249,7 +249,7 @@ def evaluar(caso: Dict[str, Any], salida: str) -> tuple[bool, str]:
     return True, "sin criterio automático"
 
 
-def probar(modelo: str, casos: List[Dict[str, Any]]) -> List[Resultado]:
+def probar(modelo: str, casos: list[dict[str, Any]]) -> list[Resultado]:
     resultados = []
     for caso in casos:
         try:
@@ -282,7 +282,7 @@ def probar(modelo: str, casos: List[Dict[str, Any]]) -> List[Resultado]:
     return resultados
 
 
-def informe(todos: List[Resultado], modelos: List[str]) -> None:
+def informe(todos: list[Resultado], modelos: list[str]) -> None:
     print()
     print("=" * 78)
     print("VALIDACIÓN DE NIVELES · gold set D0-13")
@@ -365,7 +365,7 @@ def main() -> int:
 
     print(f"Probando {len(modelos)} modelo(s) contra {len(casos)} caso(s) del gold set…")
 
-    todos: List[Resultado] = []
+    todos: list[Resultado] = []
     for modelo in modelos:
         print(f"  · {modelo}")
         todos.extend(probar(modelo, casos))

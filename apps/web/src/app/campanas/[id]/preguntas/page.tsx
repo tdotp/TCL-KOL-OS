@@ -63,8 +63,8 @@ export default async function PreguntasPage({
         </p>
         <h1>Preguntas locales</h1>
         <p className="sub">
-          Un campo del brief que el sistema no pudo llenar solo, con el motivo por el que quedó
-          pendiente. Cada pregunta se responde con autor y fecha, o se descarta con justificación.
+          Un campo del brief que el sistema no pudo llenar solo, con el motivo por el que quedó pendiente.
+          Cada pregunta se responde con autor y fecha, o se descarta con justificación.
         </p>
 
         {error !== undefined && (

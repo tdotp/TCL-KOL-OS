@@ -49,7 +49,13 @@ const TIPOS_PRECISION = [
 ];
 
 /** Construye el control correcto según `valueType` — nunca un textarea genérico para todo (§5.3). */
-function ControlDeRespuesta({ campo, onChange }: { campo: CampoCatalogo | undefined; onChange: (v: unknown) => void }) {
+function ControlDeRespuesta({
+  campo,
+  onChange,
+}: {
+  campo: CampoCatalogo | undefined;
+  onChange: (v: unknown) => void;
+}) {
   const tipo = campo?.valueType ?? 'texto';
 
   if (tipo === 'enum' && campo?.valoresPermitidos) {
@@ -68,7 +74,13 @@ function ControlDeRespuesta({ campo, onChange }: { campo: CampoCatalogo | undefi
   }
 
   if (tipo === 'numero') {
-    return <input type="number" onChange={(e) => onChange(Number(e.target.value))} style={{ padding: '4px 6px' }} />;
+    return (
+      <input
+        type="number"
+        onChange={(e) => onChange(Number(e.target.value))}
+        style={{ padding: '4px 6px' }}
+      />
+    );
   }
 
   if (tipo === 'lista') {
@@ -187,7 +199,10 @@ function FilaPregunta({ pregunta, campaignId }: { pregunta: Pregunta; campaignId
               producto {pregunta.campaignProductId.slice(0, 8)}
             </span>
           )}
-          <span className={`pill ${pregunta.status === 'pendiente' ? '' : pregunta.status === 'respondida' ? 'ok' : 'warn'}`} style={{ marginLeft: 4 }}>
+          <span
+            className={`pill ${pregunta.status === 'pendiente' ? '' : pregunta.status === 'respondida' ? 'ok' : 'warn'}`}
+            style={{ marginLeft: 4 }}
+          >
             {ETIQUETA_ESTADO[pregunta.status]}
           </span>
         </div>
@@ -214,10 +229,18 @@ function FilaPregunta({ pregunta, campaignId }: { pregunta: Pregunta; campaignId
             <form action={responder} style={{ marginTop: 10 }}>
               <input type="hidden" name="questionId" value={pregunta.id} />
               <input type="hidden" name="campaignId" value={campaignId} />
-              <input type="hidden" name="answerValue" value={answerValue === undefined ? '' : JSON.stringify(answerValue)} />
+              <input
+                type="hidden"
+                name="answerValue"
+                value={answerValue === undefined ? '' : JSON.stringify(answerValue)}
+              />
               <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <ControlDeRespuesta campo={pregunta.campo} onChange={setAnswerValue} />
-                <button className="btn pri" type="submit" disabled={respondiendo || answerValue === undefined}>
+                <button
+                  className="btn pri"
+                  type="submit"
+                  disabled={respondiendo || answerValue === undefined}
+                >
                   {respondiendo ? 'Guardando…' : 'Responder'}
                 </button>
                 <button type="button" className="btn" onClick={() => setMostrarDescarte(true)}>
@@ -284,7 +307,10 @@ export function TablaPreguntas({
             {ETIQUETA_ESTADO[s]}
           </a>
         ))}
-        <a href={`/campanas/${campaignId}/preguntas`} className={`pill ${filtroStatus === undefined ? 'ok' : ''}`}>
+        <a
+          href={`/campanas/${campaignId}/preguntas`}
+          className={`pill ${filtroStatus === undefined ? 'ok' : ''}`}
+        >
           todas
         </a>
         {productos.length > 1 && (
@@ -310,7 +336,9 @@ export function TablaPreguntas({
       )}
 
       {!editable && (
-        <p className="sub">Solo puede consultar las preguntas; responderlas es una acción del equipo interno.</p>
+        <p className="sub">
+          Solo puede consultar las preguntas; responderlas es una acción del equipo interno.
+        </p>
       )}
     </div>
   );

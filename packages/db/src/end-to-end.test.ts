@@ -6,7 +6,7 @@
  * por el camino 100% manual, sin tocar el worker en absoluto.
  *
  * Determinístico y sin red externa (corrección 6): requiere un worker HTTP
- * levantado con `AI_PROVIDER=fake` (ver docs/product/D0-16-cierre-sprint4.md
+ * levantado con `AI_PROVIDER=fake` (ver docs/product/D0-17-cierre-sprint4.md
  * para el comando exacto) — nunca OpenRouter real. Si no hay worker
  * disponible en `AI_WORKER_URL`, el caso que depende de él se omite con
  * aviso; el camino manual no depende de ningún worker y siempre corre.
@@ -21,7 +21,12 @@ import { closePool, query } from './client.ts';
 import { crearBriefManual } from './manual.ts';
 import { confirmarCampo } from './brief-fields.ts';
 import { extraerBrief } from './extraction.ts';
-import { generarPreguntas, responderPregunta, descartarPregunta, listarPreguntas } from './local-questions.ts';
+import {
+  generarPreguntas,
+  responderPregunta,
+  descartarPregunta,
+  listarPreguntas,
+} from './local-questions.ts';
 import { transicionarBrief } from './transitions.ts';
 
 let orgId: string;
@@ -73,7 +78,8 @@ async function completarCriticosPendientes(versionId: string, campaignId: string
   for (const p of preguntas.value) {
     if (p.criticidad === 'critico') {
       let valor: unknown = `Respuesta de prueba para ${p.key}`;
-      if (p.key.includes('fecha')) valor = { tipo: 'exacta', fecha: '2026-09-04', textoOriginal: '2026-09-04' };
+      if (p.key.includes('fecha'))
+        valor = { tipo: 'exacta', fecha: '2026-09-04', textoOriginal: '2026-09-04' };
       else if (p.key === 'objetivo.tipo') valor = 'awareness';
       else if (p.key === 'mandatorios') valor = [{ categoria: 'mensaje', descripcion: 'Hashtag oficial.' }];
       else if (p.key === 'practico.restricciones') valor = ['Canal de venta autorizado por el cliente.'];
@@ -111,7 +117,14 @@ beforeAll(async () => {
   );
   userId = admin!.id;
   orgId = admin!.organization_id;
-  actor = { id: userId, email: 'gerardo@smartpr.co', name: 'Gerardo', organizationId: orgId, role: 'admin', status: 'activo' };
+  actor = {
+    id: userId,
+    email: 'gerardo@smartpr.co',
+    name: 'Gerardo',
+    organizationId: orgId,
+    role: 'admin',
+    status: 'activo',
+  };
 });
 
 afterAll(async () => {
@@ -136,7 +149,7 @@ describe('recorrido con asistencia (proveedor falso, determinístico)', () => {
     if (!(await hayWorkerFalso())) {
       console.warn(
         'No hay worker en AI_WORKER_URL con AI_PROVIDER=fake; se omite. ' +
-          'Ver docs/product/D0-16-cierre-sprint4.md para levantarlo.',
+          'Ver docs/product/D0-17-cierre-sprint4.md para levantarlo.',
       );
       return;
     }
@@ -161,20 +174,18 @@ describe('recorrido con asistencia (proveedor falso, determinístico)', () => {
     // Si quedaron preguntas pendientes tras completar los críticos (poco
     // probable, pero posible si algo quedó sin decidir), se resuelve antes
     // de intentar volver al brief.
-    const status = await query<{ status: string }>(
-      `SELECT status::text FROM brief_versions WHERE id = $1`,
-      [extraido.value.versionId],
-    );
+    const status = await query<{ status: string }>(`SELECT status::text FROM brief_versions WHERE id = $1`, [
+      extraido.value.versionId,
+    ]);
     if (status[0]!.status === 'local_questions') {
       const vuelta = await transicionarBrief(actor, extraido.value.versionId, 'extraction_review');
       expect(vuelta.ok, !vuelta.ok ? vuelta.error.message : '').toBe(true);
     }
 
     const final = await transicionarBrief(actor, extraido.value.versionId, 'internal_review');
-    expect(
-      final.ok,
-      !final.ok ? `${final.error.message} ${JSON.stringify(final.error.details)}` : '',
-    ).toBe(true);
+    expect(final.ok, !final.ok ? `${final.error.message} ${JSON.stringify(final.error.details)}` : '').toBe(
+      true,
+    );
   }, 30_000);
 });
 
@@ -188,10 +199,9 @@ describe('recorrido 100% manual (sin worker en absoluto)', () => {
 
     await completarCriticosPendientes(creado.value.versionId, campaignId);
 
-    const status = await query<{ status: string }>(
-      `SELECT status::text FROM brief_versions WHERE id = $1`,
-      [creado.value.versionId],
-    );
+    const status = await query<{ status: string }>(`SELECT status::text FROM brief_versions WHERE id = $1`, [
+      creado.value.versionId,
+    ]);
     if (status[0]!.status === 'local_questions') {
       // El camino manual nunca pasó por `extraction_review`; se transiciona
       // directo desde `local_questions` no aplica — se documenta como
@@ -202,10 +212,9 @@ describe('recorrido 100% manual (sin worker en absoluto)', () => {
     }
 
     const final = await transicionarBrief(actor, creado.value.versionId, 'internal_review');
-    expect(
-      final.ok,
-      !final.ok ? `${final.error.message} ${JSON.stringify(final.error.details)}` : '',
-    ).toBe(true);
+    expect(final.ok, !final.ok ? `${final.error.message} ${JSON.stringify(final.error.details)}` : '').toBe(
+      true,
+    );
     if (final.ok) expect(final.value.status).toBe('internal_review');
   });
 });

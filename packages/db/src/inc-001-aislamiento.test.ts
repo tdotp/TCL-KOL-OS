@@ -138,7 +138,11 @@ describe('INC-001A · una corrida normal nunca toca datos que no creó', () => {
     // Las mismas operaciones que participaron en el incidente original,
     // ejecutadas aquí sobre la campaña PROPIA, nunca sobre la centinela.
     const version = await transaction((client) =>
-      obtenerOCrearVersionDeTrabajo(client, { campaignId: campanaPropia, organizationId: orgId, createdBy: userId }),
+      obtenerOCrearVersionDeTrabajo(client, {
+        campaignId: campanaPropia,
+        organizationId: orgId,
+        createdBy: userId,
+      }),
     );
     expect(version.esNueva).toBe(true);
     expect(version.versionId).not.toBe(versionCentinela);
@@ -146,7 +150,11 @@ describe('INC-001A · una corrida normal nunca toca datos que no creó', () => {
     // Llamarla de nuevo debe REUTILIZAR la propia (comportamiento correcto de
     // DEC-024), no crear otra ni tocar la centinela.
     const version2 = await transaction((client) =>
-      obtenerOCrearVersionDeTrabajo(client, { campaignId: campanaPropia, organizationId: orgId, createdBy: userId }),
+      obtenerOCrearVersionDeTrabajo(client, {
+        campaignId: campanaPropia,
+        organizationId: orgId,
+        createdBy: userId,
+      }),
     );
     expect(version2.versionId).toBe(version.versionId);
     expect(version2.esNueva).toBe(false);
@@ -157,7 +165,10 @@ describe('INC-001A · una corrida normal nunca toca datos que no creó', () => {
     expect(creado.ok).toBe(true);
     if (!creado.ok) return;
 
-    const cargada = await cargarVersion(await import('./client.ts').then((m) => m.getPool()), creado.value.versionId);
+    const cargada = await cargarVersion(
+      await import('./client.ts').then((m) => m.getPool()),
+      creado.value.versionId,
+    );
     expect(cargada).toBeDefined();
 
     // `crearBriefManual` reutiliza la versión de trabajo (DEC-024): si el

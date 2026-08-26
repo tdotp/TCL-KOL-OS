@@ -139,16 +139,23 @@ Cada historia es una **porción vertical demoable**: atraviesa interfaz, dominio
 
 ## 8. Épica E7 — Editor de brief
 
-> **Estado (26 de agosto de 2026):** **parcial.** E7-1, E7-3 (validación contra
-> el tipo del catálogo antes de guardar), E7-4, E7-5 y E7-9 implementadas.
+> **Estado (26 de agosto de 2026, corregido tras revisión del product owner):**
+> **parcial.** E7-1, E7-3 (validación contra el tipo del catálogo antes de
+> guardar, salvo fechas — ver nota), E7-4, E7-5, E7-8 y E7-9 implementadas.
 > E7-2 cubierta como autoguardado al perder foco, no como indicador de
-> guardado en curso. **E7-7 (protección contra edición concurrente) sí
-> implementada** — vía `revision` optimista (`FIELD_REVISION_CONFLICT`), no
-> vía bloqueo de edición. **E7-6 (comentarios internos) y E7-8 diferidas**:
-> E7-6 no tiene ninguna pieza construida; el editor muestra los campos
-> `compartido_con_excepcion` como fila única compartida; crear una excepción
-> por producto («desenganchar») no tiene función de repositorio propia
-> todavía. Detalle en [HANDOFF.md](../../HANDOFF.md) §5 y [D0-17](D0-17-cierre-sprint4.md).
+> guardado en curso. E7-3: `practico.fecha_inicio`/`fecha_fin` se guardan
+> como texto plano en el editor, no como el objeto `PrecisedDate` (DEC-026).
+> **E7-7 (protección contra edición concurrente) sí implementada** — vía
+> `revision` optimista (`FIELD_REVISION_CONFLICT`), no vía bloqueo de
+> edición. **E7-8 (interruptor compartido/específico por producto) sí
+> implementada** — declarar una excepción exige motivo, crea una fila nueva
+> anclada al producto sin tocar la compartida, y se puede revertir; 9
+> pruebas (`exception-por-producto.test.ts`) y verificación en vivo en el
+> navegador. Esta historia se había reportado antes como diferida — era un
+> error de reporte, estaba dentro del alcance aprobado. **Solo E7-6
+> (comentarios internos) sigue sin ninguna pieza construida**, diferida de
+> verdad. Detalle en [HANDOFF.md](../../HANDOFF.md) §5 y
+> [D0-17](D0-17-cierre-sprint4.md).
 
 > **Criterio (§24):** una falla del worker no impide completar y guardar el brief manualmente.
 

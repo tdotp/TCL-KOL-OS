@@ -12,8 +12,14 @@
  *
  * Casos S-02 y S-03 de D0-12, llevados al índice vectorial.
  *
- * Requiere la base levantada y al menos un documento indexado:
- *   docker compose up -d db
+ * Reproducibilidad desde cero (corrección posterior al cierre): ya no
+ * depende de que algún worker haya indexado un fragmento real antes de
+ * correr — el «vector conocido» se planta aquí mismo, sintético, en una
+ * campaña propia y desechable. Solo se apoya en lo que `npm run seed` deja
+ * de forma determinística (usuario `gerardo@smartpr.co`, campaña fija
+ * `Campaña confidencial de otra agencia`), igual que `isolation.test.ts`.
+ *
+ * Requiere la base levantada:  docker compose up -d db
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -28,52 +34,80 @@ let orgAjena: string;
 let campanaAjena: string;
 let usuarioAjeno: string;
 
-/** Vector de un fragmento real ya indexado; se reutiliza como consulta. */
+/** Vector sintético plantado por esta prueba; se reutiliza como consulta. */
 let vectorConocido: number[];
 let textoConocido: string;
 
 /** Filas plantadas por esta prueba, para borrarlas al final. */
+let fuentePropia: string | null = null;
 let fuenteAjena: string | null = null;
 let fuenteSensible: string | null = null;
+let fuenteCercana: string | null = null;
+let fuenteLejana: string | null = null;
 
 beforeAll(async () => {
-  const [indexado] = await query<{
-    organization_id: string;
-    campaign_id: string;
-    text: string;
-    embedding: string;
-  }>(
-    `SELECT s.organization_id, s.campaign_id, f.text, f.embedding::text AS embedding
-       FROM source_fragments f
-       JOIN source_documents s ON s.id = f.source_id
-      WHERE f.embedding IS NOT NULL
-      LIMIT 1`,
+  const [admin] = await query<{ org_id: string; user_id: string }>(
+    `SELECT organization_id AS org_id, id AS user_id FROM users WHERE email = 'gerardo@smartpr.co'`,
   );
+  if (!admin) throw new Error('Falta el seed: corra npm run seed antes de estas pruebas.');
+  orgPropia = admin.org_id;
 
-  if (!indexado) {
-    throw new Error(
-      'No hay ningún fragmento indexado. Corra la indexación del worker antes de estas pruebas.',
-    );
-  }
-
-  orgPropia = indexado.organization_id;
-  campanaPropia = indexado.campaign_id;
-  textoConocido = indexado.text;
-  vectorConocido = JSON.parse(indexado.embedding) as number[];
+  const campana = await query<{ id: string }>(
+    `INSERT INTO campaigns (organization_id, name, owner_id, created_by)
+     VALUES ($1, $2, $3, $3) RETURNING id`,
+    [orgPropia, `Búsqueda · corrida de prueba ${Date.now()}`, admin.user_id],
+  );
+  campanaPropia = campana[0]!.id;
 
   const [ajena] = await query<{ org_id: string; campaign_id: string; user_id: string }>(
     `SELECT c.organization_id AS org_id, c.id AS campaign_id, u.id AS user_id
        FROM campaigns c
        JOIN users u ON u.organization_id = c.organization_id
-      WHERE c.organization_id <> $1
+      WHERE c.name = 'Campaña confidencial de otra agencia'
       LIMIT 1`,
-    [orgPropia],
   );
-  if (!ajena) throw new Error('El seed no tiene una segunda organización con campaña.');
+  if (!ajena) throw new Error('Falta el seed: corra npm run seed antes de estas pruebas.');
 
   orgAjena = ajena.org_id;
   campanaAjena = ajena.campaign_id;
   usuarioAjeno = ajena.user_id;
+
+  // El vector «conocido»: sintético, propio de esta corrida — nunca depende
+  // de que un worker haya indexado algo antes.
+  textoConocido = 'Fragmento propio sintético, usado como vector de consulta en esta suite.';
+  vectorConocido = Array.from({ length: DIMENSIONES }, (_, i) => Math.sin(i / 97));
+
+  fuentePropia = await plantarFuente({
+    organizationId: orgPropia,
+    campaignId: campanaPropia,
+    createdBy: admin.user_id,
+    filename: 'Fragmento propio de prueba.md',
+    confidencialidad: 'interna',
+    texto: textoConocido,
+    embedding: vectorConocido,
+  });
+
+  // Dos fragmentos más, a distancias crecientes del vector conocido — para
+  // que la prueba de orden ascendente tenga señal real por sí sola, sin
+  // depender de que haya más material indexado en la base.
+  fuenteCercana = await plantarFuente({
+    organizationId: orgPropia,
+    campaignId: campanaPropia,
+    createdBy: admin.user_id,
+    filename: 'Fragmento propio cercano.md',
+    confidencialidad: 'interna',
+    texto: 'Fragmento propio a distancia intermedia del vector de consulta.',
+    embedding: vectorConocido.map((v, i) => v + (i % 2 === 0 ? 0.05 : -0.05)),
+  });
+  fuenteLejana = await plantarFuente({
+    organizationId: orgPropia,
+    campaignId: campanaPropia,
+    createdBy: admin.user_id,
+    filename: 'Fragmento propio lejano.md',
+    confidencialidad: 'interna',
+    texto: 'Fragmento propio a mayor distancia del vector de consulta.',
+    embedding: Array.from({ length: DIMENSIONES }, (_, i) => Math.cos(i / 53)),
+  });
 
   // El fragmento ajeno: mismo vector, distancia 0.
   fuenteAjena = await plantarFuente({
@@ -99,8 +133,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  for (const id of [fuenteAjena, fuenteSensible]) {
+  for (const id of [fuentePropia, fuenteAjena, fuenteSensible, fuenteCercana, fuenteLejana]) {
     if (id) await query(`DELETE FROM source_documents WHERE id = $1`, [id]);
+  }
+  if (campanaPropia) {
+    await query(`DELETE FROM campaigns WHERE id = $1`, [campanaPropia]);
   }
   await closePool();
 });

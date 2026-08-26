@@ -40,34 +40,19 @@ let briefDePrueba: string;
 let siguienteVersion = 1;
 
 beforeAll(async () => {
-  const filas = await query<{
-    org_id: string;
-    user_id: string;
-    source_id: string;
-  }>(
-    // Sirve cualquier campaña de SmartPR que tenga una fuente cargada: la
-    // evidencia necesita un `source_id` real y no importa de cuál venga.
-    `SELECT c.organization_id AS org_id,
-            u.id             AS user_id,
-            s.id             AS source_id
-       FROM campaigns c
-       JOIN users u ON u.organization_id = c.organization_id AND u.email = 'gerardo@smartpr.co'
-       JOIN source_documents s ON s.campaign_id = c.id
-      ORDER BY c.created_at
-      LIMIT 1`,
+  // Usuario y organización del seed (determinístico, no acumulado — igual
+  // que `isolation.test.ts`). La evidencia necesita un `source_id` real,
+  // pero ya no depende de que alguna campaña tenga una fuente cargada: se
+  // siembra la propia dentro de `campanaDePrueba` más abajo.
+  const [admin] = await query<{ org_id: string; user_id: string }>(
+    `SELECT organization_id AS org_id, id AS user_id FROM users WHERE email = 'gerardo@smartpr.co'`,
   );
-
-  const fila = filas[0];
-  if (!fila) {
-    throw new Error(
-      'Falta material de partida: se esperaba al menos una campaña de SmartPR con una fuente cargada. ' +
-        'Corra el seed y la carga de fuentes antes de estas pruebas.',
-    );
+  if (!admin) {
+    throw new Error('Falta el seed: corra npm run seed antes de estas pruebas.');
   }
 
-  orgId = fila.org_id;
-  userId = fila.user_id;
-  sourceId = fila.source_id;
+  orgId = admin.org_id;
+  userId = admin.user_id;
 
   const campana = await query<{ id: string }>(
     `INSERT INTO campaigns (organization_id, name, owner_id, created_by)
@@ -76,16 +61,25 @@ beforeAll(async () => {
   );
   campanaDePrueba = campana[0]!.id;
 
-  const brief = await query<{ id: string }>(
-    `INSERT INTO briefs (campaign_id) VALUES ($1) RETURNING id`,
-    [campanaDePrueba],
+  // Fuente sintética propia — esta suite prueba reglas de base sobre
+  // `evidence`/`brief_fields`, no el parseo de documentos reales.
+  const [fuente] = await query<{ id: string }>(
+    `INSERT INTO source_documents
+       (campaign_id, organization_id, type, filename, file_id, mime_type, size_bytes, hash, status, created_by)
+     VALUES ($1, $2, 'ficha_tecnica', 'fuente-de-prueba.md', 'prueba/fuente-de-prueba.md', 'text/markdown', 100,
+             $3, 'procesado', $4)
+     RETURNING id`,
+    [campanaDePrueba, orgId, `hash-brief-rules-${campanaDePrueba}`, userId],
   );
+  sourceId = fuente!.id;
+
+  const brief = await query<{ id: string }>(`INSERT INTO briefs (campaign_id) VALUES ($1) RETURNING id`, [
+    campanaDePrueba,
+  ]);
   briefDePrueba = brief[0]!.id;
 
   // Producto real de campaña propia (migración 005: anclaje verificable).
-  const [producto] = await query<{ id: string }>(
-    `SELECT id FROM products LIMIT 1`,
-  );
+  const [producto] = await query<{ id: string }>(`SELECT id FROM products LIMIT 1`);
   productoId = producto!.id;
   await query(
     `INSERT INTO campaign_products (campaign_id, product_id, rol, prioridad)
@@ -107,8 +101,17 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Borrar la campaña arrastra brief, versiones, campos y evidencias en cascada.
   if (campanaDePrueba) {
+    // `evidence.source_id` es `ON DELETE RESTRICT` — borrar `campaigns`
+    // directamente puede intentar borrar `source_documents` antes de que la
+    // cascada por el otro camino (brief_versions → brief_fields → evidence)
+    // termine de vaciar `evidence`, y el RESTRICT lo rechaza. Se borran
+    // primero las versiones (arrastran campos y evidencias en cascada), y
+    // solo entonces la campaña — mismo ajuste que ya usa `end-to-end.test.ts`.
+    await query(
+      `DELETE FROM brief_versions WHERE brief_id = (SELECT id FROM briefs WHERE campaign_id = $1)`,
+      [campanaDePrueba],
+    );
     await query(`DELETE FROM campaigns WHERE id = $1`, [campanaDePrueba]);
   }
   await closePool();
@@ -221,17 +224,15 @@ describe('§15 · un claim sin evidencia no puede aprobarse', () => {
         [campo.rows[0]!.id, sourceId],
       );
 
-      await client.query(
-        `UPDATE brief_versions SET status = 'approved', approved_at = now() WHERE id = $1`,
-        [versionId],
-      );
+      await client.query(`UPDATE brief_versions SET status = 'approved', approved_at = now() WHERE id = $1`, [
+        versionId,
+      ]);
       return versionId;
     });
 
-    const [fila] = await query<{ status: string }>(
-      `SELECT status FROM brief_versions WHERE id = $1`,
-      [versionId],
-    );
+    const [fila] = await query<{ status: string }>(`SELECT status FROM brief_versions WHERE id = $1`, [
+      versionId,
+    ]);
     expect(fila!.status).toBe('approved');
   });
 
@@ -244,17 +245,15 @@ describe('§15 · un claim sin evidencia no puede aprobarse', () => {
                  'found', 'manual_local', 'informativo')`,
         [versionId],
       );
-      await client.query(
-        `UPDATE brief_versions SET status = 'approved', approved_at = now() WHERE id = $1`,
-        [versionId],
-      );
+      await client.query(`UPDATE brief_versions SET status = 'approved', approved_at = now() WHERE id = $1`, [
+        versionId,
+      ]);
       return versionId;
     });
 
-    const [fila] = await query<{ status: string }>(
-      `SELECT status FROM brief_versions WHERE id = $1`,
-      [versionId],
-    );
+    const [fila] = await query<{ status: string }>(`SELECT status FROM brief_versions WHERE id = $1`, [
+      versionId,
+    ]);
     expect(fila!.status).toBe('approved');
   });
 });
@@ -274,10 +273,9 @@ describe('ADR-003 · una versión aprobada no se modifica', () => {
          RETURNING id`,
         [versionId],
       );
-      await client.query(
-        `UPDATE brief_versions SET status = 'approved', approved_at = now() WHERE id = $1`,
-        [versionId],
-      );
+      await client.query(`UPDATE brief_versions SET status = 'approved', approved_at = now() WHERE id = $1`, [
+        versionId,
+      ]);
       return { versionId, campoId: campo.rows[0]!.id };
     });
     versionAprobada = r.versionId;
@@ -487,7 +485,9 @@ describe('revisión de campos (corrección 2 y 7 del cierre de Sprint 4)', () =>
       return { antes, despues: upd.rows[0]! };
     });
     expect(despues.revision).toBe(antes.revision + 1);
-    expect(new Date(despues.updated_at).getTime()).toBeGreaterThanOrEqual(new Date(antes.updated_at).getTime());
+    expect(new Date(despues.updated_at).getTime()).toBeGreaterThanOrEqual(
+      new Date(antes.updated_at).getTime(),
+    );
   });
 
   it('review_status solo admite los tres valores del ciclo de revisión', async () => {
