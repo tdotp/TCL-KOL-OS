@@ -211,6 +211,11 @@ describe('auditoría (§10.3, regla 4)', () => {
     expect(eventos).toHaveLength(1);
     expect(eventos[0]!.action).toBe('campaign.create');
     expect(eventos[0]!.actor_id).toBe(admin.id);
+
+    // Limpieza por id propio (INC-001A): el evento de auditoría es de solo
+    // inserción y sobrevive a propósito; la campaña que esta prueba creó no
+    // debe acumularse en corridas sucesivas.
+    await query(`DELETE FROM campaigns WHERE id = $1`, [creada.value.id]);
   });
 
   it('la auditoría no admite modificación posterior', async () => {

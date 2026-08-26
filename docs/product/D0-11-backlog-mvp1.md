@@ -116,6 +116,13 @@ Cada historia es una **porción vertical demoable**: atraviesa interfaz, dominio
 
 ## 7. Épica E6 — Preguntas locales
 
+> **Estado (26 de agosto de 2026):** E6-1 a E6-5 y E6-7 implementadas y probadas —
+> ver el cierre de Sprint 3+4 en [HANDOFF.md](../../HANDOFF.md) y
+> [D0-17](D0-17-cierre-sprint4.md). E6-6 (preguntas pendientes visibles en el
+> detalle de campaña) cubierta parcialmente: el contador existe en
+> `campanas/[id]/page.tsx`, sin el desglose por criticidad que sugiere la
+> historia.
+
 > **Criterio (§24):** toda pregunta puede resolverse, descartarse justificadamente o quedar visible como pendiente.
 
 | ID | Historia | Prio | Bloqueada por | Aceptación |
@@ -131,6 +138,17 @@ Cada historia es una **porción vertical demoable**: atraviesa interfaz, dominio
 ---
 
 ## 8. Épica E7 — Editor de brief
+
+> **Estado (26 de agosto de 2026):** **parcial.** E7-1, E7-3 (validación contra
+> el tipo del catálogo antes de guardar), E7-4, E7-5 y E7-9 implementadas.
+> E7-2 cubierta como autoguardado al perder foco, no como indicador de
+> guardado en curso. **E7-7 (protección contra edición concurrente) sí
+> implementada** — vía `revision` optimista (`FIELD_REVISION_CONFLICT`), no
+> vía bloqueo de edición. **E7-6 (comentarios internos) y E7-8 diferidas**:
+> E7-6 no tiene ninguna pieza construida; el editor muestra los campos
+> `compartido_con_excepcion` como fila única compartida; crear una excepción
+> por producto («desenganchar») no tiene función de repositorio propia
+> todavía. Detalle en [HANDOFF.md](../../HANDOFF.md) §5 y [D0-17](D0-17-cierre-sprint4.md).
 
 > **Criterio (§24):** una falla del worker no impide completar y guardar el brief manualmente.
 
@@ -149,6 +167,14 @@ Cada historia es una **porción vertical demoable**: atraviesa interfaz, dominio
 ---
 
 ## 9. Épica E8 — Versionado y aprobación
+
+> **Estado (26 de agosto de 2026):** E8-1 conectada de verdad este incremento
+> — antes existía en `packages/domain` pero ningún código la invocaba fuera
+> de su propio test; ahora `transicionarBrief` (`packages/db`) es el único
+> punto que cambia `brief_versions.status`. E8-4 cubierta hasta
+> `internal_review` (UI-14 como botón condicionado por `allowedTransitions`,
+> no como pantalla dedicada). **E8-2, E8-3, E8-5 a E8-9 sin implementar** —
+> el ciclo de aprobación final queda para el siguiente incremento (DEC-027).
 
 > **Criterio (§24):** no se puede editar una versión aprobada; una modificación crea una versión nueva.
 

@@ -13,12 +13,22 @@ import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import {
   archiveCampaign,
+  confirmarCampo,
+  corregirCampo,
   createCampaign,
+  crearBriefManual,
+  descartarPregunta,
   extraerBrief,
   findUserByEmail,
+  generarPreguntas,
+  reintentarExtraccion,
+  resolverConflicto,
+  responderPregunta,
   retrySource,
+  transicionarBrief,
   uploadSource,
 } from '@tcl-kol-os/db';
+import type { BriefStatus } from '@tcl-kol-os/domain';
 import type { SourceType } from '@tcl-kol-os/db';
 import { SESSION_COOKIE, SESSION_MAX_AGE, authProvider, buildSessionValue, currentUser } from './session.ts';
 
@@ -191,4 +201,233 @@ export async function extraerBriefDeCampana(
       `Se extrajeron ${resultado.value.campos} campos con ${resultado.value.evidencias} ` +
       `evidencias verificadas (USD ${resultado.value.costoUsd.toFixed(4)}).`,
   };
+}
+
+/**
+ * Reintento tras `processing_failed` (§3.4) — reusa la transición ya
+ * definida en el dominio. Formulario simple de una sola acción (patrón de
+ * `archivarCampana`): el error no se filtra en detalle a la URL (§11.6), se
+ * redirige con un aviso genérico y el estado real sigue visible en la
+ * pantalla del brief.
+ */
+export async function reintentarExtraccionDeBrief(formData: FormData): Promise<void> {
+  const user = await currentUser();
+  if (user === undefined) redirect('/login');
+
+  const campaignId = String(formData.get('campaignId') ?? '');
+  const versionId = String(formData.get('versionId') ?? '');
+
+  const resultado = await reintentarExtraccion(user, campaignId, versionId);
+  if (!resultado.ok) {
+    redirect(`/campanas/${campaignId}/brief?error=${encodeURIComponent(resultado.error.message)}`);
+  }
+
+  revalidatePath(`/campanas/${campaignId}/brief`);
+  redirect(`/campanas/${campaignId}/brief`);
+}
+
+// ─────────────────────────── Camino manual (§3.3, E7-4) ───────────────────────
+
+/**
+ * Crea (o reutiliza) la versión de trabajo sin pasar por el worker (DEC-024).
+ * Es la acción real detrás de "empiece el brief a mano" — antes de este
+ * cierre, ese texto no tenía ningún formulario detrás.
+ */
+export async function crearBriefManualDeCampana(formData: FormData): Promise<void> {
+  const user = await currentUser();
+  if (user === undefined) redirect('/login');
+
+  const campaignId = String(formData.get('campaignId') ?? '');
+  const resultado = await crearBriefManual(user, campaignId);
+  if (!resultado.ok) {
+    redirect(`/campanas/${campaignId}?error=${encodeURIComponent(resultado.error.message)}`);
+  }
+
+  revalidatePath(`/campanas/${campaignId}`);
+  redirect(`/campanas/${campaignId}/brief/editar`);
+}
+
+// ─────────────────────────── Confirmar y corregir campos (§3.1) ───────────────
+
+export async function confirmarCampoDeBrief(
+  _previo: unknown,
+  formData: FormData,
+): Promise<{ error?: string; ok?: boolean }> {
+  const user = await currentUser();
+  if (user === undefined) return { error: 'Sesión no válida.' };
+
+  const versionId = String(formData.get('versionId') ?? '');
+  const fieldId = String(formData.get('fieldId') ?? '');
+  const revisionEsperada = Number(formData.get('revision') ?? Number.NaN);
+  if (versionId === '' || fieldId === '' || Number.isNaN(revisionEsperada)) {
+    return { error: 'Faltan datos del campo a confirmar.' };
+  }
+
+  const resultado = await confirmarCampo(user, versionId, fieldId, { revisionEsperada });
+  if (!resultado.ok) return { error: resultado.error.message };
+
+  revalidatePath(`/campanas/[id]/brief`);
+  return { ok: true };
+}
+
+export async function corregirCampoDeBrief(
+  _previo: unknown,
+  formData: FormData,
+): Promise<{ error?: string; ok?: boolean }> {
+  const user = await currentUser();
+  if (user === undefined) return { error: 'Sesión no válida.' };
+
+  const versionId = String(formData.get('versionId') ?? '');
+  const fieldId = String(formData.get('fieldId') ?? '');
+  const revisionEsperada = Number(formData.get('revision') ?? Number.NaN);
+  const valorCrudo = String(formData.get('value') ?? '');
+  const motivo = String(formData.get('motivo') ?? '').trim() || undefined;
+
+  if (versionId === '' || fieldId === '' || Number.isNaN(revisionEsperada)) {
+    return { error: 'Faltan datos del campo a corregir.' };
+  }
+
+  let value: unknown;
+  try {
+    // El editor envía el valor ya serializado en JSON (así un campo de
+    // lista o de fecha con precisión llega con su forma real, no como texto
+    // libre — corrección 3 del cierre).
+    value = JSON.parse(valorCrudo);
+  } catch {
+    value = valorCrudo;
+  }
+
+  const resultado = await corregirCampo(user, versionId, fieldId, { value, motivo, revisionEsperada });
+  if (!resultado.ok) return { error: resultado.error.message };
+
+  revalidatePath(`/campanas/[id]/brief`);
+  return { ok: true };
+}
+
+export async function resolverConflictoDeBrief(
+  _previo: unknown,
+  formData: FormData,
+): Promise<{ error?: string; ok?: boolean }> {
+  const user = await currentUser();
+  if (user === undefined) return { error: 'Sesión no válida.' };
+
+  const versionId = String(formData.get('versionId') ?? '');
+  const fieldId = String(formData.get('fieldId') ?? '');
+  const revisionEsperada = Number(formData.get('revision') ?? Number.NaN);
+  const valorCrudo = String(formData.get('value') ?? '');
+  const keepEvidenceIds = formData.getAll('keepEvidenceIds').map(String);
+
+  if (versionId === '' || fieldId === '' || Number.isNaN(revisionEsperada)) {
+    return { error: 'Faltan datos del conflicto a resolver.' };
+  }
+
+  let value: unknown;
+  try {
+    value = JSON.parse(valorCrudo);
+  } catch {
+    value = valorCrudo;
+  }
+
+  const resultado = await resolverConflicto(user, versionId, fieldId, { value, keepEvidenceIds, revisionEsperada });
+  if (!resultado.ok) return { error: resultado.error.message };
+
+  revalidatePath(`/campanas/[id]/brief`);
+  return { ok: true };
+}
+
+// ─────────────────────────── Épica E6 — Preguntas locales ─────────────────────
+
+export async function generarPreguntasDeBrief(formData: FormData): Promise<void> {
+  const user = await currentUser();
+  if (user === undefined) redirect('/login');
+
+  const versionId = String(formData.get('versionId') ?? '');
+  const campaignId = String(formData.get('campaignId') ?? '');
+
+  const resultado = await generarPreguntas(user, versionId);
+  if (!resultado.ok) {
+    redirect(`/campanas/${campaignId}/preguntas?error=${encodeURIComponent(resultado.error.message)}`);
+  }
+
+  revalidatePath(`/campanas/${campaignId}/preguntas`);
+  redirect(`/campanas/${campaignId}/preguntas`);
+}
+
+export async function responderPreguntaLocal(
+  _previo: unknown,
+  formData: FormData,
+): Promise<{ error?: string; ok?: boolean }> {
+  const user = await currentUser();
+  if (user === undefined) return { error: 'Sesión no válida.' };
+
+  const questionId = String(formData.get('questionId') ?? '');
+  const campaignId = String(formData.get('campaignId') ?? '');
+  const answerCrudo = String(formData.get('answerValue') ?? '');
+  const answer = String(formData.get('answer') ?? '').trim() || undefined;
+  if (questionId === '') return { error: 'Falta la pregunta a responder.' };
+
+  let answerValue: unknown;
+  try {
+    // El formulario de UI-09 arma el JSON según el `valueType` del catálogo
+    // (texto/lista/enum/fecha con precisión/número) — nunca un único
+    // `<textarea>` genérico para todo (§5.3 del pedido).
+    answerValue = JSON.parse(answerCrudo);
+  } catch {
+    answerValue = answerCrudo;
+  }
+
+  const resultado = await responderPregunta(user, questionId, { answerValue, answer });
+  if (!resultado.ok) return { error: resultado.error.message };
+
+  if (campaignId !== '') revalidatePath(`/campanas/${campaignId}/preguntas`);
+  return { ok: true };
+}
+
+export async function descartarPreguntaLocal(
+  _previo: unknown,
+  formData: FormData,
+): Promise<{ error?: string; ok?: boolean }> {
+  const user = await currentUser();
+  if (user === undefined) return { error: 'Sesión no válida.' };
+
+  const questionId = String(formData.get('questionId') ?? '');
+  const campaignId = String(formData.get('campaignId') ?? '');
+  const justificacion = String(formData.get('justificacion') ?? '').trim();
+  if (questionId === '') return { error: 'Falta la pregunta a descartar.' };
+  if (justificacion === '') return { error: 'Descartar una pregunta exige indicar por qué (E6-4).' };
+
+  const resultado = await descartarPregunta(user, questionId, justificacion);
+  if (!resultado.ok) return { error: resultado.error.message };
+
+  if (campaignId !== '') revalidatePath(`/campanas/${campaignId}/preguntas`);
+  return { ok: true };
+}
+
+// ─────────────────────────── Transiciones de estado (§3.4) ────────────────────
+
+/**
+ * Ejecuta una transición de estado del brief. Nunca reimplementa una guarda:
+ * si `transicionarBrief` la rechaza, el mensaje del dominio se muestra tal
+ * cual (ADR-008, sección 7 del pedido — el error debe decir exactamente qué
+ * falta, no "brief inválido"). Formulario simple de una sola acción: el
+ * mensaje y, si la guarda los trae, los campos exactos que faltan viajan en
+ * la URL de redirección — nada sensible, solo claves del catálogo (§11.6).
+ */
+export async function transicionarBriefDeCampana(formData: FormData): Promise<void> {
+  const user = await currentUser();
+  if (user === undefined) redirect('/login');
+
+  const versionId = String(formData.get('versionId') ?? '');
+  const campaignId = String(formData.get('campaignId') ?? '');
+  const to = String(formData.get('to') ?? '') as BriefStatus;
+
+  const resultado = await transicionarBrief(user, versionId, to);
+  if (!resultado.ok) {
+    const campos = resultado.error.details?.['campos'];
+    const detalle = Array.isArray(campos) ? `&detalle=${encodeURIComponent(campos.join(', '))}` : '';
+    redirect(`/campanas/${campaignId}/brief?error=${encodeURIComponent(resultado.error.message)}${detalle}`);
+  }
+
+  revalidatePath(`/campanas/${campaignId}/brief`);
+  redirect(`/campanas/${campaignId}/brief`);
 }

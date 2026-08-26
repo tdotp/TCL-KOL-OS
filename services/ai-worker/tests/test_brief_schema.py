@@ -17,19 +17,23 @@ from app import brief_schema
 
 
 def test_toda_clave_del_catalogo_existe_en_el_esquema() -> None:
-    """La comprobación que impide que la tabla y D0-05 se separen.
+    """La comprobación que impide que el catálogo único y D0-05 se separen.
 
-    Un `critico` que apunta a una clave inexistente no da error: simplemente
-    deja de aplicarse, y el campo real baja a informativo sin aviso.
+    Desde el cierre de Sprint 4, la criticidad y el nivel ya no viven en una
+    tabla de Python: viven en `docs/product/brief-schema/brief-catalog.json`,
+    la misma fuente que lee `packages/domain/src/brief-catalog.ts`. Un campo
+    ahí que apunte a una clave inexistente en el esquema real no da error:
+    simplemente deja de aplicarse, y el campo real baja a informativo sin
+    aviso — exactamente lo que esta prueba convierte en un fallo visible.
     """
     reales = {c.key for c in brief_schema.catalogo()}
-    declaradas = set(brief_schema.CRITICIDAD_POR_DEFECTO)
+    declaradas = set(brief_schema._cargar_catalogo())  # noqa: SLF001 — es la prueba de esta invariante.
 
     huerfanas = declaradas - reales
     assert not huerfanas, (
         f"Estas claves tienen criticidad asignada pero no existen en el esquema: "
         f"{sorted(huerfanas)}. Si se renombró un campo en D0-05, actualice "
-        f"CRITICIDAD_POR_DEFECTO."
+        f"docs/product/brief-schema/brief-catalog.json."
     )
 
 
@@ -76,3 +80,38 @@ def test_los_overrides_no_se_le_piden_al_modelo() -> None:
     claves = brief_schema.claves_validas()
     assert not any(k.startswith("overrides") for k in claves)
     assert any(k.startswith("overrides") for k in (c.key for c in brief_schema.catalogo()))
+
+
+def test_el_nivel_respeta_la_regla_de_tres_niveles_de_dec_016() -> None:
+    """DEC-016: siempre-de-campaña / siempre-por-producto / compartido-con-excepción.
+
+    Ya no es una heurística de texto sobre la clave (`"marca_producto" in
+    ruta`) — sale estructuralmente del catálogo único. Esta prueba fija los
+    tres casos representativos de la tabla de DEC-016.
+    """
+    siempre_campana = ["contexto.situacion", "objetivo.tipo", "practico.fecha_inicio"]
+    siempre_producto = ["marca_producto[].nombre_producto", "marca_producto[].rtbs"]
+    compartido_con_excepcion = [
+        "target_audiencia.descripcion",
+        "problema_insight.problema",
+        "mensaje_principal.one_line",
+        "mandatorios",
+    ]
+
+    for clave in siempre_campana:
+        campo = brief_schema.campo(clave)
+        assert campo is not None, clave
+        assert campo.nivel == "campana", clave
+        assert campo.por_producto is False, clave
+
+    for clave in siempre_producto:
+        campo = brief_schema.campo(clave)
+        assert campo is not None, clave
+        assert campo.nivel == "producto", clave
+        assert campo.por_producto is True, clave
+
+    for clave in compartido_con_excepcion:
+        campo = brief_schema.campo(clave)
+        assert campo is not None, clave
+        assert campo.nivel == "compartido_con_excepcion", clave
+        assert campo.por_producto is False, clave

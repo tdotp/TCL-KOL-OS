@@ -32,6 +32,7 @@ function user(role: Role): User {
 
 function field(overrides: Partial<BriefField> = {}): BriefField {
   return {
+    id: 'bf-1',
     key: 'marca_producto.beneficio_principal',
     value: 'Panel QLED de 144Hz',
     status: 'found',
@@ -47,6 +48,10 @@ function field(overrides: Partial<BriefField> = {}): BriefField {
         relation: 'soporta',
       },
     ],
+    // Un campo "sano" por defecto no debe bloquear ninguna transición ajena a
+    // lo que cada `describe` está probando — igual que `status`/`evidence`.
+    reviewStatus: 'confirmed',
+    revision: 1,
     ...overrides,
   };
 }
@@ -238,10 +243,135 @@ describe('guarda: preguntas críticas pendientes', () => {
     if (!result.ok) expect(result.error.code).toBe('BRIEF_PENDING_QUESTIONS');
   });
 
-  it('no bloquea el envío a revisión interna: el revisor debe poder verlas', () => {
+  it('bloquea también extraction_review → internal_review (Sprint 4, sección 7 del cierre)', () => {
+    // Antes del cierre de Sprint 4 esta guarda solo se aplicaba antes de
+    // aprobar; la sección 7 del pedido exige comprobarlo también aquí, para
+    // que internal_review nunca reciba un brief con preguntas críticas sin
+    // resolver.
     const result = transition(
       { version: version('extraction_review'), actor: user('consultor'), pendingCriticalQuestions: 2 },
       'internal_review',
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('BRIEF_PENDING_QUESTIONS');
+  });
+
+  it('sin preguntas críticas pendientes, extraction_review → internal_review sí procede', () => {
+    const result = transition(
+      { version: version('extraction_review'), actor: user('consultor'), pendingCriticalQuestions: 0 },
+      'internal_review',
+    );
+    expect(result.ok).toBe(true);
+  });
+});
+
+describe('guarda: campos críticos sin revisar, sin resolver o sin anclar (Sprint 4, sección 7 del cierre)', () => {
+  it('bloquea internal_review si un crítico sigue sin valor ni descarte justificado', () => {
+    const v = version('extraction_review', { fields: [field({ status: 'not_found', value: null, criticidad: 'critico' })] });
+    const result = transition(
+      { version: v, actor: user('consultor'), unresolvedCriticalFields: ['objetivo.tipo'] },
+      'internal_review',
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('BRIEF_MISSING_CRITICAL_FIELD');
+      expect(result.error.details?.['campos']).toEqual(['objetivo.tipo']);
+    }
+  });
+
+  it('un crítico ausente pero con descarte justificado (fuera de la lista del llamador) no bloquea', () => {
+    const v = version('extraction_review', { fields: [field({ status: 'not_found', value: null, criticidad: 'critico' })] });
+    const result = transition({ version: v, actor: user('consultor') }, 'internal_review');
+    expect(result.ok).toBe(true);
+  });
+
+  it('bloquea internal_review si un campo de producto no está anclado a un producto de campaña', () => {
+    const v = version('extraction_review', {
+      fields: [field({ key: 'marca_producto[].rtbs', campaignProductId: undefined })],
+    });
+    const result = transition({ version: v, actor: user('consultor') }, 'internal_review');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('BRIEF_FIELD_INVALID');
+      expect(result.error.details?.['campos']).toEqual(['marca_producto[].rtbs']);
+    }
+  });
+
+  it('un campo de producto anclado a un campaign_product_id no bloquea', () => {
+    const v = version('extraction_review', {
+      fields: [field({ key: 'marca_producto[].rtbs', campaignProductId: 'cp-p80-ultra' })],
+    });
+    expect(transition({ version: v, actor: user('consultor') }, 'internal_review').ok).toBe(true);
+  });
+
+  it('bloquea internal_review si un campo encontrado por la extracción sigue sin confirmar ni corregir', () => {
+    const v = version('extraction_review', { fields: [field({ reviewStatus: 'pending' })] });
+    const result = transition({ version: v, actor: user('consultor') }, 'internal_review');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('BRIEF_FIELD_INVALID');
+  });
+
+  it('un campo confirmado (sin cambiar su procedencia extraída) no bloquea', () => {
+    const v = version('extraction_review', {
+      fields: [field({ reviewStatus: 'confirmed', provenanceType: 'extracted' })],
+    });
+    expect(transition({ version: v, actor: user('consultor') }, 'internal_review').ok).toBe(true);
+  });
+
+  it('un crítico no técnico respondido manualmente (manual_local, sin evidencia) avanza con atribución', () => {
+    // Sección 4.4 / DEC-028 del pedido: un campo crítico no técnico (criticidad
+    // 'critico', no 'claim') respondido por pregunta local no exige evidencia
+    // documental — solo autor y fecha, que vive en brief_field_revisions/audit.
+    const v = version('extraction_review', {
+      fields: [
+        field({
+          key: 'practico.restricciones',
+          criticidad: 'critico',
+          status: 'found',
+          value: 'Único canal de venta: Alkosto',
+          provenanceType: 'manual_local',
+          reviewStatus: 'confirmed',
+          evidence: [],
+        }),
+      ],
+    });
+    expect(transition({ version: v, actor: user('consultor') }, 'internal_review').ok).toBe(true);
+  });
+
+  it('un claim manual sin evidencia sigue bloqueado (DEC-028: los claims siempre exigen evidencia)', () => {
+    const v = version('extraction_review', {
+      fields: [
+        field({
+          key: 'marca_producto[].rtbs',
+          campaignProductId: 'cp-p80-ultra',
+          criticidad: 'claim',
+          status: 'found',
+          provenanceType: 'manual_local',
+          reviewStatus: 'confirmed',
+          evidence: [],
+        }),
+      ],
+    });
+    const result = transition({ version: v, actor: user('consultor') }, 'internal_review');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('BRIEF_MISSING_EVIDENCE');
+  });
+});
+
+describe('guarda: preguntas locales pendientes bloquea volver al brief', () => {
+  it('bloquea local_questions → extraction_review si quedan preguntas de cualquier criticidad', () => {
+    const result = transition(
+      { version: version('local_questions'), actor: user('consultor'), pendingQuestionsTotal: 1 },
+      'extraction_review',
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('BRIEF_PENDING_QUESTIONS');
+  });
+
+  it('permite volver cuando ya no queda ninguna pregunta pendiente', () => {
+    const result = transition(
+      { version: version('local_questions'), actor: user('consultor'), pendingQuestionsTotal: 0 },
+      'extraction_review',
     );
     expect(result.ok).toBe(true);
   });
@@ -258,6 +388,53 @@ describe('guarda: traducción sin origen (caso F-33)', () => {
   it('acepta una versión EN con origen declarado', () => {
     const v = version('extraction_review', { language: 'en', translationOfId: 'bv-es-3' });
     expect(transition({ version: v, actor: user('consultor') }, 'internal_review').ok).toBe(true);
+  });
+});
+
+// ─────────────────────────── Ciclo asistido completo (Sprint 4, corrección 1) ──
+
+describe('ciclo completo de extracción asistida', () => {
+  it('recorre draft → processing → extraction_review', () => {
+    const r1 = transition({ version: version('draft'), actor: user('consultor') }, 'processing');
+    expect(r1.ok).toBe(true);
+
+    const r2 = transition({ version: version('processing'), actor: 'system' }, 'extraction_review');
+    expect(r2.ok).toBe(true);
+  });
+
+  it('un fallo del worker lleva a processing_failed, nunca directo a extraction_review', () => {
+    const result = transition({ version: version('processing'), actor: 'system' }, 'processing_failed');
+    expect(result.ok).toBe(true);
+  });
+
+  it('un reintento reusa la transición ya definida: processing_failed → processing', () => {
+    const result = transition({ version: version('processing_failed'), actor: user('consultor') }, 'processing');
+    expect(result.ok).toBe(true);
+  });
+
+  it('extraction_review → local_questions no exige guardas: se dispara al detectar vacíos', () => {
+    const result = transition({ version: version('extraction_review'), actor: user('consultor') }, 'local_questions');
+    expect(result.ok).toBe(true);
+  });
+
+  it('el ciclo completo hasta internal_review nunca usa una transición inexistente', () => {
+    const camino: BriefStatus[] = [
+      'draft',
+      'processing',
+      'extraction_review',
+      'local_questions',
+      'extraction_review',
+      'internal_review',
+    ];
+    let actual = camino[0] as BriefStatus;
+    for (const siguiente of camino.slice(1)) {
+      const actor = siguiente === 'extraction_review' && actual === 'processing' ? 'system' : user('consultor');
+      const ctx = { version: version(actual), actor, pendingQuestionsTotal: 0 } as const;
+      const result = transition(ctx, siguiente);
+      expect(result.ok, `falló ${actual} → ${siguiente}: ${!result.ok ? result.error.code : ''}`).toBe(true);
+      actual = siguiente;
+    }
+    expect(actual).toBe('internal_review');
   });
 });
 

@@ -10,7 +10,14 @@ import type pg from 'pg';
 import type { User } from '@tcl-kol-os/domain';
 
 export interface AuditInput {
-  readonly actor: User;
+  /**
+   * `'system'` audita una transición disparada por el worker (p. ej.
+   * `processing → extraction_review`), no por una persona — Sprint 4, cierre.
+   * En ese caso `organizationId` es obligatorio, porque no hay `User` del que
+   * derivarlo.
+   */
+  readonly actor: User | 'system';
+  readonly organizationId?: string | undefined;
   readonly action: string;
   readonly entityType: string;
   readonly entityId?: string | undefined;
@@ -45,12 +52,18 @@ export function sanitizeMetadata(
 }
 
 export async function recordAudit(client: pg.PoolClient, input: AuditInput): Promise<void> {
+  const organizationId = input.actor === 'system' ? input.organizationId : input.actor.organizationId;
+  if (!organizationId) {
+    throw new Error('recordAudit: organizationId es obligatorio cuando el actor es "system".');
+  }
+  const actorId = input.actor === 'system' ? null : input.actor.id;
+
   await client.query(
     `INSERT INTO audit_events (organization_id, actor_id, action, entity_type, entity_id, metadata)
      VALUES ($1, $2, $3, $4, $5, $6)`,
     [
-      input.actor.organizationId,
-      input.actor.id,
+      organizationId,
+      actorId,
       input.action,
       input.entityType,
       input.entityId ?? null,

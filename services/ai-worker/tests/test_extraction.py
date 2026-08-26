@@ -13,7 +13,6 @@ la calidad del modelo —eso se mide contra el gold set (D0-13).
 from __future__ import annotations
 
 import json
-from typing import List
 
 import pytest
 
@@ -57,7 +56,7 @@ FRAGMENTOS = [
 ]
 
 
-def _respuesta(campos: List[dict]) -> str:
+def _respuesta(campos: list[dict]) -> str:
     return json.dumps({"campos": campos}, ensure_ascii=False)
 
 
@@ -508,12 +507,12 @@ def test_un_texto_donde_va_una_lista_se_recupera_como_lista_de_uno() -> None:
     assert _buscar(campos, "accion_kpis.kpis").value == ["Cobertura en medios Tier 1"]
 
 
-def test_un_mes_no_es_una_fecha() -> None:
-    """`practico.fecha_inicio` exige AAAA-MM-DD.
+def test_un_mes_sin_respaldo_en_cita_sigue_rechazado() -> None:
+    """«Septiembre 2026» no aparece en la cita («El Reto»): sigue sin aceptarse.
 
-    Convertir «Septiembre 2026» a una fecha exigiría elegir un día que nadie
-    escribió — exactamente lo que §9.4 prohíbe. El hueco se declara y se
-    convierte en pregunta.
+    DEC-026 deja de forzar `not_found` para una fecha imprecisa, pero eso no
+    afloja la verificación: la precisión que se acepte tiene que desprenderse
+    de una cita real, igual que cualquier otro valor.
     """
     campos, descartes = validar_y_anclar(
         _respuesta(
@@ -533,7 +532,77 @@ def test_un_mes_no_es_una_fecha() -> None:
     campo = _buscar(campos, "practico.fecha_inicio")
     assert campo.status == "not_found"
     assert campo.value is None
-    assert any("no es una fecha exacta" in d for d in descartes)
+    assert any("no aparece en ninguna cita" in d for d in descartes)
+
+
+def test_un_mes_respaldado_por_cita_queda_found_con_precision_mes() -> None:
+    """DEC-026: una fecha imprecisa respaldada por su cita es un valor válido.
+
+    «Septiembre 2026», citado literalmente, ya no baja a `not_found`: queda
+    `found` con `tipo: 'mes'` — la precisión real que sí tiene la fuente,
+    conservando el texto original.
+    """
+    fragmento_mes = FragmentoDeEntrada(
+        id="frag-mes",
+        source_id="src-1",
+        filename="Brief P80.md",
+        texto="Arranca la campaña: Septiembre 2026, sin fecha exacta todavía.",
+        section="Hitos clave",
+        linea=6,
+    )
+    campos, _ = validar_y_anclar(
+        _respuesta(
+            [
+                {
+                    "key": "practico.fecha_inicio",
+                    "value": "Septiembre 2026",
+                    "status": "found",
+                    "evidence": [
+                        {
+                            "fragment_id": "frag-mes",
+                            "quote": "Septiembre 2026",
+                            "relation": "soporta",
+                        }
+                    ],
+                }
+            ]
+        ),
+        [*FRAGMENTOS, fragmento_mes],
+    )
+    campo = _buscar(campos, "practico.fecha_inicio")
+    assert campo.status == "found"
+    assert campo.value == {"tipo": "mes", "fecha": "2026-09", "textoOriginal": "Septiembre 2026"}
+
+
+def test_un_rango_respaldado_por_cita_queda_found_con_precision_rango() -> None:
+    """DEC-026: «Octubre-Noviembre 2026» conserva el rango, no un día inventado."""
+    campos, _ = validar_y_anclar(
+        _respuesta(
+            [
+                {
+                    "key": "practico.fecha_fin",
+                    "value": "Octubre-Noviembre 2026",
+                    "status": "found",
+                    "evidence": [
+                        {
+                            "fragment_id": "frag-c",
+                            "quote": "Sostenimiento: Octubre-Noviembre 2026",
+                            "relation": "soporta",
+                        }
+                    ],
+                }
+            ]
+        ),
+        FRAGMENTOS,
+    )
+    campo = _buscar(campos, "practico.fecha_fin")
+    assert campo.status == "found"
+    assert campo.value == {
+        "tipo": "rango",
+        "inicio": "2026-10-01",
+        "fin": "2026-11-30",
+        "textoOriginal": "Octubre-Noviembre 2026",
+    }
 
 
 def test_una_fecha_iso_respaldada_por_su_cita_se_acepta() -> None:
@@ -555,7 +624,7 @@ def test_una_fecha_iso_respaldada_por_su_cita_se_acepta() -> None:
     )
     campo = _buscar(campos, "practico.fecha_inicio")
     assert campo.status == "found"
-    assert campo.value == "2026-09-04"
+    assert campo.value == {"tipo": "exacta", "fecha": "2026-09-04", "textoOriginal": "2026-09-04"}
 
 
 def test_una_fecha_con_dia_inventado_se_rechaza_aunque_la_cita_sea_real() -> None:

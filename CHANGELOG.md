@@ -4,6 +4,112 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [No publicado]
 
+### Cierre de Sprint 3 + Sprint 4 — Brief funcional de punta a punta · 26 de agosto de 2026
+
+Épica E6 (preguntas locales) y E7 (editor estructurado), más lo que Sprint 3
+dejó modelado sin conectar: la máquina de estados del dominio y el anclaje de
+producto. Demo: crear campaña → cargar fuentes → extraer campos → revisar y
+corregir → generar preguntas → responder vacíos → editar el brief → validarlo
+→ enviarlo a revisión interna — con IA y también con `AI_ENABLED=false`.
+
+#### Añadido
+
+- **Ciclo de estados real** *(E8-1, conectado por fin)*: `transicionarBrief`
+  (`packages/db/src/transitions.ts`) es el único punto que cambia
+  `brief_versions.status` — nunca un `UPDATE` directo. Cubre
+  `draft → processing → extraction_review → local_questions →
+  extraction_review → internal_review`, con reintento desde
+  `processing_failed` y auditoría en cada paso.
+- **Anclaje de producto de extremo a extremo** *(DEC-023)*: el worker recibe
+  el catálogo real de productos de la campaña; `persistirExtraccion` rechaza
+  toda la extracción si algún `productoId` no pertenece a ella. P80 (3
+  productos, reparto 60/20/10) ya no puede mezclar campos entre modelos.
+- **Camino manual, sin IA** *(3.3 del pedido)*: `crearBriefManual` siembra las
+  41 claves del catálogo único, funciona con `AI_ENABLED=false`.
+- **Épica E6 — preguntas locales**: generación idempotente por campo
+  ausente/en conflicto (`generarPreguntas`), respuesta con valor
+  estructurado validado contra el tipo del catálogo (`responderPregunta`),
+  descarte con justificación obligatoria (`descartarPregunta`), alcance por
+  producto. UI-09 en `apps/web/src/app/campanas/[id]/preguntas/`.
+- **Épica E7 — editor estructurado (UI-10)**: navegación por las 10 secciones
+  de D0-05, selector de producto, campos con autoguardado al perder foco,
+  confirmación explícita, evidencia inline, clave técnica en un `<details>`
+  secundario. `apps/web/src/app/campanas/[id]/brief/editar/`.
+- **Confirmar y corregir campos con control de concurrencia optimista**
+  *(revisión entera, nunca "el último que escribe gana")*: cada
+  `brief_fields` tiene `revision`, incrementada por trigger; un `UPDATE` con
+  la revisión vieja se rechaza con `FIELD_REVISION_CONFLICT` en vez de
+  aplicarse en silencio. El historial de cada cambio vive en
+  `brief_field_revisions`, separado de `audit_events` *(DEC-024)*.
+- **Catálogo único de 41 campos** *(corrección de diseño, DEC-021 llevada a
+  la práctica)*: `docs/product/brief-schema/brief-catalog.json` reemplaza dos
+  tablas derivadas por separado (TS y Python). `scripts/verificar-catalogo.mjs`
+  compara ambas lecturas en CI.
+- **Fechas con precisión real** *(DEC-026)*: `{tipo, fecha?, inicio?, fin?,
+  textoOriginal}` en vez de un binario `found`/`not_found`; una precisión
+  imprecisa en un campo crítico dispara una pregunta local pidiendo el día
+  exacto.
+- **Mandatorios vs. restricciones** *(DEC-025)*: corrección puntual del
+  prompt — "único canal de venta: Alkosto" ya no compite con `mandatorios`.
+- **Proveedor de IA falso, determinístico** (`AI_PROVIDER=fake`,
+  `services/ai-worker/app/ai/fake_provider.py`): permite un recorrido
+  end-to-end real por HTTP sin red ni costo. Exclusivo de pruebas
+  automatizadas — nunca demos ni producción.
+- **CI levanta Postgres de verdad**: el job `web` nunca había tenido un
+  servicio de base de datos — `packages/db` corría sin nada contra qué
+  conectarse. Ahora migra y siembra `tclkolos_test` antes de las pruebas.
+  Node subido a 22 (`--experimental-strip-types` lo exige).
+- **101 pruebas de integración nuevas o reescritas** en `packages/db`
+  (transiciones, preguntas locales, brief manual, aislamiento, recorrido
+  end-to-end con proveedor falso) y **61 de dominio**.
+
+#### Corregido
+
+- **`ejecutarYPersistir` intentaba transicionar `processing →
+  extraction_review` con el actor humano**, transición restringida a
+  `'system'` en el dominio. Fallaba con "El rol admin no puede ejecutar la
+  transición". Corregido: esas dos transiciones siempre las ejecuta el
+  sistema, nunca el usuario que disparó la extracción.
+- **`brief_field_revisions` bloqueaba también el `DELETE`** en cascada al
+  borrar una campaña completa — el trigger debía impedir solo `UPDATE`.
+- **`app/__init__.py` faltante en el worker** rompía `mypy app` con "No
+  parent module" — bug preexistente, no relacionado con este incremento,
+  corregido porque bloqueaba un gate de CI obligatorio.
+
+#### Incidente
+
+- **INC-001**: una prueba de integración reescrita reutilizó y borró una
+  versión real y no terminal del brief de P80 al operar sobre la campaña
+  compartida del seed. Los documentos fuente siguieron intactos; los campos
+  extraídos y su evidencia no son restaurables de forma idéntica — se
+  regenera con el pipeline corregido. Detalle completo, causa raíz y
+  contención en
+  [`docs/incidents/INC-001-test-data-collision.md`](docs/incidents/INC-001-test-data-collision.md).
+  A partir de este incidente, `packages/db` exige `TEST_DATABASE_URL`
+  (una base separada, sufijo `_test` obligatorio) para cualquier prueba de
+  integración, sin fallback hacia la base de desarrollo.
+
+#### Decisiones
+
+- **DEC-023 a DEC-029** — anclaje de producto por nivel, versión de trabajo
+  reutilizada, mandatorios vs. restricciones, fechas con precisión,
+  aprobaciones documentadas sin implementar, evidencia vs. `manual_local`,
+  `CampaignProduct` en el dominio. Detalle en
+  [decision-log.md](docs/decisions/decision-log.md).
+
+#### Pendiente
+
+- **Ciclo de aprobación final** (versión hija al editar una `approved`):
+  documentado en DEC-027, no implementado — siguiente incremento.
+- **E7-6** (comentarios internos en el editor) y **"desenganchar producto"**
+  en un campo `compartido_con_excepcion`: diferidos, ver HANDOFF §5.
+- **Tres pruebas preexistentes** (`brief-rules.test.ts`, `extraction.test.ts`,
+  `search.test.ts`) siguen sin poder correr en una base de CI recién creada
+  porque asumen una fuente ya procesada e indexada — algo que solo existe hoy
+  por acumulación de uso local. Ver HANDOFF §8.
+
+---
+
 ### Sprint 2 — Fuentes documentales · 12 de agosto de 2026
 
 Épica E4. Demo: cargar un PPT real y verlo procesarse **sin bloquear la interfaz**.

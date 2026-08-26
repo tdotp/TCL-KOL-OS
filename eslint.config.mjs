@@ -80,4 +80,16 @@ export default tseslint.config(
       globals: { process: 'readonly', __dirname: 'readonly' },
     },
   },
+
+  // scripts/: herramientas de línea de comandos en Node, fuera del bundle.
+  // `console` ES su interfaz de usuario (mismo motivo que migrate.ts/seed.ts).
+  {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: { process: 'readonly', console: 'readonly' },
+    },
+    rules: {
+      'no-console': 'off',
+    },
+  },
 );

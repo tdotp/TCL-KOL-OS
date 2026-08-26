@@ -62,6 +62,9 @@ services:
       AI_MODEL_EMBEDDINGS: ${AI_MODEL_EMBEDDINGS:-}
       # El esquema del brief vive en docs/ (D0-05) y se monta abajo.
       BRIEF_SCHEMA_PATH: /esquema/brief.schema.json
+      # Catálogo único de campos (criticidad, nivel — Sprint 4, corrección 4
+      # del cierre). Mismo directorio montado, mismo mecanismo que el esquema.
+      BRIEF_CATALOG_PATH: /esquema/brief-catalog.json
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-50}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     ports:
@@ -109,6 +112,7 @@ services:
       AI_MODEL_EQUILIBRADO: ${AI_MODEL_EQUILIBRADO:-}
       AI_MODEL_EMBEDDINGS: ${AI_MODEL_EMBEDDINGS:-}
       BRIEF_SCHEMA_PATH: /esquema/brief.schema.json
+      BRIEF_CATALOG_PATH: /esquema/brief-catalog.json
       # Los originales que guardó la web. Sin esto el consumidor arranca bien y
       # falla en cada job con «no se pudo leer el archivo».
       STORAGE_LOCAL_PATH: /almacen
@@ -133,6 +137,10 @@ services:
       WORKER_URL: http://worker:8000
       NODE_ENV: ${NODE_ENV:-development}
       AI_ENABLED: ${AI_ENABLED:-false}
+      # `packages/domain/src/brief-catalog.ts` necesita el mismo catálogo que
+      # lee el worker (Sprint 4, corrección 4 del cierre) — sin este montaje,
+      # el contenedor `web` no tenía `docs/` en absoluto.
+      BRIEF_CATALOG_PATH: /repo/docs/product/brief-schema/brief-catalog.json
     ports:
       - '${WEB_PORT:-3000}:3000'
     depends_on:
@@ -143,6 +151,7 @@ services:
     volumes:
       - ./apps/web:/repo/apps/web
       - ./packages:/repo/packages
+      - ./docs/product/brief-schema:/repo/docs/product/brief-schema:ro
       - /repo/apps/web/.next
       - /repo/node_modules
 

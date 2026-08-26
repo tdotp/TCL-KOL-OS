@@ -2,7 +2,7 @@
 
 Plataforma interna de SmartPR para coordinar campañas de influencers (KOL) de TCL, desde la recepción de la estrategia global hasta el cierre y medición de cada campaña.
 
-**Estado:** MVP 1 · Sprint 2 completado (fuentes documentales procesándose en segundo plano)
+**Estado:** MVP 1 · cierre de Sprint 3 + Sprint 4 (brief funcional de punta a punta: extraer, revisar, generar preguntas, editar y enviar a revisión interna — con IA y sin ella)
 **Documento rector:** [`TCL_KOL_OS_DOCUMENTO_MAESTRO_EJECUCION.md`](TCL_KOL_OS_DOCUMENTO_MAESTRO_EJECUCION.md)
 
 ---
@@ -35,7 +35,7 @@ Brief en el formato de SmartPR, ES y EN, con trazabilidad completa
 
 | Herramienta | Versión | ¿Obligatoria? |
 |---|---|---|
-| **Node.js** | ≥ 20 | Sí |
+| **Node.js** | ≥ 22.6 | Sí — `packages/db`'s `migrate`/`seed` usan `node --experimental-strip-types` |
 | **npm** | ≥ 10 | Sí |
 | **Docker Desktop** | >= 29 | Para levantar el sistema completo |
 | **Python** | ≥ 3.9 local · 3.11 en contenedor | Solo para trabajar el worker sin Docker |
@@ -138,18 +138,19 @@ npm run lint   # falla si packages/domain importa de apps/ o services/
 
 ## El paquete de dominio
 
-Es el corazón del sistema y lo único que está completo en el Sprint 0.
+Es el corazón del sistema: reglas puras, sin I/O, que `packages/db` aplica y `apps/web`/`services/ai-worker` nunca reimplementan.
 
 | Módulo | Contenido |
 |---|---|
 | `types.ts` | Entidades canónicas del modelo de datos (D0-08) |
-| `brief-states.ts` | Máquina de estados: 12 estados, 25 transiciones, 4 guardas |
+| `brief-states.ts` | Máquina de estados: 12 estados, ~25 transiciones, 9 guardas |
+| `brief-catalog.ts` | Catálogo único de los 41 campos del brief (DEC-021), compartido con el worker Python |
 | `permissions.ts` | RBAC por rol y aislamiento entre organizaciones |
 | `errors.ts` | Errores tipados con código, sin filtrar trazas internas |
 
-**45 pruebas cubren las tres áreas que §27 exige al 100%:** transiciones de estado, aislamiento entre organizaciones e inmutabilidad de versiones aprobadas.
+**61 pruebas de dominio** cubren transiciones de estado, aislamiento entre organizaciones e inmutabilidad de versiones aprobadas (§27).
 
-Cuatro guardas hacen que los umbrales del §15 no dependan de la disciplina de nadie:
+Nueve guardas hacen que los umbrales del §15 no dependan de la disciplina de nadie:
 
 | Guarda | Qué impide |
 |---|---|
@@ -157,6 +158,38 @@ Cuatro guardas hacen que los umbrales del §15 no dependan de la disciplina de n
 | `guardNoUnresolvedConflicts` | Avanzar con una contradicción entre fuentes sin resolver |
 | `guardNoPendingCriticalQuestions` | Aprobar con preguntas críticas abiertas |
 | `guardTranslationHasOrigin` | Crear una traducción huérfana |
+| `guardCriticalFieldsResolved` | Pasar a revisión interna con campos críticos sin resolver |
+| `guardProductFieldsAnchored` | Pasar a revisión interna con un campo de producto sin `campaign_product_id` |
+| `guardAllFieldsReviewed` | Pasar a revisión interna con un campo extraído que nadie confirmó ni corrigió |
+| `guardNoPendingQuestions` | Volver de `local_questions` con alguna pregunta sin responder ni descartar |
+
+---
+
+## Pruebas de integración (`packages/db`)
+
+Corren contra Postgres real — nunca contra mocks. Necesitan una base **separada** de la de desarrollo, exigida por el candado de [INC-001](docs/incidents/INC-001-test-data-collision.md):
+
+```bash
+docker exec tclkolos-db psql -U tclkolos -d postgres -c "CREATE DATABASE tclkolos_test"
+docker exec tclkolos-db psql -U tclkolos -d tclkolos_test -f /docker-entrypoint-initdb.d/01-extensions.sql
+DATABASE_URL=postgresql://tclkolos:devpassword@localhost:5432/tclkolos_test npm run migrate --workspace @tcl-kol-os/db
+DATABASE_URL=postgresql://tclkolos:devpassword@localhost:5432/tclkolos_test npm run seed --workspace @tcl-kol-os/db
+```
+
+`TEST_DATABASE_URL` (ya en `.env.example`) debe apuntar ahí, con el nombre
+terminado en `_test`. `packages/db/vitest.setup.ts` se niega a arrancar si
+falta o si el nombre no cumple esa convención — no hay fallback silencioso
+hacia la base de desarrollo.
+
+```bash
+TEST_DATABASE_URL=postgresql://tclkolos:devpassword@localhost:5432/tclkolos_test npm test --workspace @tcl-kol-os/db
+```
+
+`AI_PROVIDER=fake` (`services/ai-worker/app/ai/fake_provider.py`) es un
+proveedor determinístico, sin red ni costo, **exclusivo de pruebas
+automatizadas**. Nunca se usa en demos ni en producción; solo lo detecta el
+recorrido end-to-end (`end-to-end.test.ts`) cuando hay un worker levantado
+con esa variable, y se omite en silencio si no lo hay.
 
 ---
 
@@ -166,7 +199,8 @@ Cuatro guardas hacen que los umbrales del §15 no dependan de la disciplina de n
 |---|---|
 | `AI_ENABLED` | `false` por defecto. Apagado, el sistema opera en **modo manual**: se crea, edita, versiona, aprueba y exporta un brief sin ninguna llamada a un modelo |
 | `MAX_UPLOAD_MB` | Tamaño máximo de fuente. 50 MB por defecto |
-| `AI_PROVIDER` | Obligatorio solo si `AI_ENABLED=true`. El adaptador aísla la elección |
+| `AI_PROVIDER` | Obligatorio solo si `AI_ENABLED=true`. El adaptador aísla la elección. `fake` es un valor especial, determinístico y sin red — exclusivo de pruebas automatizadas, nunca de demos ni producción |
+| `TEST_DATABASE_URL` | Base separada para `packages/db`'s pruebas de integración. Nombre debe terminar en `_test`; sin fallback hacia `DATABASE_URL` |
 
 Todas las variables están documentadas en [`.env.example`](.env.example).
 
@@ -185,6 +219,9 @@ Todas las variables están documentadas en [`.env.example`](.env.example).
 | Plan de pruebas | [`docs/product/D0-12-plan-pruebas.md`](docs/product/D0-12-plan-pruebas.md) |
 | Roles y permisos | [`docs/product/D0-07-matriz-roles-permisos.md`](docs/product/D0-07-matriz-roles-permisos.md) |
 | Prototipo navegable | [`docs/product/D0-10-prototipo/index.html`](docs/product/D0-10-prototipo/index.html) |
+| Estado del proyecto para retomar sesión | [`HANDOFF.md`](HANDOFF.md) |
+| Cierre de este incremento (matriz de requisitos) | [`docs/product/D0-17-cierre-sprint4.md`](docs/product/D0-17-cierre-sprint4.md) |
+| Incidente de datos de prueba (INC-001) | [`docs/incidents/INC-001-test-data-collision.md`](docs/incidents/INC-001-test-data-collision.md) |
 
 ---
 
@@ -202,6 +239,4 @@ Todas las variables están documentadas en [`.env.example`](.env.example).
 
 ## Siguiente incremento
 
-**Sprint 3 — extracción** (Épicas E5 y E11): fragmentos con embeddings, extracción estructurada contra el esquema del brief, evidencia por campo y el harness de IA con sus adaptadores.
-
-Demo esperada: un claim extraído que **abre su diapositiva de origen**.
+**Ciclo de aprobación final**: crear una versión hija al editar un brief `approved` y marcar la anterior `superseded` (documentado en DEC-027, no implementado todavía). Después: exportación, traducción y vista de cliente — ver [`HANDOFF.md`](HANDOFF.md) §5 para el corte exacto de alcance de este incremento.

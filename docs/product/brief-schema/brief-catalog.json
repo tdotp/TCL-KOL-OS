@@ -1,0 +1,425 @@
+[
+  {
+    "key": "contexto.situacion",
+    "label": "Situación de mercado",
+    "section": "contexto",
+    "description": "Situación de mercado y reto que enfrenta la marca. En el Brief P80 aparece bajo «El Reto» y «El Contexto»; en el Brief Estratégico, «01. Contexto». Incluye competencia, saturación de categoría y canal de venta.",
+    "criticidad": "critico",
+    "nivel": "campana",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": false
+  },
+  {
+    "key": "contexto.categoria",
+    "label": "Categoría de producto",
+    "section": "contexto",
+    "description": "Categoría de producto a la que pertenece la campaña (p. ej. smartphones, televisores, audio).",
+    "criticidad": "informativo",
+    "nivel": "campana",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": false
+  },
+  {
+    "key": "contexto.contexto_global",
+    "label": "Contexto global (TCL China)",
+    "section": "contexto",
+    "description": "Qué dice el material de TCL China sobre el contexto de lanzamiento.",
+    "criticidad": "informativo",
+    "nivel": "campana",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": false
+  },
+  {
+    "key": "objetivo.tipo",
+    "label": "Etapa del embudo",
+    "section": "objetivo",
+    "description": "Etapa del embudo que persigue la campaña. Elija exactamente uno de los valores permitidos: awareness (dar a conocer), consideration (que evalúen), conversion (que compren), loyalty (que repitan), otro. Dedúzcalo de los objetivos y KPI declarados aunque la fuente no use estas palabras.",
+    "criticidad": "critico",
+    "nivel": "campana",
+    "valueType": "enum",
+    "admiteExcepcionPorProducto": false,
+    "valoresPermitidos": [
+      "awareness",
+      "consideration",
+      "conversion",
+      "loyalty",
+      "otro"
+    ]
+  },
+  {
+    "key": "objetivo.negocio",
+    "label": "Objetivo de negocio",
+    "section": "objetivo",
+    "description": "Qué debe lograr la campaña para el negocio: participación de mercado, ventas, posicionamiento. En el Brief P80, «Objetivos (PR / KOL)».",
+    "criticidad": "critico",
+    "nivel": "campana",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": false
+  },
+  {
+    "key": "objetivo.marca_comunicacion",
+    "label": "Objetivo de marca/comunicación",
+    "section": "objetivo",
+    "description": "Qué debe lograr en percepción de marca, distinto del resultado comercial.",
+    "criticidad": "informativo",
+    "nivel": "campana",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": false
+  },
+  {
+    "key": "objetivo.comportamiento_esperado",
+    "label": "Comportamiento esperado de la audiencia",
+    "section": "objetivo",
+    "description": "Qué debe hacer distinto la audiencia después de ver la campaña.",
+    "criticidad": "informativo",
+    "nivel": "campana",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": false
+  },
+  {
+    "key": "target_audiencia.descripcion",
+    "label": "Descripción de la audiencia",
+    "section": "target_audiencia",
+    "description": "A quién le habla la campaña, en una frase. En el Brief P80, «Audiencia» (primaria y secundaria); en THE BRIEF, «WHO».",
+    "criticidad": "critico",
+    "nivel": "compartido_con_excepcion",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": true
+  },
+  {
+    "key": "target_audiencia.rango_edad",
+    "label": "Rango de edad",
+    "section": "target_audiencia",
+    "description": "Franja de edad de la audiencia, tal como la declare la fuente.",
+    "criticidad": "informativo",
+    "nivel": "compartido_con_excepcion",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": true
+  },
+  {
+    "key": "target_audiencia.ubicacion",
+    "label": "Ubicación de la audiencia",
+    "section": "target_audiencia",
+    "description": "Ciudades, regiones o país de la audiencia.",
+    "criticidad": "informativo",
+    "nivel": "compartido_con_excepcion",
+    "valueType": "lista",
+    "admiteExcepcionPorProducto": true
+  },
+  {
+    "key": "target_audiencia.comportamiento",
+    "label": "Comportamiento de la audiencia",
+    "section": "target_audiencia",
+    "description": "Hábitos de consumo, medios y compra de la audiencia.",
+    "criticidad": "informativo",
+    "nivel": "compartido_con_excepcion",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": true
+  },
+  {
+    "key": "target_audiencia.relacion_categoria",
+    "label": "Relación con la categoría",
+    "section": "target_audiencia",
+    "description": "Qué relación tiene hoy la audiencia con la categoría: si ya compra, si compara, si desconoce la marca.",
+    "criticidad": "informativo",
+    "nivel": "compartido_con_excepcion",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": true
+  },
+  {
+    "key": "problema_insight.problema",
+    "label": "Problema",
+    "section": "problema_insight",
+    "description": "El problema real que la campaña intenta resolver. En el Brief P80, «Desafío».",
+    "criticidad": "informativo",
+    "nivel": "compartido_con_excepcion",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": true
+  },
+  {
+    "key": "problema_insight.tension",
+    "label": "Tensión",
+    "section": "problema_insight",
+    "description": "La contradicción o fricción que vive la audiencia.",
+    "criticidad": "informativo",
+    "nivel": "compartido_con_excepcion",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": true
+  },
+  {
+    "key": "problema_insight.insight",
+    "label": "Insight",
+    "section": "problema_insight",
+    "description": "La verdad sobre la audiencia que hace que el mensaje funcione. En THE BRIEF, «INSIGHT».",
+    "criticidad": "informativo",
+    "nivel": "compartido_con_excepcion",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": true
+  },
+  {
+    "key": "problema_insight.cambio_comportamiento",
+    "label": "Cambio de comportamiento buscado",
+    "section": "problema_insight",
+    "description": "Qué creencia o conducta se busca mover. En THE BRIEF, «BEHAVIOR CHANGE».",
+    "criticidad": "informativo",
+    "nivel": "compartido_con_excepcion",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": true
+  },
+  {
+    "key": "marca_producto[].nombre_producto",
+    "label": "Nombre del producto",
+    "section": "marca_producto",
+    "description": "Nombre comercial exacto del producto o modelo, tal como se vende.",
+    "criticidad": "critico",
+    "nivel": "producto",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": false
+  },
+  {
+    "key": "marca_producto[].rol_marca",
+    "label": "Rol de la marca",
+    "section": "marca_producto",
+    "description": "Qué papel juega la marca en la historia: protagonista, facilitador, experto.",
+    "criticidad": "informativo",
+    "nivel": "producto",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": false
+  },
+  {
+    "key": "marca_producto[].beneficio_principal",
+    "label": "Beneficio principal",
+    "section": "marca_producto",
+    "description": "El beneficio central para el usuario, en términos de lo que gana, no de la especificación técnica.",
+    "criticidad": "claim",
+    "nivel": "producto",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": false
+  },
+  {
+    "key": "marca_producto[].diferenciales",
+    "label": "Diferenciales frente a competencia",
+    "section": "marca_producto",
+    "description": "Qué tiene este producto que la competencia no. Es una afirmación verificable: exige cita.",
+    "criticidad": "claim",
+    "nivel": "producto",
+    "valueType": "lista",
+    "admiteExcepcionPorProducto": false
+  },
+  {
+    "key": "marca_producto[].rtbs",
+    "label": "Razones para creer (RTBs)",
+    "section": "marca_producto",
+    "description": "Razones para creer (reason to believe): la prueba concreta que sostiene el beneficio.",
+    "criticidad": "claim",
+    "nivel": "producto",
+    "valueType": "lista",
+    "admiteExcepcionPorProducto": false
+  },
+  {
+    "key": "marca_producto[].especificaciones",
+    "label": "Especificaciones técnicas",
+    "section": "marca_producto",
+    "description": "Datos técnicos del producto: pantalla, cámara, batería, procesador. Copie las cifras tal como aparecen.",
+    "criticidad": "claim",
+    "nivel": "producto",
+    "valueType": "lista",
+    "admiteExcepcionPorProducto": false
+  },
+  {
+    "key": "marca_producto[].activos_marca",
+    "label": "Activos de marca",
+    "section": "marca_producto",
+    "description": "Piezas, logos, guías o material gráfico que la marca aporta.",
+    "criticidad": "informativo",
+    "nivel": "producto",
+    "valueType": "lista",
+    "admiteExcepcionPorProducto": false
+  },
+  {
+    "key": "mandatorios",
+    "label": "Mandatorios",
+    "section": "mandatorios",
+    "description": "Obligaciones y lineamientos que la campaña debe respetar sí o sí: legales, de identidad de marca, de mensaje, de canal o de timing. En el Brief Estratégico, «07. Mandatorios»; en THE BRIEF, «PRACTICAL STUFF (Must)». Compartido con excepción entre productos (DEC-016).",
+    "criticidad": "critico",
+    "nivel": "compartido_con_excepcion",
+    "valueType": "lista_objetos",
+    "admiteExcepcionPorProducto": true
+  },
+  {
+    "key": "mensaje_principal.one_line",
+    "label": "Mensaje en una línea",
+    "section": "mensaje_principal",
+    "description": "Equivalente al ONE LINE BRIEF del one-pager.",
+    "criticidad": "critico",
+    "nivel": "compartido_con_excepcion",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": true
+  },
+  {
+    "key": "mensaje_principal.mensaje_clave",
+    "label": "Mensaje clave",
+    "section": "mensaje_principal",
+    "description": "El mensaje que la campaña debe dejar instalado, en las palabras de la fuente. En el Brief P80, «La Idea» y sus taglines.",
+    "criticidad": "informativo",
+    "nivel": "compartido_con_excepcion",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": true
+  },
+  {
+    "key": "mensaje_principal.beneficio_diferencial",
+    "label": "Beneficio diferencial",
+    "section": "mensaje_principal",
+    "description": "El beneficio que distingue a este producto, expresado como se le diría al consumidor. Es una afirmación: exige cita.",
+    "criticidad": "claim",
+    "nivel": "compartido_con_excepcion",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": true
+  },
+  {
+    "key": "mensaje_principal.tono",
+    "label": "Tono",
+    "section": "mensaje_principal",
+    "description": "Registro y personalidad con que se debe hablar.",
+    "criticidad": "informativo",
+    "nivel": "compartido_con_excepcion",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": true
+  },
+  {
+    "key": "accion_kpis.accion_esperada",
+    "label": "Acción esperada",
+    "section": "accion_kpis",
+    "description": "Qué se espera que haga la audiencia: comprar, visitar, registrarse, recomendar. En THE BRIEF, «WE WILL BE HAPPY IF».",
+    "criticidad": "critico",
+    "nivel": "campana",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": false
+  },
+  {
+    "key": "accion_kpis.criterio_exito",
+    "label": "Criterio de éxito",
+    "section": "accion_kpis",
+    "description": "Cómo se sabrá que la campaña funcionó, en términos cualitativos.",
+    "criticidad": "informativo",
+    "nivel": "campana",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": false
+  },
+  {
+    "key": "accion_kpis.kpis",
+    "label": "KPIs",
+    "section": "accion_kpis",
+    "description": "Indicadores y metas numéricas. En el Brief P80, «Resultados esperados».",
+    "criticidad": "informativo",
+    "nivel": "campana",
+    "valueType": "lista",
+    "admiteExcepcionPorProducto": false
+  },
+  {
+    "key": "entregable_creativo.entregables",
+    "label": "Entregables",
+    "section": "entregable_creativo",
+    "description": "Piezas concretas que se deben producir.",
+    "criticidad": "informativo",
+    "nivel": "campana",
+    "valueType": "lista",
+    "admiteExcepcionPorProducto": false
+  },
+  {
+    "key": "entregable_creativo.canales",
+    "label": "Canales",
+    "section": "entregable_creativo",
+    "description": "Dónde se publica: medios, redes, retail, punto de venta.",
+    "criticidad": "informativo",
+    "nivel": "campana",
+    "valueType": "lista",
+    "admiteExcepcionPorProducto": false
+  },
+  {
+    "key": "entregable_creativo.formatos",
+    "label": "Formatos",
+    "section": "entregable_creativo",
+    "description": "Formatos técnicos de las piezas (video vertical, reel, nota de prensa).",
+    "criticidad": "informativo",
+    "nivel": "campana",
+    "valueType": "lista",
+    "admiteExcepcionPorProducto": false
+  },
+  {
+    "key": "entregable_creativo.alcance",
+    "label": "Alcance",
+    "section": "entregable_creativo",
+    "description": "Cobertura esperada en volumen o audiencia.",
+    "criticidad": "informativo",
+    "nivel": "campana",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": false
+  },
+  {
+    "key": "entregable_creativo.desafio_creativo",
+    "label": "Desafío creativo",
+    "section": "entregable_creativo",
+    "description": "La dificultad creativa que hay que resolver. En el Brief Estratégico, «10. Desafío».",
+    "criticidad": "informativo",
+    "nivel": "campana",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": false
+  },
+  {
+    "key": "practico.fecha_inicio",
+    "label": "Fecha de inicio",
+    "section": "practico",
+    "description": "Cuándo arranca la ejecución. Copie la fecha como la declare la fuente, sin normalizar.",
+    "criticidad": "critico",
+    "nivel": "campana",
+    "valueType": "fecha",
+    "admiteExcepcionPorProducto": false,
+    "fechaConfig": {
+      "permitePrecision": true
+    }
+  },
+  {
+    "key": "practico.fecha_fin",
+    "label": "Fecha de fin",
+    "section": "practico",
+    "description": "Cuándo termina la ejecución o el sostenimiento.",
+    "criticidad": "critico",
+    "nivel": "campana",
+    "valueType": "fecha",
+    "admiteExcepcionPorProducto": false,
+    "fechaConfig": {
+      "permitePrecision": true
+    }
+  },
+  {
+    "key": "practico.hitos",
+    "label": "Hitos",
+    "section": "practico",
+    "description": "Fechas clave intermedias: lanzamientos, ferias, cortes de reporte. En el Brief P80, «Hitos clave».",
+    "criticidad": "informativo",
+    "nivel": "campana",
+    "valueType": "lista",
+    "admiteExcepcionPorProducto": false
+  },
+  {
+    "key": "practico.presupuesto",
+    "label": "Presupuesto",
+    "section": "practico",
+    "description": "Nivel de confidencialidad heredado del recurso. Ver §12.2.",
+    "criticidad": "informativo",
+    "nivel": "campana",
+    "valueType": "texto",
+    "admiteExcepcionPorProducto": false
+  },
+  {
+    "key": "practico.restricciones",
+    "label": "Restricciones",
+    "section": "practico",
+    "description": "Límites operativos de la ejecución: qué no se puede hacer, plazos rígidos, condiciones de canal. NO confundir con la situación de mercado, que va en contexto.situacion.",
+    "criticidad": "critico",
+    "nivel": "campana",
+    "valueType": "lista",
+    "admiteExcepcionPorProducto": false
+  }
+]

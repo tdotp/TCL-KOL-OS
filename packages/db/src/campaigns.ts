@@ -10,7 +10,7 @@
  * nueva, el filtro de SQL sigue impidiendo el acceso cruzado (caso S-01).
  */
 
-import { authorize, type Result, type User, err, ok } from '@tcl-kol-os/domain';
+import { authorize, type CampaignProduct, type Result, type User, err, ok } from '@tcl-kol-os/domain';
 import { assertCapability } from './authz.ts';
 import { getPool, transaction } from './client.ts';
 import { recordAudit } from './audit.ts';
@@ -143,6 +143,23 @@ export async function getCampaign(actor: User, id: string): Promise<Result<Campa
   );
 
   return ok({ campaign, productos, avisoPresupuesto: avisoDeReparto(productos) });
+}
+
+/**
+ * `CampaignProductRow` (forma de fila SQL) sigue siendo responsabilidad de
+ * esta capa de persistencia — DEC-029 no la elimina. Lo que cruza hacia
+ * `apps/web` es el tipo de negocio de dominio; este mapeo es la frontera.
+ */
+export function comoProductoDeDominio(row: CampaignProductRow, campaignId: string): CampaignProduct {
+  return {
+    id: row.id,
+    campaignId,
+    productId: row.product_id,
+    rol: row.rol as CampaignProduct['rol'],
+    prioridad: row.prioridad,
+    participacionPresupuesto:
+      row.participacion_presupuesto === null ? undefined : Number(row.participacion_presupuesto),
+  };
 }
 
 /** Historia E3-9. Devuelve el aviso o `undefined` si el reparto está bien. */

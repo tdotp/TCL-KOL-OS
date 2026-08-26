@@ -25,10 +25,11 @@ from __future__ import annotations
 import logging
 import os
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, List, Optional, Sequence
+from typing import Any
 
-from .ai import openrouter, registro
+from .ai import provider, registro
 from .ai.router import RouterError, modelo_de_embeddings
 
 logger = logging.getLogger("ai-worker.embeddings")
@@ -52,7 +53,7 @@ class Resultado:
 
     indexados: int
     omitidos: int
-    motivo: Optional[str] = None
+    motivo: str | None = None
 
     @property
     def se_indexo(self) -> bool:
@@ -68,7 +69,7 @@ def _a_literal_vector(vector: Sequence[float]) -> str:
     return "[" + ",".join(repr(float(x)) for x in vector) + "]"
 
 
-def embeber_consulta(texto: str) -> List[float]:
+def embeber_consulta(texto: str) -> list[float]:
     """Vector de una consulta de búsqueda.
 
     Es el único punto donde la búsqueda toca al proveedor de IA. El resto de la
@@ -83,7 +84,7 @@ def embeber_consulta(texto: str) -> List[float]:
     if not limpio:
         raise ValueError("La consulta está vacía.")
 
-    vectores, _uso = openrouter.embeddings(modelo_de_embeddings(), [limpio])
+    vectores, _uso = provider.embeddings(modelo_de_embeddings(), [limpio])
     return vectores[0]
 
 
@@ -175,7 +176,7 @@ def indexar_documento(conn: Any, source_id: str) -> Resultado:
 def _indexar_lote(
     conn: Any,
     *,
-    lote: List[tuple[str, str]],
+    lote: list[tuple[str, str]],
     modelo: str,
     organization_id: str,
     campaign_id: str,
@@ -186,7 +187,7 @@ def _indexar_lote(
     comenzo = time.monotonic()
 
     try:
-        vectores, uso = openrouter.embeddings(modelo, textos)
+        vectores, uso = provider.embeddings(modelo, textos)
     except Exception as exc:  # noqa: BLE001
         latencia = int((time.monotonic() - comenzo) * 1000)
         registro.registrar_ejecucion(
@@ -209,7 +210,9 @@ def _indexar_lote(
     latencia = int((time.monotonic() - comenzo) * 1000)
 
     with conn.cursor() as cur:
-        for (fragment_id, _texto), vector in zip(lote, vectores):
+        # Sin `strict=`: ese parámetro de `zip()` es de Python 3.10+, y este
+        # módulo se mantiene ejecutable en 3.9 fuera de Docker (ver config.py).
+        for (fragment_id, _texto), vector in zip(lote, vectores):  # noqa: B905
             cur.execute(
                 "UPDATE source_fragments SET embedding = %s::vector WHERE id = %s",
                 (_a_literal_vector(vector), fragment_id),

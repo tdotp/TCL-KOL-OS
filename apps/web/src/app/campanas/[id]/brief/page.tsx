@@ -1,24 +1,35 @@
 import { notFound, redirect } from 'next/navigation';
-import { getCampaign, verCamposDeVersion, versionesDelBrief } from '@tcl-kol-os/db';
+import { getCampaign, listarPreguntas, verCamposDeVersion, versionesDelBrief } from '@tcl-kol-os/db';
+import { allowedTransitions, type BriefStatus } from '@tcl-kol-os/domain';
 import { Encabezado } from '@/components/Encabezado';
 import { currentUser } from '@/lib/session';
+import { crearBriefManualDeCampana, reintentarExtraccionDeBrief, transicionarBriefDeCampana } from '@/lib/actions';
 import { BotonExtraer } from './BotonExtraer';
 import { TablaCampos } from './TablaCampos';
 
 export const dynamic = 'force-dynamic';
 
-/** Los estados del brief, en el idioma en que se trabaja (§6, glosario D0-06). */
-const ESTADO_EN_ESPANOL: Record<string, string> = {
+/** Los doce estados reales de §7.3 — antes esta tabla tenía nombres que no existían. */
+const ESTADO_EN_ESPANOL: Record<BriefStatus, string> = {
   draft: 'borrador',
-  processing: 'procesando',
+  processing: 'extrayendo…',
+  extraction_review: 'revisión de extracción',
+  local_questions: 'preguntas locales',
   internal_review: 'revisión interna',
-  approved: 'aprobado',
-  sent_to_client: 'enviado al cliente',
+  internal_changes_requested: 'cambios internos solicitados',
   client_review: 'revisión del cliente',
-  changes_requested: 'cambios solicitados',
-  client_approved: 'aprobado por el cliente',
-  archived: 'archivado',
+  client_changes_requested: 'cambios del cliente solicitados',
+  approved: 'aprobado',
+  superseded: 'reemplazado',
   cancelled: 'cancelado',
+  processing_failed: 'extracción fallida',
+};
+
+/** Qué transición ofrecer y con qué texto — la regla vive en el dominio, esto solo la muestra. */
+const TEXTO_DEL_BOTON: Partial<Record<BriefStatus, string>> = {
+  local_questions: 'Ir a las preguntas',
+  extraction_review: 'Volver al brief',
+  internal_review: 'Enviar a revisión interna',
 };
 
 /**
@@ -30,16 +41,24 @@ const ESTADO_EN_ESPANOL: Record<string, string> = {
  * verificación en un trámite que nadie hace. La evidencia se despliega bajo el
  * campo que respalda.
  *
- * Lo que esta pantalla deja explícito, y es lo que la hace útil:
- *   · qué campos faltan, en vez de mostrar solo lo que se encontró;
- *   · cuáles son críticos, para saber qué bloquea la aprobación;
- *   · de dónde salió cada afirmación, con archivo, ubicación y cita.
+ * Los botones de transición nunca reimplementan una guarda del dominio
+ * (ADR-008): se calculan con `allowedTransitions`, la misma función que usa
+ * `transicionarBrief`, y si el servidor rechaza la transición, el mensaje que
+ * vuelve es el de la guarda que falló — nunca "brief inválido" genérico
+ * (sección 7 del cierre de Sprint 4).
  */
-export default async function BriefPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function BriefPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string; detalle?: string }>;
+}) {
   const user = await currentUser();
   if (user === undefined) redirect('/login');
 
   const { id } = await params;
+  const { error, detalle } = await searchParams;
 
   const campana = await getCampaign(user, id);
   if (!campana.ok) notFound();
@@ -56,6 +75,16 @@ export default async function BriefPage({ params }: { params: Promise<{ id: stri
   );
   const conflictos = listaCampos.filter((c) => c.status === 'conflict');
   const encontrados = listaCampos.filter((c) => c.status === 'found');
+  const sinRevisar = listaCampos.filter((c) => c.status === 'found' && c.reviewStatus === 'pending');
+
+  const preguntas = ultima === undefined ? undefined : await listarPreguntas(user, id, { status: 'pendiente' });
+  const preguntasPendientes = preguntas?.ok ? preguntas.value.length : 0;
+  const preguntasCriticasPendientes = preguntas?.ok
+    ? preguntas.value.filter((p) => p.criticidad === 'critico').length
+    : 0;
+
+  const transicionesPosibles =
+    ultima !== undefined ? allowedTransitions(ultima.status as BriefStatus, user).filter((t) => t !== 'cancelled') : [];
 
   return (
     <>
@@ -70,7 +99,19 @@ export default async function BriefPage({ params }: { params: Promise<{ id: stri
           la ubicación y la frase exacta de donde salió.
         </p>
 
-        {user.role !== 'cliente' && <BotonExtraer campaignId={id} />}
+        {error !== undefined && (
+          <div className="aviso error">
+            <strong>No se pudo completar la acción</strong>
+            {decodeURIComponent(error)}
+            {detalle !== undefined && (
+              <p style={{ marginTop: 6 }}>
+                Campos afectados: <span className="mono">{decodeURIComponent(detalle)}</span>
+              </p>
+            )}
+          </div>
+        )}
+
+        {user.role !== 'cliente' && ultima === undefined && <BotonExtraer campaignId={id} />}
 
         {ultima === undefined ? (
           <div className="card">
@@ -79,22 +120,35 @@ export default async function BriefPage({ params }: { params: Promise<{ id: stri
               Cargue fuentes en la campaña y ejecute la extracción, o empiece el brief a mano: la
               asistencia de IA nunca es requisito para avanzar.
             </p>
-            <p style={{ marginTop: 12 }}>
-              <a href={`/campanas/${id}/fuentes`}>Ir a fuentes →</a>
-            </p>
+            <div className="row" style={{ gap: 8, marginTop: 12 }}>
+              <a className="btn" href={`/campanas/${id}/fuentes`}>
+                Ir a fuentes →
+              </a>
+              {user.role !== 'cliente' && (
+                <form action={crearBriefManualDeCampana}>
+                  <input type="hidden" name="campaignId" value={id} />
+                  <button className="btn pri" type="submit">
+                    Empezar el brief a mano
+                  </button>
+                </form>
+              )}
+            </div>
           </div>
         ) : (
           <>
             <div className="card">
-              <h2>
-                Versión {ultima.version}{' '}
-                <span className={`pill ${ultima.status === 'approved' ? 'ok' : 'info'}`}>
-                  {ESTADO_EN_ESPANOL[ultima.status] ?? ultima.status}
-                </span>
-              </h2>
+              <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <h2 style={{ margin: 0 }}>
+                  Versión {ultima.version}{' '}
+                  <span className={`pill ${ultima.status === 'approved' ? 'ok' : ultima.status === 'processing_failed' ? 'bad' : 'info'}`}>
+                    {ESTADO_EN_ESPANOL[ultima.status as BriefStatus] ?? ultima.status}
+                  </span>
+                </h2>
+                {user.role !== 'cliente' && <BotonExtraer campaignId={id} />}
+              </div>
               <p className="sub">
                 {encontrados.length} campo(s) con dato · {criticosFaltantes.length} crítico(s)
-                pendiente(s) · {conflictos.length} conflicto(s)
+                pendiente(s) · {conflictos.length} conflicto(s) · {sinRevisar.length} sin confirmar
                 {ultima.modelo !== null && (
                   <>
                     {' '}
@@ -104,15 +158,50 @@ export default async function BriefPage({ params }: { params: Promise<{ id: stri
                 )}
               </p>
 
-              {criticosFaltantes.length > 0 && (
-                <p className="sub" style={{ marginTop: 10 }}>
-                  Los campos críticos que siguen sin dato impiden aprobar el brief. No se rellenan
-                  solos: hay que buscarlos en la fuente o preguntarlos.
+              {preguntasCriticasPendientes > 0 && (
+                <p className="aviso error" style={{ marginTop: 10 }}>
+                  {preguntasCriticasPendientes} pregunta(s) crítica(s) pendiente(s).{' '}
+                  <a href={`/campanas/${id}/preguntas`}>Responder ahora →</a>
                 </p>
               )}
+
+              {/* El estado y la siguiente acción posible siempre quedan visibles
+                  (corrección 1 del cierre de Sprint 4). */}
+              <div className="row" style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                <a className="btn" href={`/campanas/${id}/brief/editar`}>
+                  Abrir el editor
+                </a>
+                {(preguntasPendientes > 0 || ultima.status === 'local_questions') && (
+                  <a className="btn" href={`/campanas/${id}/preguntas`}>
+                    Preguntas locales{preguntasPendientes > 0 ? ` (${preguntasPendientes})` : ''}
+                  </a>
+                )}
+                {user.role !== 'cliente' && ultima.status === 'processing_failed' && (
+                  <form action={reintentarExtraccionDeBrief}>
+                    <input type="hidden" name="campaignId" value={id} />
+                    <input type="hidden" name="versionId" value={ultima.id} />
+                    <button className="btn pri" type="submit">
+                      Reintentar extracción
+                    </button>
+                  </form>
+                )}
+                {user.role !== 'cliente' &&
+                  transicionesPosibles
+                    .filter((t) => t in TEXTO_DEL_BOTON)
+                    .map((to) => (
+                      <form action={transicionarBriefDeCampana} key={to}>
+                        <input type="hidden" name="campaignId" value={id} />
+                        <input type="hidden" name="versionId" value={ultima.id} />
+                        <input type="hidden" name="to" value={to} />
+                        <button className="btn pri" type="submit">
+                          {TEXTO_DEL_BOTON[to]}
+                        </button>
+                      </form>
+                    ))}
+              </div>
             </div>
 
-            <TablaCampos campos={listaCampos} campaignId={id} />
+            <TablaCampos campos={listaCampos} campaignId={id} versionId={ultima.id} editable={user.role !== 'cliente'} />
           </>
         )}
 
@@ -123,7 +212,7 @@ export default async function BriefPage({ params }: { params: Promise<{ id: stri
               <thead>
                 <tr>
                   <th style={{ width: 80 }}>Versión</th>
-                  <th style={{ width: 120 }}>Estado</th>
+                  <th style={{ width: 160 }}>Estado</th>
                   <th style={{ width: 180 }}>Fecha</th>
                   <th>Modelo</th>
                   <th style={{ width: 100 }}>Costo</th>
@@ -134,7 +223,7 @@ export default async function BriefPage({ params }: { params: Promise<{ id: stri
                   <tr key={v.id}>
                     <td>{v.version}</td>
                     <td>
-                      <span className="pill">{ESTADO_EN_ESPANOL[v.status] ?? v.status}</span>
+                      <span className="pill">{ESTADO_EN_ESPANOL[v.status as BriefStatus] ?? v.status}</span>
                     </td>
                     <td style={{ fontSize: 13, color: 'var(--muted)' }}>
                       {new Date(v.createdAt).toLocaleString('es-CO')}

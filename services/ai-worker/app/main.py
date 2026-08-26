@@ -12,8 +12,8 @@ Lo que este servicio NO hace (ADR-008 y D0-09 §3.1):
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -42,8 +42,19 @@ class FragmentoEntrada(BaseModel):
     linea: int | None = None
 
 
+class ProductoEntrada(BaseModel):
+    """Un producto válido de la campaña (DEC-016). Nunca lo busca el worker."""
+
+    id: str
+    nombre_producto: str
+
+
 class ExtraccionEntrada(BaseModel):
     fragmentos: list[FragmentoEntrada] = Field(min_length=1, max_length=200)
+    #: Vacío para campañas de un solo producto sin catálogo declarado. Con más
+    #: de un producto, ancla cada campo `marca_producto[].*` al que corresponde
+    #: (DEC-016/DEC-023, corrección 3.2 del cierre de Sprint 4).
+    productos: list[ProductoEntrada] = Field(default_factory=list)
 
 logger = logging.getLogger("ai-worker")
 
@@ -141,9 +152,13 @@ async def extraccion(peticion: ExtraccionEntrada) -> dict[str, object]:
         )
         for f in peticion.fragmentos
     ]
+    productos = [
+        extraction.ProductoDeEntrada(id=p.id, nombre_producto=p.nombre_producto)
+        for p in peticion.productos
+    ]
 
     try:
-        resultado = extraction.extraer(fragmentos)
+        resultado = extraction.extraer(fragmentos, productos=productos)
     except extraction.ExtraccionInvalida as exc:
         # E5-3: una salida que no cumple el contrato no se persiste como versión
         # aprobable. Se dice qué pasó, en vez de devolver campos a medias.
@@ -172,6 +187,7 @@ async def extraccion(peticion: ExtraccionEntrada) -> dict[str, object]:
                 "criticidad": c.criticidad,
                 "confidence": c.confidence,
                 "nota": c.nota,
+                "productoId": c.producto_id,
                 "evidence": [
                     {
                         "fragmentId": e.fragment_id,

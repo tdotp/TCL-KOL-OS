@@ -1,8 +1,8 @@
 import { notFound, redirect } from 'next/navigation';
-import { getCampaign } from '@tcl-kol-os/db';
+import { getCampaign, listarPreguntas, versionesDelBrief } from '@tcl-kol-os/db';
 import { Encabezado } from '@/components/Encabezado';
 import { currentUser } from '@/lib/session';
-import { archivarCampana } from '@/lib/actions';
+import { archivarCampana, crearBriefManualDeCampana } from '@/lib/actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +30,14 @@ export default async function DetalleCampanaPage({
 
   const { campaign, productos, avisoPresupuesto } = resultado.value;
 
+  const versiones = await versionesDelBrief(user, id);
+  const versionActual = versiones.ok ? versiones.value[0] : undefined;
+
+  const preguntas = await listarPreguntas(user, id, { status: 'pendiente' });
+  const preguntasCriticasPendientes = preguntas.ok
+    ? preguntas.value.filter((p) => p.criticidad === 'critico').length
+    : 0;
+
   return (
     <>
       <Encabezado user={user} />
@@ -46,6 +54,12 @@ export default async function DetalleCampanaPage({
           <div className="aviso error">
             <strong>Acción no permitida</strong>
             Tu rol no puede ejecutar esa acción sobre esta campaña.
+          </div>
+        )}
+        {error !== undefined && error !== 'no_permitido' && (
+          <div className="aviso error">
+            <strong>No se pudo completar la acción</strong>
+            {decodeURIComponent(error)}
           </div>
         )}
 
@@ -101,10 +115,47 @@ export default async function DetalleCampanaPage({
         </div>
 
         <div className="card">
-          <h2>Brief</h2>
-          <p className="vacio">
-            El brief se construye en el Sprint 3. Las fuentes y la extracción llegan en el Sprint 2.
-          </p>
+          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
+            <h2 style={{ margin: 0 }}>Brief</h2>
+            {versionActual !== undefined && (
+              <a className="btn pri" href={`/campanas/${campaign.id}/brief`}>
+                Ver el brief ({versionActual.status})
+              </a>
+            )}
+          </div>
+
+          {preguntasCriticasPendientes > 0 && (
+            <div className="aviso error" style={{ marginBottom: 12 }}>
+              <strong>{preguntasCriticasPendientes} pregunta(s) crítica(s) pendiente(s)</strong>
+              <a href={`/campanas/${campaign.id}/preguntas?status=pendiente`}>Ver y responder →</a>
+            </div>
+          )}
+
+          {versionActual === undefined ? (
+            <>
+              <p className="sub" style={{ marginTop: 0 }}>
+                Todavía no hay ninguna versión. Cargue fuentes y extraiga, o empiece el brief a mano — la
+                asistencia de IA nunca es requisito para avanzar.
+              </p>
+              <div className="row" style={{ gap: 8 }}>
+                <a className="btn" href={`/campanas/${campaign.id}/fuentes`}>
+                  Ir a fuentes →
+                </a>
+                {user.role !== 'cliente' && (
+                  <form action={crearBriefManualDeCampana}>
+                    <input type="hidden" name="campaignId" value={campaign.id} />
+                    <button className="btn pri" type="submit">
+                      Empezar el brief a mano
+                    </button>
+                  </form>
+                )}
+              </div>
+            </>
+          ) : (
+            <p className="sub" style={{ margin: 0 }}>
+              Versión {versionActual.version} · estado <span className="pill">{versionActual.status}</span>
+            </p>
+          )}
         </div>
 
         <div className="card">

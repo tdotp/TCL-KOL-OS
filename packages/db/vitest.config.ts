@@ -5,9 +5,10 @@ export default defineConfig({
     // Las pruebas de aislamiento golpean PostgreSQL real: se ejecutan en serie
     // para que el estado sembrado sea predecible.
     fileParallelism: false,
-    env: {
-      DATABASE_URL:
-        process.env['DATABASE_URL'] ?? 'postgresql://tclkolos:devpassword@localhost:5432/tclkolos',
-    },
+    // INC-001A: sin valor por defecto ni fallback hacia `DATABASE_URL`. La
+    // validación y el candado viven en `vitest.setup.ts` — aquí no se declara
+    // ninguna base, para que sea imposible caer en la de desarrollo por
+    // omisión.
+    setupFiles: ['./vitest.setup.ts'],
   },
 });

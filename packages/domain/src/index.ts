@@ -11,6 +11,7 @@
 export * from './types';
 export * from './errors';
 export * from './brief-states';
+export * from './brief-catalog';
 export * from './permissions';
 export * from './file-validation';
 export * from './ai-tasks';

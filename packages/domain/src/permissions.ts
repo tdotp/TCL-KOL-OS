@@ -29,6 +29,14 @@ export type Action =
   | 'brief:translate'
   | 'brief:export'
   | 'question:answer'
+  // Sprint 4 (cierre): E6 y E7 completas necesitan distinguir cada acción de
+  // escritura sobre el brief — antes solo existía `brief:edit` genérico.
+  | 'question:create'
+  | 'question:discard'
+  | 'field:confirm'
+  | 'field:correct'
+  | 'brief:manual_create'
+  | 'brief:transition'
   | 'glossary:propose'
   | 'glossary:approve'
   | 'comment:internal'
@@ -56,6 +64,12 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'brief:translate',
     'brief:export',
     'question:answer',
+    'question:create',
+    'question:discard',
+    'field:confirm',
+    'field:correct',
+    'brief:manual_create',
+    'brief:transition',
     'glossary:propose',
     'glossary:approve',
     'comment:internal',
@@ -82,6 +96,12 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'brief:translate',
     'brief:export',
     'question:answer',
+    'question:create',
+    'question:discard',
+    'field:confirm',
+    'field:correct',
+    'brief:manual_create',
+    'brief:transition',
     'glossary:propose',
     'glossary:approve',
     'comment:internal',
@@ -105,6 +125,12 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'brief:translate',
     'brief:export',
     'question:answer',
+    'question:create',
+    'question:discard',
+    'field:confirm',
+    'field:correct',
+    'brief:manual_create',
+    'brief:transition',
     'glossary:propose',
     'comment:internal',
     'comment:client_visible',

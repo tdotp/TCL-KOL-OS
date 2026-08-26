@@ -14,6 +14,7 @@
 
 import type { BriefStatus, BriefField, BriefVersion, Role, User } from './types';
 import { type DomainErrorPayload, type Result, err, ok } from './errors';
+import { campoDelCatalogo } from './brief-catalog';
 
 /** Quién ejecuta la transición. `'system'` es el worker, no una persona. */
 export type Actor = User | 'system';
@@ -23,6 +24,15 @@ export interface TransitionContext {
   readonly actor: Actor;
   /** Preguntas locales sobre campos críticos que siguen sin responder ni descartar. */
   readonly pendingCriticalQuestions?: number | undefined;
+  /** Preguntas locales de cualquier criticidad que siguen sin responder ni descartar. */
+  readonly pendingQuestionsTotal?: number | undefined;
+  /**
+   * Claves de campos críticos sin valor `found` y sin una pregunta local
+   * `descartada` que lo justifique. La calcula el llamador consultando
+   * `local_questions` (Postgres) — el dominio no lo deriva solo, igual que ya
+   * hace `pendingCriticalQuestions` (Sprint 4, corrección 1/2 del cierre).
+   */
+  readonly unresolvedCriticalFields?: readonly string[] | undefined;
 }
 
 type Guard = (ctx: TransitionContext) => DomainErrorPayload | null;
@@ -38,9 +48,20 @@ interface TransitionRule {
 
 // ─────────────────────────── Guardas ───────────────────────────────────────────
 
-/** Campos que exigen evidencia cuando tienen valor: los críticos y los claims. */
+/**
+ * Campos que exigen evidencia documental cuando tienen valor.
+ *
+ * Un `claim` (afirmación verificable sobre el producto) la exige siempre, sin
+ * excepción — un claim manual sin evidencia sigue bloqueando el avance
+ * (DEC-028). Un campo `critico` no técnico respondido por pregunta local
+ * (`provenanceType: 'manual_local'`) NO la exige: se sustenta con autor y
+ * fecha, no con un fragmento documental. Un `critico` que la IA dice haber
+ * *encontrado* en una fuente sí sigue exigiéndola — ahí "encontrado" es
+ * exactamente el tipo de afirmación que el sistema nunca inventa.
+ */
 function requiresEvidence(field: BriefField): boolean {
-  return field.criticidad === 'critico' || field.criticidad === 'claim';
+  if (field.criticidad === 'claim') return true;
+  return field.criticidad === 'critico' && field.provenanceType !== 'manual_local';
 }
 
 /**
@@ -92,6 +113,73 @@ const guardTranslationHasOrigin: Guard = ({ version }) => {
     code: 'TRANSLATION_MISSING_ORIGIN',
     message: 'Una versión en inglés debe referenciar la versión en español de la que deriva.',
     details: { versionId: version.id, language: version.language },
+  };
+};
+
+/**
+ * Un campo crítico sin valor y sin una pregunta local descartada que lo
+ * justifique no puede colarse a revisión interna (Sprint 4, sección 7 del
+ * cierre). El llamador calcula la lista consultando `local_questions`.
+ */
+const guardCriticalFieldsResolved: Guard = ({ unresolvedCriticalFields }) => {
+  const claves = unresolvedCriticalFields ?? [];
+  if (claves.length === 0) return null;
+  return {
+    code: 'BRIEF_MISSING_CRITICAL_FIELD',
+    message: `El brief tiene ${claves.length} campo(s) crítico(s) sin valor ni descarte justificado: ${claves.join(', ')}.`,
+    details: { campos: claves },
+  };
+};
+
+/**
+ * Defensa en profundidad (DEC-023): un campo de nivel `producto` (p. ej.
+ * `marca_producto[].rtbs`) nunca debería llegar sin `campaignProductId` — eso
+ * ya lo impide `packages/db` al persistir — pero el dominio también lo
+ * verifica antes de dejar avanzar el brief.
+ */
+const guardProductFieldsAnchored: Guard = ({ version }) => {
+  const sinAnclar = version.fields.filter((f) => {
+    const campo = campoDelCatalogo(f.key);
+    return campo?.nivel === 'producto' && f.campaignProductId === undefined;
+  });
+  if (sinAnclar.length === 0) return null;
+  return {
+    code: 'BRIEF_FIELD_INVALID',
+    message: `El brief tiene ${sinAnclar.length} campo(s) de producto sin un producto de campaña válido asociado.`,
+    details: { campos: sinAnclar.map((f) => f.key) },
+  };
+};
+
+/**
+ * Un campo que la extracción encontró (`status: 'found'`) pero que nadie
+ * confirmó ni corrigió todavía no puede pasar a revisión interna en silencio
+ * (Sprint 4, corrección 2 del cierre: "no permitas pasar a internal_review si
+ * los campos... siguen pendientes de revisión").
+ */
+const guardAllFieldsReviewed: Guard = ({ version }) => {
+  const sinRevisar = version.fields.filter((f) => f.status === 'found' && f.reviewStatus === 'pending');
+  if (sinRevisar.length === 0) return null;
+  return {
+    code: 'BRIEF_FIELD_INVALID',
+    message: `El brief tiene ${sinRevisar.length} campo(s) encontrado(s) por la extracción que nadie confirmó ni corrigió todavía.`,
+    details: { campos: sinRevisar.map((f) => f.key) },
+  };
+};
+
+/**
+ * `local_questions → extraction_review` solo se habilita cuando ya no queda
+ * ninguna pregunta pendiente, de cualquier criticidad (Sprint 4, corrección 1
+ * del cierre: "cuando todas estén respondidas o descartadas justificadamente,
+ * permite" esta transición). Distinta de `guardNoPendingCriticalQuestions`,
+ * que solo mira las críticas y solo se usa antes de aprobar.
+ */
+const guardNoPendingQuestions: Guard = ({ pendingQuestionsTotal }) => {
+  const pending = pendingQuestionsTotal ?? 0;
+  if (pending === 0) return null;
+  return {
+    code: 'BRIEF_PENDING_QUESTIONS',
+    message: `Quedan ${pending} pregunta(s) local(es) sin responder ni descartar.`,
+    details: { pendientes: pending },
   };
 };
 
@@ -163,7 +251,7 @@ export const TRANSITIONS: readonly TransitionRule[] = [
     from: 'local_questions',
     to: 'extraction_review',
     roles: EDITORIAL_ROLES,
-    guards: [],
+    guards: [guardNoPendingQuestions],
     description: 'Las preguntas locales fueron respondidas o descartadas con justificación.',
   },
 
@@ -172,7 +260,15 @@ export const TRANSITIONS: readonly TransitionRule[] = [
     from: 'extraction_review',
     to: 'internal_review',
     roles: EDITORIAL_ROLES,
-    guards: [guardNoUnresolvedConflicts, guardTranslationHasOrigin],
+    guards: [
+      guardNoUnresolvedConflicts,
+      guardClaimsHaveEvidence,
+      guardNoPendingCriticalQuestions,
+      guardCriticalFieldsResolved,
+      guardProductFieldsAnchored,
+      guardAllFieldsReviewed,
+      guardTranslationHasOrigin,
+    ],
     description: 'El consultor solicita revisión interna.',
   },
   {
@@ -181,7 +277,15 @@ export const TRANSITIONS: readonly TransitionRule[] = [
     from: 'draft',
     to: 'internal_review',
     roles: EDITORIAL_ROLES,
-    guards: [guardNoUnresolvedConflicts, guardTranslationHasOrigin],
+    guards: [
+      guardNoUnresolvedConflicts,
+      guardClaimsHaveEvidence,
+      guardNoPendingCriticalQuestions,
+      guardCriticalFieldsResolved,
+      guardProductFieldsAnchored,
+      guardAllFieldsReviewed,
+      guardTranslationHasOrigin,
+    ],
     description: 'Brief completado manualmente, sin asistencia de IA.',
   },
 

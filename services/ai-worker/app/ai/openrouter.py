@@ -111,7 +111,8 @@ def _post(ruta: str, cuerpo: Dict[str, Any], timeout: int) -> Dict[str, Any]:
 
     try:
         with urllib.request.urlopen(peticion, timeout=timeout) as respuesta:
-            return json.loads(respuesta.read().decode("utf-8"))
+            cuerpo_json: Dict[str, Any] = json.loads(respuesta.read().decode("utf-8"))
+            return cuerpo_json
 
     except urllib.error.HTTPError as exc:
         detalle = ""

@@ -378,6 +378,73 @@ El material operativo entregado por el product owner (ver [D0-14](../product/D0-
 
 ---
 
+## Cierre de Sprint 3 + Sprint 4 (DEC-023 a DEC-029)
+
+Resueltas durante el incremento «Brief funcional de punta a punta» — el ciclo de estados,
+el anclaje de producto y las preguntas locales (Épica E6) pasan de modeladas a conectadas.
+Aprobadas por el product owner en revisión de plan, 25 de agosto de 2026.
+
+### DEC-023 — Anclaje de producto por nivel
+
+- **Fecha:** 25 de agosto de 2026
+- **Estado:** **aprobada**
+- **Origen:** `brief_fields.campaign_product_id` existe desde la migración 004, pero ningún código lo usaba — el anclaje de campos a producto en una campaña multiproducto (P80: 60/20/10) no estaba implementado en ningún punto del pipeline, ni siquiera en el prompt del worker.
+- **Decisión:** aterriza la regla de tres niveles de [DEC-016](#dec-016--campañas-con-varios-productos) en una columna real: `campaign_product_id` es siempre `NULL` en los campos «siempre de campaña»; nunca `NULL` en `marca_producto.*` (una fila por producto); y `NULL` por defecto en «compartido con excepción», con una fila adicional por producto que declara su excepción puntual. Sin prefijo `overrides.` en la clave — la nulabilidad ya distingue compartido de específico.
+- **Dónde vive:** índices únicos parciales y el trigger de validación en `infra/db/migrations/005_producto_preguntas_y_revision.sql`; el nivel de cada campo en `docs/product/brief-schema/brief-catalog.json` (`nivel`); la validación de `productoId` contra el catálogo real de la campaña en `packages/db/src/extraction.ts` (`persistirExtraccion`) — rechaza toda la extracción si un producto no pertenece a la campaña, nunca mezcla campos entre P80/P80 Pro/P80 Ultra.
+- **Responsable de aprobación:** Gerardo Calambás.
+
+### DEC-024 — Estrategia de «versión de trabajo»
+
+- **Fecha:** 25 de agosto de 2026
+- **Estado:** **aprobada**
+- **Decisión:** mientras un `brief_version` no esté en estado terminal ni `approved`, la misma fila se reutiliza. Confirmar un campo, corregirlo, responder una pregunta o resolver un conflicto son `UPDATE` sobre `brief_fields`, nunca una versión nueva. El detalle de cada cambio (valor anterior, valor nuevo, motivo) no vive en `audit_events.metadata` — vive en la tabla `brief_field_revisions`, dedicada; `audit_events` conserva su naturaleza de auditoría general (identificadores, tipo de acción, metadatos mínimos) y nunca se vuelve copia del contenido del brief.
+- **Dónde vive:** `packages/db/src/brief-version.ts` (`obtenerOCrearVersionDeTrabajo`), `packages/db/src/brief-fields.ts` (`confirmarCampo`/`corregirCampo`/`resolverConflicto`, cada una escribiendo su fila en `brief_field_revisions` dentro de la misma transacción).
+- **Responsable de aprobación:** Gerardo Calambás.
+
+### DEC-025 — Mandatorios vs. restricciones
+
+- **Fecha:** 25 de agosto de 2026
+- **Estado:** **aprobada** — corrección puntual del prompt de extracción, no una optimización general (fuera del alcance de este incremento)
+- **Origen:** `practico.restricciones` competía con `mandatorios` por el mismo material fuente (ambigüedad ya señalada en [DEC-022](#dec-022--el-prompt-de-extracción-debe-describir-lo-que-pide)); un caso real («único canal de venta: Alkosto») se archivaba en el campo equivocado.
+- **Decisión:** `mandatorios` son elementos que deben aparecer o ejecutarse; `practico.restricciones` son límites, prohibiciones o condiciones. «Único canal de venta: Alkosto» es una restricción, no un mandatorio.
+- **Dónde vive:** instrucción explícita en `services/ai-worker/app/extraction.py` (`_instrucciones()`); prueba dedicada en `tests/test_extraction_mandatorios_restricciones.py`.
+- **Responsable de aprobación:** Gerardo Calambás.
+
+### DEC-026 — Fechas con precisión real
+
+- **Fecha:** 25 de agosto de 2026
+- **Estado:** **aprobada**
+- **Origen:** el binario `found`/`not_found` fuerza a elegir entre inventar un día que la fuente no da o descartar una fecha que sí está, aunque imprecisa (rango o mes) — el caso real de [DEC-022](#dec-022--el-prompt-de-extracción-debe-describir-lo-que-pide) («Sostenimiento: Octubre-Noviembre 2026»).
+- **Decisión:** `value` de `practico.fecha_inicio`/`fecha_fin` pasa a un objeto con precisión: `{tipo: 'exacta'|'mes'|'rango'|'aproximada'|'pendiente_confirmar', fecha?, inicio?, fin?, textoOriginal}`. Una precisión distinta de `exacta` en un campo crítico queda `status: 'found'` (hay valor, aunque impreciso) y además dispara una pregunta local pidiendo el día exacto. La fecha debe estar respaldada por una cita real — nunca inferida.
+- **Dónde vive:** `PrecisedDate`/`DatePrecision` en `packages/domain/src/types.ts`; `_precisar_fecha()`/`_fecha_respaldada_por_citas()` en `services/ai-worker/app/extraction.py`.
+- **Responsable de aprobación:** Gerardo Calambás.
+
+### DEC-027 — Aprobaciones: documentación sin implementar
+
+- **Fecha:** 25 de agosto de 2026
+- **Estado:** **aprobada** — declarativa, no cambia código
+- **Decisión:** una aprobación no se revierte editando la misma versión; cualquier cambio posterior a `approved` crea una versión hija, y la anterior queda `superseded`, nunca se reescribe. Ya protegido por ADR-003 (inmutabilidad) en el dominio y en triggers de base de datos. Este incremento llega hasta `internal_review`; el ciclo de aprobación final (creación de la versión hija, flujo de `superseded`) queda como siguiente incremento — no implementado aquí.
+- **Responsable de aprobación:** Gerardo Calambás.
+
+### DEC-028 — Evidencia vs. `manual_local`
+
+- **Fecha:** 25 de agosto de 2026
+- **Estado:** **aprobada**
+- **Decisión:** un claim o un dato técnico verificable exige evidencia documental siempre. Un campo crítico no técnico respondido por pregunta local se sustenta con `provenance_type = 'manual_local'` más autor y fecha, sin exigir fragmento documental — la guarda `guardClaimsHaveEvidence` solo actúa sobre claims con `status: 'found'`. Un claim vacío (`not_found`) no bloquea nada por sí solo; si no aplica a la campaña, se descarta con justificación por el mismo mecanismo de preguntas locales que un campo crítico — no existe un mecanismo aparte de «marcar como no aplicable».
+- **Dónde vive:** `requiresEvidence()` en `packages/domain/src/brief-states.ts`; descarte con justificación obligatoria en `packages/db/src/local-questions.ts` (`descartarPregunta`).
+- **Responsable de aprobación:** Gerardo Calambás.
+
+### DEC-029 — `CampaignProduct` de negocio vive en `packages/domain`
+
+- **Fecha:** 25 de agosto de 2026
+- **Estado:** **aprobada**
+- **Origen:** el tipo de negocio que cruza hacia `apps/web` para representar un producto dentro de una campaña no existía en el dominio.
+- **Decisión:** se añade `CampaignProduct` a `packages/domain/src/types.ts`. Esto **no** elimina `CampaignProductRow` de `packages/db` — la forma de fila SQL (`snake_case`) se queda donde está, porque un tipo de persistencia específico dentro de `packages/db` no viola ADR-008 (lo prohibido es que el *dominio* importe de aplicaciones o servicios, no que la capa de persistencia tenga sus propias formas de fila). Lo que cruza hacia `apps/web` es únicamente el tipo de negocio compartido.
+- **Dónde vive:** `packages/db/src/campaigns.ts` (`comoProductoDeDominio`, mapeo explícito fila→dominio en la frontera).
+- **Responsable de aprobación:** Gerardo Calambás.
+
+---
+
 ## Decisiones pendientes que no bloquean MVP 0
 
 Quedan abiertas y sin efecto sobre el arranque, se resuelven durante la ejecución:

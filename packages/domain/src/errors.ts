@@ -25,7 +25,16 @@ export type DomainErrorCode =
    */
   | 'AI_EXTRACTION_FAILED'
   | 'FORBIDDEN_ROLE'
-  | 'RESOURCE_NOT_FOUND';
+  | 'RESOURCE_NOT_FOUND'
+  /** Un campo del brief no cumple una regla de integridad (p. ej. de producto sin anclar). */
+  | 'BRIEF_FIELD_INVALID'
+  /**
+   * Control de concurrencia optimista (Sprint 4, corrección 7 del cierre): el
+   * guardado llegó con una `revision` que ya no coincide con la actual —
+   * alguien más modificó el campo primero. Nunca se aplica "el último que
+   * escribe gana" en silencio.
+   */
+  | 'FIELD_REVISION_CONFLICT';
 
 export interface DomainErrorPayload {
   readonly code: DomainErrorCode;

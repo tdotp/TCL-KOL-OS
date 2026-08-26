@@ -10,7 +10,8 @@ contra el gold set, no con pruebas unitarias.
 
 from __future__ import annotations
 
-from typing import Any, List, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import pytest
 
@@ -21,11 +22,11 @@ from app.ai.openrouter import Uso
 class CursorFalso:
     """Cursor mínimo que devuelve respuestas preparadas y anota lo ejecutado."""
 
-    def __init__(self, base: "ConexionFalsa") -> None:
+    def __init__(self, base: ConexionFalsa) -> None:
         self._base = base
         self._resultado: Any = None
 
-    def __enter__(self) -> "CursorFalso":
+    def __enter__(self) -> CursorFalso:
         return self
 
     def __exit__(self, *_: object) -> None:
@@ -38,15 +39,15 @@ class CursorFalso:
     def fetchone(self) -> Any:
         return self._resultado if not isinstance(self._resultado, list) else self._resultado[0]
 
-    def fetchall(self) -> List[Any]:
+    def fetchall(self) -> list[Any]:
         return self._resultado if isinstance(self._resultado, list) else []
 
 
 class ConexionFalsa:
-    def __init__(self, documento: Optional[tuple], fragmentos: List[tuple]) -> None:
+    def __init__(self, documento: tuple | None, fragmentos: list[tuple]) -> None:
         self.documento = documento
         self.fragmentos = fragmentos
-        self.ejecutadas: List[tuple] = []
+        self.ejecutadas: list[tuple] = []
         self.commits = 0
 
     def cursor(self) -> CursorFalso:
@@ -103,7 +104,7 @@ def test_documento_sensible_no_entra_al_indice(monkeypatch: pytest.MonkeyPatch) 
         llamado = True
         raise AssertionError("Se llamó al proveedor con un documento sensible.")
 
-    monkeypatch.setattr(embeddings.openrouter, "embeddings", _no_deberia)
+    monkeypatch.setattr(embeddings.provider, "embeddings", _no_deberia)
 
     conn = ConexionFalsa(_documento("sensible"), [("f1", "Cédula 1.023.456.789")])
     resultado = embeddings.indexar_documento(conn, "doc-1")
@@ -133,10 +134,10 @@ def test_sin_ia_el_documento_queda_procesado_pero_sin_vectores(
 def test_indexa_y_registra_el_costo(monkeypatch: pytest.MonkeyPatch) -> None:
     _entorno_listo(monkeypatch)
 
-    def _falso(modelo: str, textos: List[str], **_k: object) -> tuple:
+    def _falso(modelo: str, textos: list[str], **_k: object) -> tuple:
         return ([[0.1] * 1536 for _ in textos], Uso(10, 0, 10, 0.000002))
 
-    monkeypatch.setattr(embeddings.openrouter, "embeddings", _falso)
+    monkeypatch.setattr(embeddings.provider, "embeddings", _falso)
 
     conn = ConexionFalsa(_documento(), [("f1", "uno"), ("f2", "dos")])
     resultado = embeddings.indexar_documento(conn, "doc-1")
@@ -152,7 +153,7 @@ def test_el_registro_no_guarda_el_texto_enviado(monkeypatch: pytest.MonkeyPatch)
     secreto = "El presupuesto reservado es de USD 55,000"
 
     monkeypatch.setattr(
-        embeddings.openrouter,
+        embeddings.provider,
         "embeddings",
         lambda m, t, **k: ([[0.1] * 1536 for _ in t], Uso(5, 0, 5, 0.0)),
     )
@@ -177,7 +178,7 @@ def test_un_lote_fallido_se_registra_y_no_rompe_el_documento(
     def _revienta(*_a: object, **_k: object) -> None:
         raise RuntimeError("502 del proveedor")
 
-    monkeypatch.setattr(embeddings.openrouter, "embeddings", _revienta)
+    monkeypatch.setattr(embeddings.provider, "embeddings", _revienta)
 
     conn = ConexionFalsa(_documento(), [("f1", "uno")])
     resultado = embeddings.indexar_documento(conn, "doc-1")

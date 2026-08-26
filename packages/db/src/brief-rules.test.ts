@@ -22,6 +22,9 @@ import { closePool, getPool, query, transaction } from './client.ts';
 let orgId: string;
 let userId: string;
 let sourceId: string;
+let productoId: string;
+let campaignProductId: string;
+let productoDeOtraCampanaId: string;
 
 /**
  * Campaña y brief propios de esta corrida.
@@ -78,6 +81,29 @@ beforeAll(async () => {
     [campanaDePrueba],
   );
   briefDePrueba = brief[0]!.id;
+
+  // Producto real de campaña propia (migración 005: anclaje verificable).
+  const [producto] = await query<{ id: string }>(
+    `SELECT id FROM products LIMIT 1`,
+  );
+  productoId = producto!.id;
+  await query(
+    `INSERT INTO campaign_products (campaign_id, product_id, rol, prioridad)
+     VALUES ($1, $2, 'unico', 1)`,
+    [campanaDePrueba, productoId],
+  );
+  const [asociacion] = await query<{ id: string }>(
+    `SELECT id FROM campaign_products WHERE campaign_id = $1`,
+    [campanaDePrueba],
+  );
+  campaignProductId = asociacion!.id;
+
+  // Un `campaign_products.id` de OTRA campaña, para probar el rechazo cruzado.
+  const [otra] = await query<{ id: string }>(
+    `SELECT id FROM campaign_products WHERE campaign_id <> $1 LIMIT 1`,
+    [campanaDePrueba],
+  );
+  productoDeOtraCampanaId = otra!.id;
 });
 
 afterAll(async () => {
@@ -319,5 +345,214 @@ describe('preguntas locales · descartar exige justificación', () => {
         );
       }),
     ).rejects.toThrow(/local_questions_respuesta_con_autor/);
+  });
+});
+
+// ──────────── Migración 005 · Anclaje de producto verificable (DEC-023) ───────
+
+describe('anclaje de producto en brief_fields (prueba 11, 12, 20)', () => {
+  it('permite una fila por producto para la misma clave (campo de nivel producto)', async () => {
+    const filas = await desechable(async (client, { versionId }) => {
+      await client.query(
+        `INSERT INTO brief_fields (brief_version_id, key, value, status, provenance_type, campaign_product_id)
+         VALUES ($1, 'marca_producto[].rtbs', '["144Hz"]'::jsonb, 'found', 'extracted', $2)`,
+        [versionId, campaignProductId],
+      );
+      const r = await client.query(`SELECT count(*) AS n FROM brief_fields WHERE brief_version_id = $1`, [
+        versionId,
+      ]);
+      return Number(r.rows[0].n);
+    });
+    expect(filas).toBe(1);
+  });
+
+  it('rechaza dos filas de campaña (campaign_product_id NULL) con la misma clave', async () => {
+    await expect(
+      desechable(async (client, { versionId }) => {
+        await client.query(
+          `INSERT INTO brief_fields (brief_version_id, key, status, provenance_type)
+           VALUES ($1, 'objetivo.tipo', 'not_found', 'extracted')`,
+          [versionId],
+        );
+        await client.query(
+          `INSERT INTO brief_fields (brief_version_id, key, status, provenance_type)
+           VALUES ($1, 'objetivo.tipo', 'not_found', 'extracted')`,
+          [versionId],
+        );
+      }),
+    ).rejects.toThrow(/brief_fields_unica_campana/);
+  });
+
+  it('un producto de OTRA campaña se rechaza al persistir el campo (prueba 12)', async () => {
+    await expect(
+      desechable(async (client, { versionId }) => {
+        await client.query(
+          `INSERT INTO brief_fields (brief_version_id, key, value, status, provenance_type, campaign_product_id)
+           VALUES ($1, 'marca_producto[].rtbs', '["x"]'::jsonb, 'found', 'extracted', $2)`,
+          [versionId, productoDeOtraCampanaId],
+        );
+      }),
+    ).rejects.toThrow(/no pertenece a la campaña/);
+  });
+
+  it('un producto de la propia campaña se acepta (prueba 11, caso positivo)', async () => {
+    const filas = await desechable(async (client, { versionId }) => {
+      const r = await client.query(
+        `INSERT INTO brief_fields (brief_version_id, key, value, status, provenance_type, campaign_product_id)
+         VALUES ($1, 'marca_producto[].rtbs', '["x"]'::jsonb, 'found', 'extracted', $2) RETURNING id`,
+        [versionId, campaignProductId],
+      );
+      return r.rowCount;
+    });
+    expect(filas).toBe(1);
+  });
+});
+
+describe('preguntas locales por producto (migración 005, pruebas 4, 5, 12)', () => {
+  it('un producto de otra campaña se rechaza al crear una pregunta local', async () => {
+    await expect(
+      desechable(async (client, { versionId }) => {
+        await client.query(
+          `INSERT INTO local_questions (campaign_id, brief_version_id, key, question, reason, campaign_product_id)
+           VALUES ($1, $2, 'marca_producto[].rtbs', '¿RTBs?', 'Campo de producto vacío', $3)`,
+          [campanaDePrueba, versionId, productoDeOtraCampanaId],
+        );
+      }),
+    ).rejects.toThrow(/no pertenece a la campaña/);
+  });
+
+  it('una pregunta compartida (campaign_product_id NULL) no se puede duplicar para la misma versión', async () => {
+    await expect(
+      desechable(async (client, { versionId }) => {
+        await client.query(
+          `INSERT INTO local_questions (campaign_id, brief_version_id, key, question, reason)
+           VALUES ($1, $2, 'target_audiencia.descripcion', '¿Audiencia?', 'Campo vacío')`,
+          [campanaDePrueba, versionId],
+        );
+        await client.query(
+          `INSERT INTO local_questions (campaign_id, brief_version_id, key, question, reason)
+           VALUES ($1, $2, 'target_audiencia.descripcion', '¿Audiencia?', 'Campo vacío')`,
+          [campanaDePrueba, versionId],
+        );
+      }),
+    ).rejects.toThrow(/local_questions_unica_campana/);
+  });
+
+  it('una pregunta específica sí puede repetirse por producto distinto', async () => {
+    const filas = await desechable(async (client, { versionId }) => {
+      await client.query(
+        `INSERT INTO local_questions (campaign_id, brief_version_id, key, question, reason, campaign_product_id)
+         VALUES ($1, $2, 'marca_producto[].rtbs', '¿RTBs?', 'Campo vacío', $3)`,
+        [campanaDePrueba, versionId, campaignProductId],
+      );
+      const r = await client.query(`SELECT count(*) AS n FROM local_questions WHERE brief_version_id = $1`, [
+        versionId,
+      ]);
+      return Number(r.rows[0].n);
+    });
+    expect(filas).toBe(1);
+  });
+});
+
+// ──────────── Migración 005 · Revisión persistida y control optimista ────────
+
+describe('revisión de campos (corrección 2 y 7 del cierre de Sprint 4)', () => {
+  it('un campo nuevo nace con review_status pending y revision 1', async () => {
+    const fila = await desechable(async (client, { versionId }) => {
+      const r = await client.query<{ review_status: string; revision: number }>(
+        `INSERT INTO brief_fields (brief_version_id, key, value, status, provenance_type)
+         VALUES ($1, 'objetivo.tipo', '"awareness"'::jsonb, 'found', 'extracted')
+         RETURNING review_status, revision`,
+        [versionId],
+      );
+      return r.rows[0]!;
+    });
+    expect(fila.review_status).toBe('pending');
+    expect(fila.revision).toBe(1);
+  });
+
+  it('un UPDATE real incrementa revision y actualiza updated_at', async () => {
+    const { antes, despues } = await desechable(async (client, { versionId }) => {
+      const ins = await client.query<{ id: string; revision: number; updated_at: string }>(
+        `INSERT INTO brief_fields (brief_version_id, key, value, status, provenance_type)
+         VALUES ($1, 'objetivo.tipo', '"awareness"'::jsonb, 'found', 'extracted')
+         RETURNING id, revision, updated_at`,
+        [versionId],
+      );
+      const antes = ins.rows[0]!;
+      const upd = await client.query<{ revision: number; updated_at: string }>(
+        `UPDATE brief_fields SET review_status = 'confirmed' WHERE id = $1 RETURNING revision, updated_at`,
+        [antes.id],
+      );
+      return { antes, despues: upd.rows[0]! };
+    });
+    expect(despues.revision).toBe(antes.revision + 1);
+    expect(new Date(despues.updated_at).getTime()).toBeGreaterThanOrEqual(new Date(antes.updated_at).getTime());
+  });
+
+  it('review_status solo admite los tres valores del ciclo de revisión', async () => {
+    await expect(
+      desechable(async (client, { versionId }) => {
+        await client.query(
+          `INSERT INTO brief_fields (brief_version_id, key, status, provenance_type, review_status)
+           VALUES ($1, 'objetivo.tipo', 'not_found', 'extracted', 'inventado')`,
+          [versionId],
+        );
+      }),
+    ).rejects.toThrow(/brief_fields_review_status_valido/);
+  });
+});
+
+describe('brief_field_revisions es de solo inserción (corrección 5 del cierre de Sprint 4)', () => {
+  it('registra el historial de un cambio de campo', async () => {
+    const filas = await desechable(async (client, { versionId }) => {
+      const campo = await client.query<{ id: string }>(
+        `INSERT INTO brief_fields (brief_version_id, key, value, status, provenance_type)
+         VALUES ($1, 'objetivo.tipo', '"awareness"'::jsonb, 'found', 'extracted') RETURNING id`,
+        [versionId],
+      );
+      const r = await client.query(
+        `INSERT INTO brief_field_revisions
+           (brief_field_id, brief_version_id, accion, valor_anterior, valor_nuevo, actor_id)
+         VALUES ($1, $2, 'correct', '"awareness"'::jsonb, '"conversion"'::jsonb, $3) RETURNING id`,
+        [campo.rows[0]!.id, versionId, userId],
+      );
+      return r.rowCount;
+    });
+    expect(filas).toBe(1);
+  });
+
+  it('no admite UPDATE sobre una revisión ya escrita (DELETE sí, solo en cascada al borrar la campaña dueña)', async () => {
+    const revisionId = await desechable(async (client, { versionId }) => {
+      const campo = await client.query<{ id: string }>(
+        `INSERT INTO brief_fields (brief_version_id, key, value, status, provenance_type)
+         VALUES ($1, 'objetivo.tipo', '"awareness"'::jsonb, 'found', 'extracted') RETURNING id`,
+        [versionId],
+      );
+      const r = await client.query<{ id: string }>(
+        `INSERT INTO brief_field_revisions (brief_field_id, brief_version_id, accion, actor_id)
+         VALUES ($1, $2, 'confirm', $3) RETURNING id`,
+        [campo.rows[0]!.id, versionId, userId],
+      );
+      return r.rows[0]!.id;
+    });
+    // La fila ya no existe fuera de la transacción desechada — se prueba la regla
+    // sobre una fila real e íntegra, dentro de su propia transacción de prueba.
+    await expect(
+      desechable(async (client, { versionId }) => {
+        const campo = await client.query<{ id: string }>(
+          `INSERT INTO brief_fields (brief_version_id, key, value, status, provenance_type)
+           VALUES ($1, 'objetivo.tipo', '"awareness"'::jsonb, 'found', 'extracted') RETURNING id`,
+          [versionId],
+        );
+        const r = await client.query<{ id: string }>(
+          `INSERT INTO brief_field_revisions (brief_field_id, brief_version_id, accion, actor_id)
+           VALUES ($1, $2, 'confirm', $3) RETURNING id`,
+          [campo.rows[0]!.id, versionId, userId],
+        );
+        await client.query(`UPDATE brief_field_revisions SET motivo = 'x' WHERE id = $1`, [r.rows[0]!.id]);
+      }),
+    ).rejects.toThrow(/brief_field_revisions no admite UPDATE/);
+    expect(revisionId).toBeDefined();
   });
 });

@@ -14,12 +14,34 @@ jobs:
   web:
     name: Dominio y web
     runs-on: ubuntu-latest
+    # `packages/db` corre contra Postgres real (nunca contra mocks — sección
+    # de pruebas del cierre de Sprint 4). Antes de este servicio, el paso
+    # "Pruebas del dominio" ejecutaba `packages/db` sin base de datos
+    # disponible: el candado de INC-001A lo hacía fallar en cada corrida.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: tclkolos
+          POSTGRES_PASSWORD: devpassword
+          # Se nombra _test desde el arranque: packages/db/vitest.setup.ts
+          # (INC-001A) exige ese sufijo y nunca cae de vuelta a otra base.
+          POSTGRES_DB: tclkolos_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tclkolos -d tclkolos_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # `packages/db`'s migrate/seed corren con `--experimental-strip-types`
+          # (Node 22.6+). El 20 fijado antes nunca lo habría soportado.
+          node-version: '22'
           cache: npm
 
       - run: npm ci
@@ -31,9 +53,28 @@ jobs:
       - name: Typecheck (modo estricto)
         run: npm run typecheck
 
+      # El servicio arranca la base vacía, sin las extensiones que
+      # infra/db/init/01-extensions.sql aplica normalmente vía
+      # docker-entrypoint-initdb.d (docker-compose.yml). Se replican aquí.
+      - name: Preparar extensiones de Postgres
+        env:
+          PGPASSWORD: devpassword
+        run: psql -h localhost -U tclkolos -d tclkolos_test -f infra/db/init/01-extensions.sql
+
+      # pipeline.test.ts (Sprint 2) necesita la campaña y el usuario del seed
+      # incluso cuando su rama de PPT real se omite por falta de material.
+      - name: Migrar y sembrar la base de pruebas (INC-001A)
+        env:
+          DATABASE_URL: postgresql://tclkolos:devpassword@localhost:5432/tclkolos_test
+        run: |
+          npm run migrate --workspace @tcl-kol-os/db
+          npm run seed --workspace @tcl-kol-os/db
+
       # E13-1, E13-2, E13-3: transiciones, aislamiento e inmutabilidad.
       # Estas pruebas bloquean el merge sin excepción (D0-12 §8).
       - name: Pruebas del dominio
+        env:
+          TEST_DATABASE_URL: postgresql://tclkolos:devpassword@localhost:5432/tclkolos_test
         run: npm test
 
       - name: Build
@@ -67,6 +108,17 @@ jobs:
 
       - name: Pruebas
         run: PYTHONPATH=. pytest tests/ -q
+
+      # Corrección 4 del cierre de Sprint 4: TS y Python deben leer
+      # exactamente el mismo docs/product/brief-schema/brief-catalog.json.
+      # Sin dependencias de node_modules — no hace falta `npm ci` aquí.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Catálogo único (TS y Python coinciden)
+        working-directory: ${{ github.workspace }}
+        run: node --experimental-strip-types scripts/verificar-catalogo.mjs
 
   security:
     name: Dependencias y secretos
