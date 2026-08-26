@@ -103,10 +103,10 @@ corregir → generar preguntas → responder vacíos → editar el brief → val
 - **Ciclo de aprobación final** (versión hija al editar una `approved`):
   documentado en DEC-027, no implementado — siguiente incremento.
 - **E7-6** (comentarios internos en el editor): diferida, ver HANDOFF §5.
-- **Demo A y Gate INC-001B** (extracción real de P80): `BLOCKED_EXTERNAL_INPUT`
-  por una clave de OpenRouter inválida. Ver
-  [D0-17](docs/product/D0-17-cierre-sprint4.md) y
-  [INC-001](docs/incidents/INC-001-test-data-collision.md).
+- **Fechas con precisión real (DEC-026) en el editor manual de corrección**:
+  la capa de extracción y la de preguntas locales ya usan el objeto
+  `PrecisedDate`; `corregirCampo` (editor manual) sigue guardando texto
+  plano. Ver [D0-17 §2.2](docs/product/D0-17-cierre-sprint4.md).
 
 ### Corrección posterior al checkpoint (26 de agosto de 2026)
 
@@ -163,6 +163,51 @@ apresurado, y el product owner lo señaló antes de aceptarlo como cierre:
   proveedor real, no el falso) — su camino crítico lo cubre
   `end-to-end.test.ts`, que sí corre y pasa. Detalle completo en
   [D0-17 §6](docs/product/D0-17-cierre-sprint4.md#6-ci-y-reproducibilidad-desde-cero).
+
+### Demo A y cierre del Gate INC-001B (26 de agosto de 2026)
+
+Con la clave de OpenRouter ya renovada por el usuario en su `.env` local, se
+ejecutó la extracción real de P80 de punta a punta contra la aplicación real.
+
+#### Añadido
+
+- **5 pruebas de regresión nuevas** (`brief-fields.test.ts`, 4 casos; 1 caso
+  nuevo en `local-questions.test.ts`) que simulan un campo con `confidence`
+  real antes de corregirlo/confirmarlo — el caso que ningún test anterior
+  cubría, porque `crearBriefManual` siempre siembra `confidence: NULL`.
+
+#### Corregido
+
+- **Corregir, resolver un conflicto, declarar una excepción por producto o
+  responder una pregunta local sobre un campo ya extraído con `confidence`
+  no nulo violaba `brief_fields_manual_sin_confianza`** (error 500 real,
+  encontrado en vivo durante Demo A al corregir un campo real de P80).
+  `corregirCampo`, `resolverConflicto`, `declararExcepcionProducto` (rama de
+  fila existente) y `responderPregunta` cambiaban `provenance_type` a
+  `manual_local` sin poner `confidence = NULL` a la vez. Corregido en las 4
+  rutas. Detalle en [D0-17 §4](docs/product/D0-17-cierre-sprint4.md).
+
+#### Demo A — P80 real (PASS)
+
+Extracción real vía OpenRouter (`google/gemini-2.5-flash-lite`, `USD
+0.005886`, `19504 ms`, `ok_con_descartes`): 51 campos con dato, 5 sin
+encontrar, 0 en conflicto, 69/69 citas verificadas literalmente contra su
+fragmento fuente, 3 productos correctamente anclados sin mezclar valores (21
+campos `marca_producto[].*`), una excepción por producto declarada y
+verificada desde la UI (E7-8, campo `mandatorios`, producto P80), 2 preguntas
+locales generadas y resueltas (una respondida con el objeto `PrecisedDate`
+correcto, una descartada con justificación), los 44 campos `found` restantes
+confirmados o corregidos desde la UI real hasta 0 pendientes de revisión, y
+transición real `local_questions → extraction_review → internal_review` sin
+relajar ninguna guarda. Detalle completo, incluida la re-verificación total
+de CI tras el fix, en [D0-17 §4 y §6.1](docs/product/D0-17-cierre-sprint4.md).
+
+#### Incidente
+
+- **Gate INC-001B: `PASS`.** La extracción perdida en INC-001 no era
+  restaurable de forma idéntica; se generó una extracción nueva con el
+  pipeline corregido, verificada de punta a punta. Detalle en
+  [INC-001 §7](docs/incidents/INC-001-test-data-collision.md#7-regeneración--gate-inc-001b).
 
 ---
 

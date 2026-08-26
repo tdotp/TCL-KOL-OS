@@ -195,6 +195,44 @@ describe('responder y descartar (pruebas 6, 7, 8)', () => {
     expect(campo!.value).toBe('awareness');
   });
 
+  it(
+    'responder una pregunta sobre un campo YA extraído con confidence no nulo ' +
+      'no viola brief_fields_manual_sin_confianza (regresión Demo A)',
+    async () => {
+      // A diferencia de `crearBriefManual` (siempre confidence NULL), esto
+      // simula el caso real que rompió en P80: un campo que el worker ya
+      // había extraído con confianza, y que además tiene una pregunta local
+      // pendiente (aquí, plantada directo — no depende de qué dispara
+      // `generarPreguntas`, solo del `UPDATE` interno de `responderPregunta`).
+      const [campo] = await query<{ id: string }>(
+        `UPDATE brief_fields
+            SET status = 'found', provenance_type = 'extracted', confidence = 0.85,
+                value = '"Informal"'::jsonb
+          WHERE brief_version_id = $1 AND key = 'mensaje_principal.tono' AND campaign_product_id IS NULL
+          RETURNING id`,
+        [versionId],
+      );
+      const [pregunta] = await query<{ id: string }>(
+        `INSERT INTO local_questions (campaign_id, brief_version_id, key, question, reason, criticidad)
+         VALUES ($1, $2, 'mensaje_principal.tono', '¿Cuál es el tono?', 'Ajuste manual', 'informativo')
+         RETURNING id`,
+        [campanaPropia, versionId],
+      );
+
+      const resultado = await responderPregunta(actor, pregunta!.id, { answerValue: 'Cercano y directo' });
+      expect(resultado.ok, !resultado.ok ? resultado.error.message : '').toBe(true);
+
+      const [fila] = await query<{
+        value: unknown;
+        provenance_type: string;
+        confidence: string | null;
+      }>(`SELECT value, provenance_type::text, confidence FROM brief_fields WHERE id = $1`, [campo!.id]);
+      expect(fila!.value).toBe('Cercano y directo');
+      expect(fila!.provenance_type).toBe('manual_local');
+      expect(fila!.confidence).toBeNull();
+    },
+  );
+
   it('una fecha respondida como texto libre se rechaza (corrección 3)', async () => {
     const preguntasFecha = await listarPreguntas(actor, campanaPropia, { status: 'pendiente' }).then((r) =>
       r.ok ? r.value.filter((p) => p.key === 'practico.fecha_inicio') : [],

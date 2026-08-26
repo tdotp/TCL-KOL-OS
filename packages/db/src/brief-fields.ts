@@ -114,6 +114,7 @@ export async function corregirCampo(
     const actualizado = await client.query<{ revision: number }>(
       `UPDATE brief_fields
           SET value = $1::jsonb, status = 'found', provenance_type = 'manual_local',
+              confidence = NULL,
               review_status = 'corrected', reviewed_by = $2, reviewed_at = now()
         WHERE id = $3 AND revision = $4
         RETURNING revision`,
@@ -237,6 +238,7 @@ export async function declararExcepcionProducto(
       const actualizado = await client.query<{ revision: number }>(
         `UPDATE brief_fields
             SET value = $1::jsonb, status = 'found', provenance_type = 'manual_local',
+                confidence = NULL,
                 review_status = 'corrected', reviewed_by = $2, reviewed_at = now()
           WHERE id = $3
           RETURNING revision`,
@@ -346,6 +348,7 @@ export async function resolverConflicto(
     const actualizado = await client.query<{ revision: number }>(
       `UPDATE brief_fields
           SET value = $1::jsonb, status = 'found', provenance_type = 'manual_local',
+              confidence = NULL,
               review_status = 'corrected', reviewed_by = $2, reviewed_at = now()
         WHERE id = $3 AND revision = $4
         RETURNING revision`,

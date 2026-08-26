@@ -389,6 +389,7 @@ export async function responderPregunta(
     await client.query(
       `UPDATE brief_fields
           SET value = $1::jsonb, status = 'found', provenance_type = 'manual_local',
+              confidence = NULL,
               review_status = 'confirmed', reviewed_by = $2, reviewed_at = now()
         WHERE id = $3`,
       [JSON.stringify(opciones.answerValue), actor.id, campoFila.id],

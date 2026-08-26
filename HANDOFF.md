@@ -1,9 +1,9 @@
 # Handoff — TCL KOL OS
 
-Estado a **26 de agosto de 2026**. Base de este cierre: `10788d9`. **Checkpoint
-técnico commiteado en `516de31`** — preserva lo construido, no es el cierre
-definitivo de Sprint 4: falta Demo A y Gate INC-001B, bloqueados por una clave
-de OpenRouter inválida (§7). Detalle completo y matriz de estado en
+Estado a **26 de agosto de 2026**. Base de este cierre: `10788d9`.
+**Checkpoints técnicos:** `516de31` (reproducibilidad, E7-8), `b9b2768` (CI
+genuinamente verde). **Sprint 4 cerrado**: Demo A se ejecutó con P80 real y
+Gate INC-001B quedó en `PASS` — detalle completo y matriz de estado en
 [D0-17](docs/product/D0-17-cierre-sprint4.md).
 
 Este archivo existe para que una sesión nueva pueda continuar sin releer el
@@ -37,11 +37,11 @@ consecuencia de eso.
 | Sprint 1 — identidad, campañas multiproducto, aislamiento | ✅ |
 | Sprint 2 — fuentes documentales, cola, parsers | ✅ |
 | Sprint 3 — índice vectorial, extracción con evidencia, UI-08/UI-11 | ✅ |
-| **Sprint 4 — ciclo de estados real, anclaje de producto, Épica E6 (preguntas locales), E7 (editor, incl. E7-8)** | 🟡 **checkpoint técnico, no cierre definitivo — ver §5 y D0-17** |
-| Demo A + Gate INC-001B (P80 real) | ⬅️ **bloqueado por clave de OpenRouter — único pendiente antes del cierre** |
+| **Sprint 4 — ciclo de estados real, anclaje de producto, Épica E6 (preguntas locales), E7 (editor, incl. E7-8)** | ✅ **cerrado — ver D0-17** |
+| Demo A + Gate INC-001B (P80 real) | ✅ **ejecutada y verificada — ver D0-17 §4** |
 | Ciclo de aprobación final, exportación, traducción, Drive/OIDC/OCR | ⬅️ siguiente incremento |
 
-**Pruebas al cierre de este checkpoint:** 61 dominio (vitest) · 110 integración
+**Pruebas al cierre: 61 dominio (vitest) · 115 integración
 `packages/db` (vitest, contra Postgres real, sin ningún dato acumulado) · 97
 worker (pytest) · `ruff check .` y `mypy app` limpios sobre todo
 `services/ai-worker` · verificación cruzada de catálogo TS/Python en verde ·
@@ -49,8 +49,8 @@ worker (pytest) · `ruff check .` y `mypy app` limpios sobre todo
 `next build` compila, incluidas las tres rutas nuevas (`/brief/editar` con
 E7-8, `/preguntas`). **La receta literal de `ci.yml` (Postgres + Redis +
 worker/consumidor con `AI_PROVIDER=fake`, todos efímeros y recién creados)
-se corrió completa: cero fallas** — la primera vez que se declaró esto
-"corregido" fue apresurado (§8, punto 11); esta vez está reproducido.
+se corrió completa: cero fallas** — verificada de nuevo tras el defecto real
+de `confidence`/`provenance_type` encontrado durante Demo A (§8, punto 12).
 
 ### Lo que cambia respecto al HANDOFF anterior
 
@@ -204,17 +204,6 @@ próxima sesión no los redescubra por accidente:
 
 ## 7. Bloqueos externos (no dependen del código)
 
-- **La clave de OpenRouter en `.env` ya no es válida** (`AIError: La clave de
-  OpenRouter no es válida o expiró.`) — confirmado el 26 de agosto de 2026
-  al intentar regenerar la extracción real de P80 (Gate INC-001B) y también
-  visto antes en los logs del `consumidor` al indexar embeddings. **Esto
-  bloquea la Demo A y el cierre de Gate INC-001B**, ambos con estado
-  `BLOCKED_EXTERNAL_INPUT`. No es un bug: el ciclo de estados manejó la
-  falla exactamente como debía (versión 3 de P80 quedó en
-  `processing_failed`, con «Reintentar extracción» visible). En cuanto haya
-  una clave válida, basta con abrir `/campanas/f9a857bf-.../brief` y pulsar
-  «Reintentar extracción» — no hace falta recrear nada. Detalle completo en
-  [INC-001 §7](docs/incidents/INC-001-test-data-collision.md#7-regeneración--gate-inc-001b).
 - **Material real de más campañas** — desbloquea los casos `real_derivado` del
   gold set (D0-13) y completa D0-14.
 - **Tiempo de ciclo del brief** sigue sin medir (D0-14 §8).
@@ -320,6 +309,26 @@ Están documentados porque cada uno costó tiempo y ninguno era obvio:
    literal de `ci.yml` contra servicios efímeros recién creados: cero
    fallas.** Detalle completo en
    [D0-17 §6](docs/product/D0-17-cierre-sprint4.md#6-ci-y-reproducibilidad-desde-cero).
+12. **Corregir un campo ya extraído con `confidence` no nulo rompía una
+    restricción de base real (`brief_fields_manual_sin_confianza`), y ningún
+    test lo detectó antes de Demo A.** `corregirCampo`, `resolverConflicto`,
+    `declararExcepcionProducto` (rama de fila existente) y `responderPregunta`
+    cambiaban `provenance_type` a `manual_local` sin poner `confidence =
+    NULL` — la migración 004 exige que un campo `manual_local` nunca lleve
+    una confianza estimada por IA. Ninguna prueba anterior lo cubría porque
+    `crearBriefManual` siempre siembra `confidence: NULL`; **la única forma
+    de encontrarlo era corregir un campo realmente extraído**, que es
+    exactamente lo que hizo Demo A (error 500 real en la UI). Corregido en
+    las 4 rutas, 5 pruebas de regresión nuevas, toda la matriz de CI vuelta a
+    correr antes de cerrar. Detalle en
+    [D0-17 §4 y §6.1](docs/product/D0-17-cierre-sprint4.md#6-ci-y-reproducibilidad-desde-cero).
+    **Lección:** un helper de prueba que siembra datos "limpios" por defecto
+    (aquí, `confidence` siempre `NULL`) puede esconder un defecto entero de
+    una rama de código que solo se activa con datos "sucios" reales — vale
+    la pena, para cualquier módulo que combine dos o más campos derivados
+    entre sí, tener al menos una prueba que simule el estado real más
+    cercano a producción, no solo el estado inicial que siembra el propio
+    helper de pruebas.
 
 ---
 

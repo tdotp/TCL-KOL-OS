@@ -1,6 +1,6 @@
 # INC-001 · Colisión de datos de prueba con una versión real de P80
 
-**Fecha:** 25 de agosto de 2026. **Severidad:** alta (pérdida de datos derivados, no de fuente). **Estado:** contenido (gate A en PASS); regeneración intentada y bloqueada por una clave de OpenRouter inválida — causa externa, no de código (gate B, ver §7).
+**Fecha:** 25-26 de agosto de 2026. **Severidad:** alta (pérdida de datos derivados, no de fuente). **Estado:** cerrado — Gate A en `PASS` (contención), Gate B en `PASS` (regeneración real completada y verificada, ver §7).
 
 ## 1. Qué pasó
 
@@ -48,25 +48,34 @@ Ejecutado y verificado el 25 de agosto de 2026:
 7. **Doble corrida verificada** (`npm run test --workspace @tcl-kol-os/db` contra `tclkolos_test`, dos veces consecutivas): **81/81 pruebas en verde ambas veces**, mismo resultado. Snapshot de P80 en `tclkolos_test` (solo conteos e ids técnicos, nunca contenido) antes y después de las dos corridas: `fuentes=2, fragmentos=14, versiones=0` — sin cambio. Total de campañas en `tclkolos_test` antes y después: 3 — sin residuo. Total de `brief_versions` en toda la base tras las dos corridas: 0.
 8. **Base de desarrollo real (`tclkolos`) verificada sin cambios**: P80 sigue con exactamente 1 versión, `status='approved'`, 41 campos — la misma que existía antes de iniciar la contención.
 
-## 7. Regeneración — Gate INC-001B
+## 7. Regeneración — Gate INC-001B (PASS)
 
-**Intentada el 26 de agosto de 2026. Bloqueada por una causa externa, no por código.**
-
-Con el anclaje de producto, el ciclo de estados, la persistencia de campos/evidencia y el aislamiento de pruebas ya terminados, se verificó primero el material de partida en `tclkolos` (base de desarrollo real, nunca `tclkolos_test`):
+**Primer intento, 26 de agosto de 2026 (temprano): bloqueado por una causa externa.** Con el anclaje de producto, el ciclo de estados, la persistencia de campos/evidencia y el aislamiento de pruebas ya terminados, se verificó primero el material de partida en `tclkolos` (base de desarrollo real, nunca `tclkolos_test`):
 
 - **Fuentes intactas:** `Brief P80 del cliente.docx` y `Brief P80.md`, `status='procesado'`, 7 fragmentos cada una (14 en total) — igual que en la contención (§6.7).
 - **Productos intactos:** P80 Ultra (flagship, 60%), P80 Pro (secundario, 20%), P80 (entrada, 10%).
 - **Único brief_version existente:** versión 2, `status='approved'`, 41 campos — anterior a este incidente, sin relación con la versión perdida.
 
-Se disparó una extracción real **a través de la aplicación** (botón «Extraer campos de las fuentes» en `/campanas/{id}/brief`, nunca SQL manual — corrección 8 del plan aprobado), con el worker HTTP real (`AI_ENABLED=true`, `AI_PROVIDER=openrouter`) levantado vía `docker compose up -d worker`.
+Se disparó una extracción real **a través de la aplicación** (botón «Extraer campos de las fuentes» en `/campanas/{id}/brief`, nunca SQL manual — corrección 8 del plan aprobado), con el worker HTTP real (`AI_ENABLED=true`, `AI_PROVIDER=openrouter`) levantado vía `docker compose up -d worker`. La llamada real a OpenRouter falló con `AIError: La clave de OpenRouter no es válida o expiró.` (`services/ai-worker/app/ai/openrouter.py:125`).
 
-**Resultado:** la llamada real a OpenRouter falló con `AIError: La clave de OpenRouter no es válida o expiró.` (`services/ai-worker/app/ai/openrouter.py:125`). La clave vigente en el `.env` local ya no es válida — la misma causa que se había observado en los logs del `consumidor` para embeddings, ahora confirmada también para la llamada de extracción.
+**Lo que sí quedó demostrado en ese primer intento, y es una prueba positiva independiente del bloqueo:** el ciclo de estados manejó la falla exactamente como está diseñado. Se creó la versión de trabajo 3 (la 2 es terminal/`approved`, así que `obtenerOCrearVersionDeTrabajo` correctamente no la reutilizó), transicionó a `processing`, y al fallar la llamada real transicionó a `processing_failed` — sin persistir campos a medias, con los dos eventos de auditoría (`brief.transition`) registrados, y con el botón «Reintentar extracción» visible en la UI para esa versión.
 
-**Lo que sí queda demostrado, y es una prueba positiva independiente del bloqueo:** el ciclo de estados manejó la falla exactamente como está diseñado. Se creó la versión de trabajo 3 (la 2 es terminal/`approved`, así que `obtenerOCrearVersionDeTrabajo` correctamente no la reutilizó), transicionó a `processing`, y al fallar la llamada real transicionó a `processing_failed` — sin persistir campos a medias, con los dos eventos de auditoría (`brief.transition`) registrados, y con el botón «Reintentar extracción» visible en la UI para esa versión. No es una simulación: es el mismo camino que seguiría cualquier corrida real, deteniéndose exactamente donde debía.
+**Segundo intento, mismo día: la clave de OpenRouter renovada por el usuario en su `.env` local (`docker compose up -d worker` / `docker compose up -d consumidor` para forzar la recarga — `docker restart` no releía el `.env`, lección operativa registrada aparte). Se pulsó «Reintentar extracción» sobre la misma versión 3 — no hizo falta recrear nada.**
 
-**Pendiente de verdad:** obtener una clave de OpenRouter válida (rotarla o confirmar saldo/vigencia) y volver a intentar «Reintentar extracción» sobre la versión 3 ya creada — no hace falta recrear nada. Cuando eso funcione, esta sección se completa con: confirmación de los tres productos anclados en los campos `marca_producto.*`, campos y evidencia verificados, estado final en `extraction_review`, y la comprobación de que correr las pruebas de `packages/db` después no modifica esta extracción (corren contra `tclkolos_test`, nunca contra `tclkolos` — ver §6.3-6.5).
+**Resultado: extracción real completada.** `google/gemini-2.5-flash-lite`, `output_status: ok_con_descartes`, latencia `19504 ms`, costo `USD 0.005886`. Transición real `processing → extraction_review`. Verificado en `tclkolos` al terminar:
 
-**No se declara la Demo A ni el cierre de Sprint 4 completos mientras este punto siga pendiente** — quedan en `BLOCKED_EXTERNAL_INPUT` en el reporte de cierre ([D0-17](../product/D0-17-cierre-sprint4.md)), con esta misma causa.
+- **Los tres productos, sin mezclar**: 21 campos `marca_producto[].*` (7 claves × 3 productos), cada uno con su `campaign_product_id` real — ninguno `NULL`, ninguno con valores cruzados entre P80 / P80 Pro / P80 Ultra.
+- **69 evidencias, 69/69 citas verificadas literalmente** contra el texto real de su `source_fragment` (misma normalización que usa el worker para aceptarlas: espacios colapsados, minúsculas).
+- **51 campos con dato, 5 sin encontrar, 0 en conflicto.**
+- Los 44 campos `found` que llegaron `sin confirmar` se confirmaron o corrigieron uno por uno desde la UI real de `/campanas/{id}/brief`, hasta 0 pendientes de revisión.
+- Una excepción por producto declarada y verificada (E7-8, campo `mandatorios`, producto P80).
+- 2 preguntas locales generadas (`practico.fecha_inicio`, `practico.fecha_fin`); una respondida con el objeto `PrecisedDate` correcto, una descartada con justificación real.
+- Transición final real a `internal_review`, con todas las guardas del dominio evaluadas de verdad (`guardCriticalFieldsResolved`, `guardProductFieldsAnchored`, `guardAllFieldsReviewed`, `guardClaimsHaveEvidence`, `guardNoPendingQuestions`) — ninguna relajada.
+- Confirmado que correr la suite de `packages/db` después no modificó esta extracción: las pruebas corren contra `tclkolos_test`, nunca contra `tclkolos` (candado de INC-001A, §6.3-6.5), y una relectura de `brief_versions`/`brief_fields` de P80 tras la corrida completa de CI mostró el mismo estado.
+
+**Un defecto de código real apareció durante este proceso** (no en la extracción en sí, sino al corregir manualmente un campo ya extraído con `confidence` no nulo) — documentado, corregido, y re-verificado con toda la matriz de CI en [D0-17 §4 y §6.1](../product/D0-17-cierre-sprint4.md).
+
+**Gate INC-001B: `PASS`.** Detalle completo del recorrido y de cada punto verificado en [D0-17 §4](../product/D0-17-cierre-sprint4.md).
 
 ## 8. Riesgo residual
 
