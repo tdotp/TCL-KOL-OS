@@ -2,7 +2,7 @@
 
 Plataforma interna de SmartPR para coordinar campañas de influencers (KOL) de TCL, desde la recepción de la estrategia global hasta el cierre y medición de cada campaña.
 
-**Estado:** MVP 1 · cierre de Sprint 3 + Sprint 4 (brief funcional de punta a punta: extraer, revisar, generar preguntas, editar y enviar a revisión interna — con IA y sin ella)
+**Estado:** MVP 1 · cierre de Sprint 5 (ciclo completo del brief: de `internal_review` a `approved` — comentarios internos, fechas estructuradas, aprobación interna, revisión y decisión del cliente, versionado posterior a aprobación)
 **Documento rector:** [`TCL_KOL_OS_DOCUMENTO_MAESTRO_EJECUCION.md`](TCL_KOL_OS_DOCUMENTO_MAESTRO_EJECUCION.md)
 
 ---
@@ -220,7 +220,8 @@ Todas las variables están documentadas en [`.env.example`](.env.example).
 | Roles y permisos | [`docs/product/D0-07-matriz-roles-permisos.md`](docs/product/D0-07-matriz-roles-permisos.md) |
 | Prototipo navegable | [`docs/product/D0-10-prototipo/index.html`](docs/product/D0-10-prototipo/index.html) |
 | Estado del proyecto para retomar sesión | [`HANDOFF.md`](HANDOFF.md) |
-| Cierre de este incremento (matriz de requisitos) | [`docs/product/D0-17-cierre-sprint4.md`](docs/product/D0-17-cierre-sprint4.md) |
+| Cierre de Sprint 5 (matriz de requisitos, ciclo de aprobación) | [`docs/product/D0-18-cierre-sprint5.md`](docs/product/D0-18-cierre-sprint5.md) |
+| Cierre de Sprint 4 (brief hasta `internal_review`) | [`docs/product/D0-17-cierre-sprint4.md`](docs/product/D0-17-cierre-sprint4.md) |
 | Incidente de datos de prueba (INC-001) | [`docs/incidents/INC-001-test-data-collision.md`](docs/incidents/INC-001-test-data-collision.md) |
 
 ---
@@ -239,4 +240,4 @@ Todas las variables están documentadas en [`.env.example`](.env.example).
 
 ## Siguiente incremento
 
-**Ciclo de aprobación final**: crear una versión hija al editar un brief `approved` y marcar la anterior `superseded` (documentado en DEC-027, no implementado todavía). Después: exportación, traducción y vista de cliente — ver [`HANDOFF.md`](HANDOFF.md) §5 para el corte exacto de alcance de este incremento.
+Exportación, traducción, OCR, Google Drive, OIDC y CRM de influencers — ver [`HANDOFF.md`](HANDOFF.md) §5 para el corte exacto de alcance. El ciclo de aprobación completo (DEC-027) ya está implementado — ver [`D0-18`](docs/product/D0-18-cierre-sprint5.md).

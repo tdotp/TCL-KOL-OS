@@ -75,9 +75,19 @@ describe('vista del cliente TCL (DEC-012 / ADR-004)', () => {
     expect(canAccessResource(user('cliente', 'org-tcl'), scope({ visibility: 'compartida' }))).toBe(true);
   });
 
-  it('NO puede aprobar dentro del sistema: la aprobación ocurre fuera', () => {
+  it('NO puede aprobar internamente: eso sigue siendo exclusivo de admin/director', () => {
     expect(roleCan('cliente', 'brief:approve_internal')).toBe(false);
-    expect(roleCan('cliente', 'brief:register_client_decision')).toBe(false);
+  });
+
+  it('desde Sprint 5 (Fase D) sí decide sobre su propia revisión, pero nada más', () => {
+    // `brief:register_client_decision` ya existía, reservada para que el
+    // personal registrara la decisión del cliente en su nombre (DEC-012) —
+    // ahora el propio cliente también la ejerce (DEC-030).
+    expect(roleCan('cliente', 'brief:register_client_decision')).toBe(true);
+    expect(roleCan('cliente', 'brief:request_client_changes')).toBe(true);
+    // Nunca la transición genérica: solo esas dos, mapeadas explícitamente en
+    // `packages/db/src/transitions.ts` (`accionParaDestino`).
+    expect(roleCan('cliente', 'brief:transition')).toBe(false);
   });
 
   it('no puede editar, cargar fuentes ni ver auditoría', () => {
@@ -86,8 +96,19 @@ describe('vista del cliente TCL (DEC-012 / ADR-004)', () => {
     }
   });
 
-  it('solo puede leer campaña y brief, y exportar', () => {
-    expect([...actionsFor('cliente')].sort()).toEqual(['brief:export', 'brief:read', 'campaign:read']);
+  it('nunca ve comentarios internos, abiertos o resueltos (Sprint 5, Fase B — decisión explícita del product owner)', () => {
+    expect(roleCan('cliente', 'comment:internal')).toBe(false);
+    expect(roleCan('cliente', 'comment:client_visible')).toBe(false);
+  });
+
+  it('solo lee campaña y brief, exporta, y decide sobre su propia revisión — nada más', () => {
+    expect([...actionsFor('cliente')].sort()).toEqual([
+      'brief:export',
+      'brief:read',
+      'brief:register_client_decision',
+      'brief:request_client_changes',
+      'campaign:read',
+    ]);
   });
 });
 

@@ -1,10 +1,13 @@
 # Handoff — TCL KOL OS
 
-Estado a **26 de agosto de 2026**. Base de este cierre: `10788d9`.
-**Checkpoints técnicos:** `516de31` (reproducibilidad, E7-8), `b9b2768` (CI
-genuinamente verde). **Sprint 4 cerrado**: Demo A se ejecutó con P80 real y
-Gate INC-001B quedó en `PASS` — detalle completo y matriz de estado en
-[D0-17](docs/product/D0-17-cierre-sprint4.md).
+Estado a **15 de septiembre de 2026**. Base de este cierre: `106f622` (Sprint
+4 + Demo A + Gate INC-001B, todo en `PASS` — ver
+[D0-17](docs/product/D0-17-cierre-sprint4.md)). **Sprint 5 cerrado**: el ciclo
+completo del brief corre de punta a punta — comentarios internos, fechas
+estructuradas, aprobación interna, revisión y decisión del cliente,
+versionado posterior a aprobación — verificado con 330 pruebas automatizadas
+y dos demos reales en el navegador (Demo C, Demo D). Detalle completo y
+matriz de estado en [D0-18](docs/product/D0-18-cierre-sprint5.md).
 
 Este archivo existe para que una sesión nueva pueda continuar sin releer el
 historial. No repite lo que ya está en otros documentos: los enlaza.
@@ -39,27 +42,37 @@ consecuencia de eso.
 | Sprint 3 — índice vectorial, extracción con evidencia, UI-08/UI-11 | ✅ |
 | **Sprint 4 — ciclo de estados real, anclaje de producto, Épica E6 (preguntas locales), E7 (editor, incl. E7-8)** | ✅ **cerrado — ver D0-17** |
 | Demo A + Gate INC-001B (P80 real) | ✅ **ejecutada y verificada — ver D0-17 §4** |
-| Ciclo de aprobación final, exportación, traducción, Drive/OIDC/OCR | ⬅️ siguiente incremento |
+| **Sprint 5 — ciclo completo del brief: `internal_review → approved`, comentarios internos (E7-6), fechas estructuradas (DEC-026), versionado posterior a aprobación (DEC-027)** | ✅ **cerrado — ver D0-18** |
+| Demo C (ciclo de aprobación) + Demo D (versión nueva) | ✅ **ejecutadas y verificadas — ver D0-18 §4** |
+| Exportación, traducción, Drive/OIDC/OCR, CRM de influencers | ⬅️ siguiente incremento |
 
-**Pruebas al cierre: 61 dominio (vitest) · 115 integración
+**Pruebas al cierre: 80 dominio (vitest) · 153 integración
 `packages/db` (vitest, contra Postgres real, sin ningún dato acumulado) · 97
 worker (pytest) · `ruff check .` y `mypy app` limpios sobre todo
 `services/ai-worker` · verificación cruzada de catálogo TS/Python en verde ·
 `npm run lint`, `npm run typecheck` y `npm run format:check` limpios ·
-`next build` compila, incluidas las tres rutas nuevas (`/brief/editar` con
-E7-8, `/preguntas`). **La receta literal de `ci.yml` (Postgres + Redis +
-worker/consumidor con `AI_PROVIDER=fake`, todos efímeros y recién creados)
-se corrió completa: cero fallas** — verificada de nuevo tras el defecto real
-de `confidence`/`provenance_type` encontrado durante Demo A (§8, punto 12).
+`next build` compila, incluidas las rutas nuevas de Sprint 5. **La receta
+literal de `ci.yml` (Postgres + Redis + worker/consumidor con
+`AI_PROVIDER=fake`, todos efímeros) se corrió completa: cero fallas** —
+contra Docker local (puerto alternativo por un conflicto de otro proyecto en
+esta máquina, `.env` restaurado a sus valores originales al cerrar; no se
+corrió dentro del runner real de GitHub Actions en esta sesión — ver D0-18
+§8). Detalle completo en [D0-18](docs/product/D0-18-cierre-sprint5.md).
 
 ### Lo que cambia respecto al HANDOFF anterior
 
-La versión previa de este archivo declaraba Sprint 3 cerrado y Sprint 4 como
-"siguiente", pero verificar el código real mostró que era optimista en dos
-frentes: la máquina de estados del dominio (12 estados, ~25 transiciones)
-nunca se conectaba a nada fuera de su propio test, y la pantalla de
-extracción era de solo lectura sin camino de confirmación, corrección, ni
-manual. Este incremento cierra esa brecha:
+Sprint 5 implementó el ciclo de aprobación completo que DEC-027 dejaba
+documentado sin código desde Sprint 4. Al ejercitarlo por primera vez con
+datos reales —nunca antes ninguna transición había llegado a `approved`—
+aparecieron seis defectos reales que ninguna prueba en memoria había
+detectado, todos corregidos antes de cerrar (detalle completo en D0-18 §5):
+un trigger de base sin una excepción que el dominio ya aplicaba (DEC-028),
+una validación nueva demasiado amplia que bloqueaba campos sin control
+propio en el editor, dos rutas de consulta que filtraban por la organización
+del actor cuando el actor era el rol `cliente` (que es de otra organización
+por definición), y una acción que redirigía a una ruta que nunca se
+construyó. El detalle de qué se cerró en Sprint 4 (el estado sobre el que
+se construyó Sprint 5) sigue siendo válido tal cual está más abajo:
 
 - El ciclo de estados corre de verdad: `draft → processing → extraction_review
   → local_questions → extraction_review → internal_review`, con reintento
@@ -188,19 +201,20 @@ próxima sesión no los redescubra por accidente:
 
 | Qué | Por qué queda fuera |
 |---|---|
-| **Ciclo de aprobación final** (crear versión hija al editar una `approved`, marcar la anterior `superseded`) | DEC-027 lo documenta pero no lo implementa. Este incremento llega hasta `internal_review`. Protegido igual por ADR-003/triggers de inmutabilidad. |
-| **E7-6 — comentarios internos en el editor** | Prioridad `should`, explícitamente diferida. El editor (E7/UI-10) cubre navegación por sección, selector de producto, edición con autoguardado, confirmación y evidencia inline, y ahora también excepción por producto (E7-8, ver más abajo). |
-| **Fechas con precisión real (DEC-026) en el editor manual** | El modelo de dominio (`PrecisedDate`) existe y `responderPregunta` lo valida; `corregirCampo` (el editor, `CampoEditable.tsx`) todavía guarda `practico.fecha_inicio`/`fecha_fin` como texto plano. Verificado en vivo en Demo B. |
-| **Exportación, traducción, vista de cliente, CRM de influencers, métricas de campaña** | Excluidos por el alcance original de este incremento (§2 del pedido). |
+| **Exportación, traducción, CRM de influencers, métricas de campaña, OCR, Google Drive, OIDC** | Excluidos por el alcance original de Sprint 5 (fuera del pedido explícitamente). |
+| **Control dedicado para campos `lista`/`enum`/`numero`/`lista_objetos` en el editor manual** | Sigue siendo un `<input>` de texto plano sin validación estructural, deuda ya marcada `PARTIAL` desde el cierre de Sprint 4 (E7-3) — confirmada de nuevo al acotar a propósito la validación de `PrecisedDate` en Sprint 5 a `valueType:'fecha'` (D0-18 §5, defecto 3), para no bloquear esos campos sin ofrecer un control para satisfacerlos. |
+| **Verificación de Fase J contra el runner real de GitHub Actions** | Se corrió la receta literal de `ci.yml` contra Docker local en esta sesión (puerto alternativo, ver D0-18 §8); no dentro de GitHub Actions. |
+| **Más de una organización cliente** | El modelo actual (`canAccessResource` para `cliente` decide por `visibility`, no por organización) asume una sola organización cliente, igual que ya asumía DEC-011. Documentado en D0-18 §8 para que no se redescubra por accidente si en el futuro hay más de un cliente. |
 
 ---
 
 ## 6. Lo que necesita decisión del product owner
 
-| # | Asunto | Por qué importa |
-|---|---|---|
-| 1 | **¿Cuándo se acomete el ciclo de aprobación final?** | DEC-027 lo deja documentado; falta decidir si es el siguiente incremento o si hay algo más urgente primero. |
-| 2 | **Fechas con precisión real (DEC-026) en el editor manual** | El modelo de dominio existe; falta decidir si vale la pena llevarlo también a `corregirCampo`/`CampoEditable.tsx`, o si el texto plano es aceptable para el editor manual mientras el camino de preguntas locales sí sea preciso. |
+Ninguna decisión de producto pendiente y sin resolver al cierre de este
+incremento — las que existían (ciclo de aprobación final, fechas con
+precisión en el editor manual) quedaron implementadas. Las nuevas
+decisiones tomadas en el camino están en el decision-log, DEC-030 a
+DEC-034.
 
 ## 7. Bloqueos externos (no dependen del código)
 
@@ -329,6 +343,27 @@ Están documentados porque cada uno costó tiempo y ninguno era obvio:
     entre sí, tener al menos una prueba que simule el estado real más
     cercano a producción, no solo el estado inicial que siembra el propio
     helper de pruebas.
+13. **`client_review → approved` nunca se había ejecutado en toda la vida del
+    proyecto** hasta Sprint 5 (DEC-027 quedaba documentado, no implementado).
+    Al ejercitarlo por primera vez con datos reales aparecieron seis
+    defectos que ninguna prueba en memoria había detectado — mismo patrón
+    exacto que el punto 12: **un camino nunca ejercitado no está probado,
+    esté o no "cubierto" por una prueba que corre en memoria contra datos
+    de mentira.** El más costoso: un trigger de base (`claim_exige_evidencia`,
+    migración 004) le faltaba la excepción de DEC-028 que el dominio ya
+    aplicaba desde Sprint 4 — nadie lo había notado porque nada había
+    llegado nunca a `approved` con un campo crítico resuelto por pregunta
+    local. Detalle completo de los seis defectos en
+    [D0-18 §5](docs/product/D0-18-cierre-sprint5.md).
+14. **Validar de más rompe tanto como validar de menos.** Al exigir
+    `PrecisedDate` en `corregirCampo` para cumplir DEC-026, la primera
+    versión lo aplicó a todos los `valueType`, no solo `fecha` — bloqueó de
+    inmediato cualquier corrección de un campo `lista` (`practico.hitos`)
+    desde el editor manual, que solo tiene un `<input>` de texto plano y
+    ningún control para satisfacer esa forma. Se encontró probando el
+    editor en vivo, no con una prueba automatizada — ninguna prueba
+    existente tocaba un campo `lista` a través de `corregirCampo`. Corregido
+    acotando la validación exactamente al alcance que pidió Sprint 5.
 
 ---
 
@@ -336,30 +371,43 @@ Están documentados porque cada uno costó tiempo y ninguno era obvio:
 
 ```
 packages/domain/     Reglas puras. No importa de apps/ ni services/ (ADR-008)
-  brief-states.ts      12 estados, ~25 transiciones, 9 guardas
+  brief-states.ts      12 estados, ~25 transiciones, 9 guardas — incluidas
+                        las dos que ahora también autorizan al rol `cliente`
   brief-catalog.ts     Catálogo único de 41 campos (lee brief-catalog.json)
+  field-values.ts       validarValorEstructurado — validación por valueType (Sprint 5)
   types.ts             BriefField, LocalQuestion, CampaignProduct, PrecisedDate...
-  permissions.ts       Qué rol puede qué
+  permissions.ts       Qué rol puede qué — cliente ahora con dos acciones más
 
 packages/db/         Aplica la política del dominio; nunca la redefine
   brief-version.ts     obtenerOCrearVersionDeTrabajo (DEC-024)
-  transitions.ts        transicionarBrief — único punto que cambia status
-  brief-fields.ts        confirmarCampo/corregirCampo/resolverConflicto (revisión optimista)
+  transitions.ts        transicionarBrief — único punto que cambia status;
+                          accionParaDestino mapea to→Action; sube visibility (DEC-032)
+  brief-fields.ts        confirmarCampo/corregirCampo/resolverConflicto (revisión optimista);
+                          validarSiEsFecha acota DEC-026 a valueType:'fecha'
   local-questions.ts    generarPreguntas/responderPregunta/descartarPregunta (E6)
   manual.ts              crearBriefManual — camino sin IA
   extraction.ts          Llama al worker, valida producto, persiste, transiciona
+  client-review.ts       (Sprint 5) solicitarCambiosInternos/aprobarInternamente/
+                          solicitarCambiosCliente/aprobarComoCliente
+  versioning.ts           (Sprint 5) crearVersionHija — candado atómico (DEC-033)
+  comments.ts             (Sprint 5) comentarios internos por campo (E7-6)
 
-services/ai-worker/  Único que habla con el proveedor de IA
+services/ai-worker/  Único que habla con el proveedor de IA — sin cambios en Sprint 5
   brief_schema.py      Lee el catálogo único (antes: tabla propia)
   extraction.py         Anclaje de producto, mandatorios vs. restricciones, fechas con precisión
   ai/provider.py         Selección real/fake según AI_PROVIDER
   ai/fake_provider.py    Determinístico, solo pruebas — nunca demos ni producción
 
 apps/web/            Next.js 15. Server actions en src/lib/actions.ts
-  campanas/[id]/brief/editar/   E7/UI-10 — editor estructurado por sección
-  campanas/[id]/preguntas/      E6/UI-09 — responder o descartar preguntas locales
+  campanas/[id]/brief/              UI-08/UI-11 — extracción, tabla de campos;
+                                     rama VistaCliente.tsx para el rol cliente (Sprint 5)
+  campanas/[id]/brief/editar/       E7/UI-10 — editor por sección; PanelComentarios.tsx (Sprint 5)
+  campanas/[id]/preguntas/          E6/UI-09 — responder o descartar preguntas locales
+  components/ControlDeFecha.tsx     (Sprint 5) control de PrecisedDate, compartido
 
 infra/db/migrations/ 005_producto_preguntas_y_revision.sql — anclaje, revisión, brief_field_revisions
+                      007_comentarios_internos.sql — field_comments (Sprint 5)
+                      008_claim_exige_evidencia_excepcion_manual.sql — excepción DEC-028 (Sprint 5)
 docs/product/brief-schema/brief-catalog.json   Fuente única de los 41 campos
 ```
 
@@ -368,4 +416,5 @@ docs/product/brief-schema/brief-catalog.json   Fuente única de los 41 campos
 [D0-08 modelo de datos](docs/architecture/D0-08-modelo-datos.md) ·
 [D0-11 backlog](docs/product/D0-11-backlog-mvp1.md) ·
 [INC-001](docs/incidents/INC-001-test-data-collision.md) ·
-[D0-17 — cierre de este incremento](docs/product/D0-17-cierre-sprint4.md)
+[D0-17 — cierre de Sprint 4](docs/product/D0-17-cierre-sprint4.md) ·
+[D0-18 — cierre de este incremento](docs/product/D0-18-cierre-sprint5.md)

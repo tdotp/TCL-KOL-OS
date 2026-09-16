@@ -94,17 +94,18 @@ describe('corregirCampo sobre un campo con confianza real (regresión Demo A)', 
       value: unknown;
       provenance_type: string;
       confidence: string | null;
-    }>(
-      `SELECT value, provenance_type::text, confidence FROM brief_fields WHERE id = $1`,
-      [fieldId],
-    );
+    }>(`SELECT value, provenance_type::text, confidence FROM brief_fields WHERE id = $1`, [fieldId]);
     expect(fila!.value).toBe('Directo y cercano');
     expect(fila!.provenance_type).toBe('manual_local');
     expect(fila!.confidence).toBeNull();
   });
 
   it('confirmar NUNCA cambia provenance_type ni confidence (regla del módulo)', async () => {
-    const { id: fieldId, revision } = await simularCampoExtraido('mensaje_principal.mensaje_clave', 'Rendimiento real', 0.9);
+    const { id: fieldId, revision } = await simularCampoExtraido(
+      'mensaje_principal.mensaje_clave',
+      'Rendimiento real',
+      0.9,
+    );
 
     const resultado = await confirmarCampo(actor, versionId, fieldId, { revisionEsperada: revision });
     expect(resultado.ok, !resultado.ok ? resultado.error.message : '').toBe(true);
@@ -113,10 +114,7 @@ describe('corregirCampo sobre un campo con confianza real (regresión Demo A)', 
       provenance_type: string;
       confidence: string | null;
       review_status: string;
-    }>(
-      `SELECT provenance_type::text, confidence, review_status FROM brief_fields WHERE id = $1`,
-      [fieldId],
-    );
+    }>(`SELECT provenance_type::text, confidence, review_status FROM brief_fields WHERE id = $1`, [fieldId]);
     expect(fila!.provenance_type).toBe('extracted');
     expect(Number(fila!.confidence)).toBeCloseTo(0.9, 5);
     expect(fila!.review_status).toBe('confirmed');
@@ -155,13 +153,51 @@ describe('resolverConflicto sobre un campo con confianza real', () => {
       status: string;
       provenance_type: string;
       confidence: string | null;
-    }>(
-      `SELECT value, status::text, provenance_type::text, confidence FROM brief_fields WHERE id = $1`,
-      [fieldId],
-    );
+    }>(`SELECT value, status::text, provenance_type::text, confidence FROM brief_fields WHERE id = $1`, [
+      fieldId,
+    ]);
     expect(fila!.value).toBe('USD 55,000');
     expect(fila!.status).toBe('found');
     expect(fila!.provenance_type).toBe('manual_local');
     expect(fila!.confidence).toBeNull();
+  });
+});
+
+describe('corregirCampo sobre un campo de fecha (Sprint 5, Fase A — DEC-026)', () => {
+  it('rechaza texto plano — el bug real que Demo B/A encontraron en el editor manual', async () => {
+    const [campo] = await query<{ id: string; revision: number }>(
+      `SELECT id, revision FROM brief_fields WHERE brief_version_id = $1 AND key = 'practico.fecha_inicio'`,
+      [versionId],
+    );
+    const resultado = await corregirCampo(actor, versionId, campo!.id, {
+      value: '15 de septiembre de 2026',
+      revisionEsperada: campo!.revision,
+    });
+    expect(resultado.ok).toBe(false);
+    if (resultado.ok) return;
+    expect(resultado.error.message).toContain('DEC-026');
+  });
+
+  it('acepta y persiste un objeto PrecisedDate, sin pérdida al leerlo de vuelta', async () => {
+    const [campo] = await query<{ id: string; revision: number }>(
+      `SELECT id, revision FROM brief_fields WHERE brief_version_id = $1 AND key = 'practico.fecha_fin'`,
+      [versionId],
+    );
+    const valor = {
+      tipo: 'rango',
+      inicio: '2026-10-01',
+      fin: '2026-11-30',
+      textoOriginal: 'Octubre-Noviembre 2026',
+    };
+    const resultado = await corregirCampo(actor, versionId, campo!.id, {
+      value: valor,
+      revisionEsperada: campo!.revision,
+    });
+    expect(resultado.ok, !resultado.ok ? resultado.error.message : '').toBe(true);
+
+    const [fila] = await query<{ value: unknown }>(`SELECT value FROM brief_fields WHERE id = $1`, [
+      campo!.id,
+    ]);
+    expect(fila!.value).toEqual(valor);
   });
 });

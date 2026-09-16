@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { descartarPreguntaLocal, responderPreguntaLocal } from '@/lib/actions';
+import { ControlDeFecha } from '@/components/ControlDeFecha';
 
 interface CampoCatalogo {
   key: string;
@@ -39,14 +40,6 @@ const ETIQUETA_ESTADO: Record<string, string> = {
   respondida: 'respondida',
   descartada: 'descartada',
 };
-
-const TIPOS_PRECISION = [
-  { valor: 'exacta', texto: 'Fecha exacta' },
-  { valor: 'mes', texto: 'Solo el mes' },
-  { valor: 'rango', texto: 'Un rango' },
-  { valor: 'aproximada', texto: 'Aproximada' },
-  { valor: 'pendiente_confirmar', texto: 'Pendiente de confirmar' },
-];
 
 /** Construye el control correcto según `valueType` — nunca un textarea genérico para todo (§5.3). */
 function ControlDeRespuesta({
@@ -120,64 +113,6 @@ function ControlDeRespuesta({
       onChange={(e) => onChange(e.target.value)}
       style={{ padding: '4px 6px', width: '100%' }}
     />
-  );
-}
-
-function ControlDeFecha({ onChange }: { onChange: (v: unknown) => void }) {
-  const [tipoPrecision, setTipoPrecision] = useState('exacta');
-  const [fecha, setFecha] = useState('');
-  const [inicio, setInicio] = useState('');
-  const [fin, setFin] = useState('');
-
-  const emitir = (t: string, f: string, i: string, fn: string) => {
-    if (t === 'rango') onChange({ tipo: t, inicio: i, fin: fn, textoOriginal: `${i} – ${fn}` });
-    else onChange({ tipo: t, fecha: f, textoOriginal: f });
-  };
-
-  return (
-    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-      <select
-        value={tipoPrecision}
-        onChange={(e) => {
-          setTipoPrecision(e.target.value);
-          emitir(e.target.value, fecha, inicio, fin);
-        }}
-        style={{ padding: '4px 6px' }}
-      >
-        {TIPOS_PRECISION.map((t) => (
-          <option key={t.valor} value={t.valor}>
-            {t.texto}
-          </option>
-        ))}
-      </select>
-      {tipoPrecision === 'rango' ? (
-        <>
-          <input
-            type="date"
-            onChange={(e) => {
-              setInicio(e.target.value);
-              emitir(tipoPrecision, fecha, e.target.value, fin);
-            }}
-          />
-          <span>a</span>
-          <input
-            type="date"
-            onChange={(e) => {
-              setFin(e.target.value);
-              emitir(tipoPrecision, fecha, inicio, e.target.value);
-            }}
-          />
-        </>
-      ) : (
-        <input
-          type={tipoPrecision === 'mes' ? 'month' : 'date'}
-          onChange={(e) => {
-            setFecha(e.target.value);
-            emitir(tipoPrecision, e.target.value, inicio, fin);
-          }}
-        />
-      )}
-    </div>
   );
 }
 

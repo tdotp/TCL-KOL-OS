@@ -445,6 +445,127 @@ Aprobadas por el product owner en revisión de plan, 25 de agosto de 2026.
 
 ---
 
+## Cierre de Sprint 5 (DEC-030 a DEC-033)
+
+Resueltas durante el incremento «Ciclo completo del brief: de `internal_review`
+a `approved`, comentarios internos, fechas estructuradas y versionado
+posterior a aprobación». 15 de septiembre de 2026.
+
+### DEC-030 — Permisos exactos del rol `cliente` para decidir sobre su brief
+
+- **Fecha:** 15 de septiembre de 2026
+- **Estado:** **aprobada**
+- **Origen:** DEC-012/ADR-004 solo autorizaban una vista de solo lectura para
+  TCL; este incremento pide que el cliente pueda solicitar cambios y aprobar
+  desde la aplicación, no solo por fuera de ella.
+- **Decisión:** el rol `cliente` recibe exactamente dos permisos nuevos —
+  `brief:request_client_changes` y `brief:register_client_decision` (esta
+  segunda ya existía, reservada para que el personal registrara la decisión
+  del cliente por él; ahora también la ejerce el propio cliente). **Nunca**
+  recibe `brief:transition` genérico, ni ningún `comment:*` — los
+  comentarios internos, abiertos o resueltos, no son del cliente en ninguna
+  circunstancia; esa distinción no se relaja ni siquiera para un comentario
+  ya resuelto, por decisión explícita del product owner.
+- **Dónde vive:** `packages/domain/src/permissions.ts` (rol `cliente`);
+  `packages/db/src/transitions.ts` (`accionParaDestino` — qué acción exige
+  cada `to`, en vez de un único `brief:transition` para todos); las dos
+  reglas de transición `client_review → client_changes_requested` y
+  `client_review → approved` en `packages/domain/src/brief-states.ts` ahora
+  incluyen `'cliente'` en sus roles autorizados, además de `EDITORIAL_ROLES`
+  (el personal conserva la vía de registrar la decisión en su nombre,
+  DEC-012 original).
+- **Responsable de aprobación:** Gerardo Calambás.
+
+### DEC-031 — Comentarios internos: tabla propia, ligados a la clave del campo
+
+- **Fecha:** 15 de septiembre de 2026
+- **Estado:** **aprobada**
+- **Decisión:** E7-6 se implementa en `field_comments` (migración 007),
+  anclada a `(brief_version_id, field_key)` — nunca a `brief_fields.id` — para
+  que la conversación sobreviva aunque la fila cambie (una excepción por
+  producto declarada después, o una versión hija que copia el campo con un
+  `id` nuevo). Igual que `brief_fields`/ADR-003: una versión `approved`
+  conserva sus comentarios para consulta, pero no admite contenido nuevo ni
+  alterado (trigger `field_comments_inmutabilidad`, mismo patrón que
+  `campos_de_version_aprobada_inmutables`).
+- **Consecuencia sobre Fase E:** al crear una versión hija, los comentarios
+  de la versión padre **no se copian** — quedan asociados a la versión
+  histórica, ya `superseded`, nunca como conversación activa de la hija
+  (así lo pide explícitamente el punto 6 de la Fase E del pedido).
+- **Dónde vive:** `infra/db/migrations/007_comentarios_internos.sql`;
+  `packages/db/src/comments.ts`.
+- **Responsable de aprobación:** Gerardo Calambás.
+
+### DEC-032 — La visibilidad de una campaña para TCL sube sola al enviarla a revisión del cliente
+
+- **Fecha:** 15 de septiembre de 2026
+- **Estado:** **aprobada** — corrige un vacío real de ADR-004, no una
+  optimización de alcance
+- **Origen:** al auditar el código antes de este incremento se encontró que
+  `campaigns.visibility` nace `interna` por defecto (migración 001) y
+  **ningún código en todo el repositorio la cambiaba jamás** — ni acción de
+  servidor, ni transición, nada. Consecuencia práctica: el rol `cliente`
+  nunca podía ver ninguna campaña real, en ningún estado, pese a que
+  ADR-004 (10 de agosto de 2026) ya prometía "una vista mínima de solo
+  lectura para TCL... visible únicamente a partir del envío". La vista
+  existía en la promesa, pero el envío que debía activarla nunca ocurría.
+- **Decisión:** `transicionarBrief` sube `campaigns.visibility` de `interna`
+  a `tcl` automáticamente, dentro de la misma transacción, exactamente
+  cuando la transición es `→ client_review` — ese es "el envío" que dice
+  ADR-004. Solo sube el nivel: una campaña que ya es `tcl` o `compartida` no
+  se toca, y nada la baja de vuelta a `interna` en ningún flujo (ni al
+  solicitar cambios, ni al devolver a revisión interna) — una vez que TCL
+  vio la campaña, sigue viéndola.
+- **Dónde vive:** `packages/db/src/transitions.ts` (`transicionarBrief`).
+- **Responsable de aprobación:** Gerardo Calambás.
+
+### DEC-033 — Candado de concurrencia para la versión hija: un `UPDATE` condicional, no un `SELECT` + `INSERT`
+
+- **Fecha:** 15 de septiembre de 2026
+- **Estado:** **aprobada**
+- **Origen:** DEC-027 exige que dos solicitudes simultáneas de "crear nueva
+  revisión" sobre el mismo brief `approved` nunca produzcan dos versiones
+  hijas.
+- **Decisión:** `crearVersionHija` no comprueba primero el estado y luego
+  inserta — hace `UPDATE brief_versions SET status = 'superseded' WHERE id =
+  $1 AND status = 'approved'` como primer paso de la transacción. Solo una
+  de dos peticiones concurrentes puede ganar esa fila; la segunda ve `0`
+  filas afectadas (el estado ya cambió) y se rechaza ahí mismo, antes de
+  crear nada. Mismo principio que ya usa la revisión optimista de
+  `confirmarCampo`/`corregirCampo` (`UPDATE ... WHERE revision = $x`) —
+  un `UPDATE` condicional como candado, no una comprobación separada que deja
+  una ventana de carrera entre leer y escribir.
+- **Dónde vive:** `packages/db/src/versioning.ts` (`crearVersionHija`).
+- **Responsable de aprobación:** Gerardo Calambás.
+
+### DEC-034 — El trigger de "claims con evidencia" no tenía la excepción de DEC-028 (defecto real, encontrado al ejercitar `approved` por primera vez)
+
+- **Fecha:** 15 de septiembre de 2026
+- **Estado:** **aprobada** — corrección de un defecto real, no una decisión de diseño nueva
+- **Origen:** al correr por primera vez en toda la vida del proyecto la
+  transición `client_review → approved` (este incremento implementa
+  `aprobarComoCliente`; DEC-027 había dejado el ciclo de aprobación final
+  documentado pero nunca ejecutado), la prueba `client-review.test.ts` falló
+  con `No se puede aprobar: los campos (...) son claims sin evidencia`. Los
+  campos listados eran críticos resueltos por pregunta local
+  (`provenance_type = 'manual_local'`), no claims — exactamente el caso que
+  DEC-028 (cierre de Sprint 4) exime de evidencia documental.
+- **Causa:** `claim_exige_evidencia()` (trigger diferido, migración 004)
+  exigía evidencia para todo campo `criticidad IN ('critico', 'claim')` con
+  `status = 'found'`, sin la excepción de `manual_local` que
+  `requiresEvidence()` (`packages/domain/src/brief-states.ts`, la guarda
+  equivalente en el dominio) sí aplica desde DEC-028. La guarda del dominio
+  nunca lo detectó porque las pruebas de dominio son puramente en memoria; el
+  trigger de base es la última línea de defensa, y hasta este incremento
+  nada había llegado a `approved` con datos reales para ejercitarlo.
+- **Decisión:** se corrige el trigger para que la condición sea idéntica a
+  `requiresEvidence()`: un `claim` exige evidencia siempre; un `critico`
+  la exige salvo que su procedencia sea `manual_local`.
+- **Dónde vive:** `infra/db/migrations/008_claim_exige_evidencia_excepcion_manual.sql`.
+- **Responsable de aprobación:** Gerardo Calambás.
+
+---
+
 ## Decisiones pendientes que no bloquean MVP 0
 
 Quedan abiertas y sin efecto sobre el arranque, se resuelven durante la ejecución:

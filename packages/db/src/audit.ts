@@ -52,7 +52,15 @@ export function sanitizeMetadata(
 }
 
 export async function recordAudit(client: pg.PoolClient, input: AuditInput): Promise<void> {
-  const organizationId = input.actor === 'system' ? input.organizationId : input.actor.organizationId;
+  // `input.organizationId` explícito manda siempre que se pase — necesario
+  // desde Sprint 5, donde un actor `cliente` (de OTRA organización, DEC-012)
+  // puede transicionar el brief de la agencia: el evento debe quedar
+  // archivado bajo la organización DUEÑA del recurso, no la del actor, o el
+  // rastro de auditoría de la agencia nunca lo vería (`listAudit` filtra por
+  // `actor.organizationId` de quien consulta). Sin `organizationId` explícito,
+  // se sigue derivando de `actor.organizationId` como antes.
+  const organizationId =
+    input.organizationId ?? (input.actor === 'system' ? undefined : input.actor.organizationId);
   if (!organizationId) {
     throw new Error('recordAudit: organizationId es obligatorio cuando el actor es "system".');
   }

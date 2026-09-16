@@ -1,38 +1,18 @@
 import { notFound, redirect } from 'next/navigation';
-import { getCampaign, listarPreguntas, verCamposDeVersion, versionesDelBrief } from '@tcl-kol-os/db';
+import {
+  contarConversacionesAbiertas,
+  getCampaign,
+  listarPreguntas,
+  verCamposDeVersion,
+  versionesDelBrief,
+} from '@tcl-kol-os/db';
 import { campoDelCatalogo } from '@tcl-kol-os/domain';
 import { Encabezado } from '@/components/Encabezado';
 import { currentUser } from '@/lib/session';
+import { ORDEN_DE_SECCIONES, TITULO_SECCION } from '@/lib/brief-sections';
 import { EditorBrief } from './EditorBrief';
 
 export const dynamic = 'force-dynamic';
-
-/** Los diez bloques canónicos de D0-05 §2.1, en el orden en que se navegan. */
-const ORDEN_DE_SECCIONES = [
-  'contexto',
-  'objetivo',
-  'target_audiencia',
-  'problema_insight',
-  'marca_producto',
-  'mandatorios',
-  'mensaje_principal',
-  'accion_kpis',
-  'entregable_creativo',
-  'practico',
-];
-
-const TITULO_SECCION: Record<string, string> = {
-  contexto: 'Contexto',
-  objetivo: 'Objetivo',
-  target_audiencia: 'Audiencia objetivo',
-  problema_insight: 'Problema e insight',
-  marca_producto: 'Marca y producto',
-  mandatorios: 'Mandatorios',
-  mensaje_principal: 'Mensaje principal',
-  accion_kpis: 'Acción y KPIs',
-  entregable_creativo: 'Entregable creativo',
-  practico: 'Datos prácticos',
-};
 
 /**
  * UI-10 · Editor estructurado del brief (Épica E7).
@@ -63,6 +43,9 @@ export default async function EditorBriefPage({ params }: { params: Promise<{ id
 
   const preguntas = await listarPreguntas(user, id, { status: 'pendiente' });
   const preguntasCriticas = preguntas.ok ? preguntas.value.filter((p) => p.criticidad === 'critico') : [];
+
+  const conteos = await contarConversacionesAbiertas(user, ultima.id);
+  const conteosComentarios = conteos.ok ? conteos.value : {};
 
   const camposConCatalogo = campos.map((c) => {
     const catalogo = campoDelCatalogo(c.key);
@@ -105,6 +88,7 @@ export default async function EditorBriefPage({ params }: { params: Promise<{ id
           secciones={secciones}
           productos={campana.value.productos.map((p) => ({ id: p.id, model: p.model, rol: p.rol }))}
           preguntasCriticasPendientes={preguntasCriticas.length}
+          conteosComentarios={conteosComentarios}
         />
       </main>
     </>

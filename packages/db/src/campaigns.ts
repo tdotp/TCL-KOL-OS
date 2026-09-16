@@ -105,14 +105,19 @@ export async function listCampaigns(actor: User): Promise<Result<CampaignRow[]>>
   const permitido = assertCapability(actor, 'campaign:read');
   if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
 
-  // El cliente TCL solo ve lo que se le compartió (DEC-012 / ADR-004).
-  const filtroVisibilidad = actor.role === 'cliente' ? `AND c.visibility IN ('tcl', 'compartida')` : '';
-
+  // El cliente TCL es de OTRA organización por definición (DEC-012) — un
+  // `organization_id = $actor` lo dejaría sin ver nunca nada, sin importar
+  // la visibilidad (defecto real, encontrado en Sprint 5 al ejercitar por
+  // primera vez la revisión del cliente de punta a punta: `canAccessResource`
+  // ya trata `visibility` como el único límite para `cliente`, pero esta
+  // consulta seguía filtrando por organización primero). Ve lo que se le
+  // compartió, de cualquier organización; el resto de roles sigue viendo
+  // solo lo de la suya, como siempre.
   const { rows } = await getPool().query<CampaignRow>(
-    `${SELECT_CAMPAIGN}
-      WHERE c.organization_id = $1 ${filtroVisibilidad}
-      ORDER BY c.created_at DESC`,
-    [actor.organizationId],
+    actor.role === 'cliente'
+      ? `${SELECT_CAMPAIGN} WHERE c.visibility IN ('tcl', 'compartida') ORDER BY c.created_at DESC`
+      : `${SELECT_CAMPAIGN} WHERE c.organization_id = $1 ORDER BY c.created_at DESC`,
+    actor.role === 'cliente' ? [] : [actor.organizationId],
   );
   return ok(rows);
 }

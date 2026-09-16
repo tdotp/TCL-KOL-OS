@@ -13,22 +13,32 @@ import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import {
   archiveCampaign,
+  aprobarComoCliente,
+  aprobarInternamente,
   confirmarCampo,
   corregirCampo,
-  createCampaign,
+  crearComentario,
   crearBriefManual,
+  crearVersionHija,
+  createCampaign,
   declararExcepcionProducto,
   descartarPregunta,
   extraerBrief,
   findUserByEmail,
   generarPreguntas,
+  listarComentarios,
+  reabrirComentario,
   reintentarExtraccion,
+  resolverComentario,
   resolverConflicto,
   responderPregunta,
   retrySource,
   revertirExcepcionProducto,
+  solicitarCambiosCliente,
+  solicitarCambiosInternos,
   transicionarBrief,
   uploadSource,
+  type ComentarioDeCampo,
 } from '@tcl-kol-os/db';
 import type { BriefStatus } from '@tcl-kol-os/domain';
 import type { SourceType } from '@tcl-kol-os/db';
@@ -498,4 +508,189 @@ export async function transicionarBriefDeCampana(formData: FormData): Promise<vo
 
   revalidatePath(`/campanas/${campaignId}/brief`);
   redirect(`/campanas/${campaignId}/brief`);
+}
+
+/** Fase C · el revisor devuelve el brief con cambios solicitados. Motivo obligatorio. */
+export async function solicitarCambiosInternosDeCampana(
+  _previo: unknown,
+  formData: FormData,
+): Promise<{ error?: string; ok?: boolean }> {
+  const user = await currentUser();
+  if (user === undefined) return { error: 'Sesión no válida.' };
+
+  const versionId = String(formData.get('versionId') ?? '');
+  const campaignId = String(formData.get('campaignId') ?? '');
+  const motivo = String(formData.get('motivo') ?? '').trim();
+  if (versionId === '') return { error: 'Falta la versión.' };
+  if (motivo === '') return { error: 'Solicitar cambios internos exige un motivo.' };
+
+  const resultado = await solicitarCambiosInternos(user, versionId, motivo);
+  if (!resultado.ok) return { error: resultado.error.message };
+
+  if (campaignId !== '') revalidatePath(`/campanas/${campaignId}/brief`);
+  return { ok: true };
+}
+
+/** Fase C · aprobación interna: envía el brief a revisión del cliente. */
+export async function aprobarInternamenteDeCampana(formData: FormData): Promise<void> {
+  const user = await currentUser();
+  if (user === undefined) redirect('/login');
+
+  const versionId = String(formData.get('versionId') ?? '');
+  const campaignId = String(formData.get('campaignId') ?? '');
+
+  const resultado = await aprobarInternamente(user, versionId);
+  if (!resultado.ok) {
+    redirect(`/campanas/${campaignId}/brief?error=${encodeURIComponent(resultado.error.message)}`);
+  }
+
+  revalidatePath(`/campanas/${campaignId}/brief`);
+  redirect(`/campanas/${campaignId}/brief`);
+}
+
+// ─────────────────────────── Fase D · Revisión del cliente ────────────────────
+
+/** El cliente solicita cambios. Motivo general obligatorio; campos señalados opcionales. */
+export async function solicitarCambiosClienteDeCampana(
+  _previo: unknown,
+  formData: FormData,
+): Promise<{ error?: string; ok?: boolean }> {
+  const user = await currentUser();
+  if (user === undefined) return { error: 'Sesión no válida.' };
+
+  const versionId = String(formData.get('versionId') ?? '');
+  const campaignId = String(formData.get('campaignId') ?? '');
+  const motivo = String(formData.get('motivo') ?? '').trim();
+  const camposSenalados = formData
+    .getAll('campo')
+    .map(String)
+    .filter((c) => c !== '');
+  if (versionId === '') return { error: 'Falta la versión.' };
+  if (motivo === '') return { error: 'Solicitar cambios exige un motivo.' };
+
+  const resultado = await solicitarCambiosCliente(user, versionId, { motivo, camposSenalados });
+  if (!resultado.ok) return { error: resultado.error.message };
+
+  if (campaignId !== '') revalidatePath(`/campanas/${campaignId}/brief`);
+  return { ok: true };
+}
+
+/** El cliente aprueba el brief. */
+export async function aprobarComoClienteDeCampana(formData: FormData): Promise<void> {
+  const user = await currentUser();
+  if (user === undefined) redirect('/login');
+
+  const versionId = String(formData.get('versionId') ?? '');
+  const campaignId = String(formData.get('campaignId') ?? '');
+
+  const resultado = await aprobarComoCliente(user, versionId);
+  if (!resultado.ok) {
+    redirect(`/campanas/${campaignId}/brief?error=${encodeURIComponent(resultado.error.message)}`);
+  }
+
+  revalidatePath(`/campanas/${campaignId}/brief`);
+  redirect(`/campanas/${campaignId}/brief`);
+}
+
+// ─────────────────────────── Fase E · Versionado posterior a aprobación ───────
+
+/** Crea una versión hija a partir de una versión `approved` (DEC-027). */
+export async function crearVersionHijaDeCampana(formData: FormData): Promise<void> {
+  const user = await currentUser();
+  if (user === undefined) redirect('/login');
+
+  const versionId = String(formData.get('versionId') ?? '');
+  const campaignId = String(formData.get('campaignId') ?? '');
+
+  const resultado = await crearVersionHija(user, versionId);
+  if (!resultado.ok) {
+    redirect(`/campanas/${campaignId}/brief?error=${encodeURIComponent(resultado.error.message)}`);
+  }
+
+  revalidatePath(`/campanas/${campaignId}/brief`);
+  revalidatePath(`/campanas/${campaignId}/brief/editar`);
+  redirect(`/campanas/${campaignId}/brief/editar`);
+}
+
+// ─────────────────────────── Fase B · Comentarios internos (E7-6) ─────────────
+
+/**
+ * Se llama directo desde un componente cliente (no es un `<form action>`) —
+ * Next.js admite invocar una server action como función normal. Sigue
+ * resolviendo el usuario y delegando el permiso (`comment:internal`) a
+ * `listarComentarios`, igual que cualquier otra acción de este archivo.
+ */
+export async function obtenerComentariosDeCampo(
+  versionId: string,
+  fieldKey: string,
+): Promise<{ error?: string; comentarios?: readonly ComentarioDeCampo[] }> {
+  const user = await currentUser();
+  if (user === undefined) return { error: 'Sesión no válida.' };
+
+  const resultado = await listarComentarios(user, versionId, fieldKey);
+  if (!resultado.ok) return { error: resultado.error.message };
+
+  return { comentarios: resultado.value };
+}
+
+export async function crearComentarioDeCampo(
+  _previo: unknown,
+  formData: FormData,
+): Promise<{ error?: string; ok?: boolean }> {
+  const user = await currentUser();
+  if (user === undefined) return { error: 'Sesión no válida.' };
+
+  const versionId = String(formData.get('versionId') ?? '');
+  const fieldKey = String(formData.get('fieldKey') ?? '');
+  const campaignProductId = String(formData.get('campaignProductId') ?? '') || undefined;
+  const parentCommentId = String(formData.get('parentCommentId') ?? '') || undefined;
+  const content = String(formData.get('content') ?? '');
+  if (versionId === '' || fieldKey === '') return { error: 'Falta el campo del comentario.' };
+
+  const resultado = await crearComentario(user, versionId, {
+    fieldKey,
+    campaignProductId,
+    parentCommentId,
+    content,
+  });
+  if (!resultado.ok) return { error: resultado.error.message };
+
+  revalidatePath(`/campanas/[id]/brief/editar`);
+  return { ok: true };
+}
+
+export async function resolverComentarioDeCampo(
+  _previo: unknown,
+  formData: FormData,
+): Promise<{ error?: string; ok?: boolean }> {
+  const user = await currentUser();
+  if (user === undefined) return { error: 'Sesión no válida.' };
+
+  const versionId = String(formData.get('versionId') ?? '');
+  const commentId = String(formData.get('commentId') ?? '');
+  if (versionId === '' || commentId === '') return { error: 'Falta el comentario a resolver.' };
+
+  const resultado = await resolverComentario(user, versionId, commentId);
+  if (!resultado.ok) return { error: resultado.error.message };
+
+  revalidatePath(`/campanas/[id]/brief/editar`);
+  return { ok: true };
+}
+
+export async function reabrirComentarioDeCampo(
+  _previo: unknown,
+  formData: FormData,
+): Promise<{ error?: string; ok?: boolean }> {
+  const user = await currentUser();
+  if (user === undefined) return { error: 'Sesión no válida.' };
+
+  const versionId = String(formData.get('versionId') ?? '');
+  const commentId = String(formData.get('commentId') ?? '');
+  if (versionId === '' || commentId === '') return { error: 'Falta el comentario a reabrir.' };
+
+  const resultado = await reabrirComentario(user, versionId, commentId);
+  if (!resultado.ok) return { error: resultado.error.message };
+
+  revalidatePath(`/campanas/[id]/brief/editar`);
+  return { ok: true };
 }

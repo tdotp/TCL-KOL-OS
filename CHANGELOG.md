@@ -4,6 +4,24 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [No publicado]
 
+### Cierre de Sprint 5 — Ciclo completo del brief: de `internal_review` a `approved` · 15 de septiembre de 2026
+
+Comentarios internos por campo, fechas estructuradas en el editor manual, aprobación interna con motivo, revisión y decisión del cliente, y versionado posterior a aprobación. Detalle completo en [D0-18](docs/product/D0-18-cierre-sprint5.md).
+
+#### Añadido
+
+- **E7-6 — comentarios internos por campo**, diferidos desde Sprint 4: crear, responder en hilo, resolver, reabrir, contador de conversaciones abiertas. Ancla a `(brief_version_id, field_key)`, no a la fila del campo, para sobrevivir a una versión hija. Nunca visibles para el rol `cliente` (`packages/db/src/comments.ts`, migración `007_comentarios_internos.sql`).
+- **DEC-026 en el editor manual**: `corregirCampo` ahora exige el objeto `PrecisedDate` para campos de fecha — antes solo lo exigía el camino de preguntas locales. Control de fecha con precisión real, reutilizado del editor de preguntas (`ControlDeFecha.tsx`).
+- **Ciclo de aprobación interna**: solicitar cambios internos con motivo obligatorio, reenviar, aprobar internamente — todo sobre las transiciones que el dominio ya declaraba desde Sprint 3/4 (`packages/db/src/client-review.ts`).
+- **Revisión y decisión del cliente**: vista de solo lectura por sección con evidencia, sin costos ni información técnica (`VistaCliente.tsx`); el rol `cliente` puede solicitar cambios (señalando campos concretos) o aprobar, con dos permisos nuevos y acotados (`brief:request_client_changes`, `brief:register_client_decision`).
+- **Versionado posterior a aprobación (DEC-027)**: `crearVersionHija` — candado de concurrencia atómico, copia de campos y evidencia como punto de partida, la versión anterior queda `superseded` e intacta, sus comentarios internos quedan asociados a la versión histórica.
+
+#### Corregido
+
+- `campaigns.visibility` nunca subía de `interna` a `tcl` en ningún flujo — el rol `cliente` no podía ver ninguna campaña real pese a que ADR-004 ya lo prometía. Ahora sube automáticamente al aprobar internamente (DEC-032).
+- El trigger `claim_exige_evidencia()` (migración 004) no tenía la excepción de DEC-028 para campos críticos resueltos por pregunta local — bloqueaba cualquier aprobación real. Corregido en migración `008_claim_exige_evidencia_excepcion_manual.sql`.
+- `listCampaigns` filtraba por la organización del actor incluso para el rol `cliente`, que es de otra organización por definición — la campaña nunca aparecía en su listado.
+
 ### Cierre de Sprint 3 + Sprint 4 — Brief funcional de punta a punta · 26 de agosto de 2026
 
 Épica E6 (preguntas locales) y E7 (editor estructurado), más lo que Sprint 3

@@ -18,4 +18,7 @@ export * from './transitions.ts';
 export * from './manual.ts';
 export * from './brief-fields.ts';
 export * from './local-questions.ts';
+export * from './comments.ts';
+export * from './client-review.ts';
+export * from './versioning.ts';
 export { migrate } from './migrate.ts';

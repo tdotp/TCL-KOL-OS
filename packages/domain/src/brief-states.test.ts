@@ -162,10 +162,20 @@ describe('autorización de transiciones (caso F-27)', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('el cliente no puede ejecutar ninguna transición', () => {
+  it('el cliente no puede ejecutar ninguna transición, salvo decidir sobre su propia revisión (Sprint 5, Fase D)', () => {
+    // Desde el cierre de Sprint 4, `client_review → client_changes_requested`
+    // y `client_review → approved` también autorizan al rol `cliente`
+    // directamente (antes solo ocurría "fuera del sistema", DEC-012). Sigue
+    // bloqueado en cualquier otra transición — el cliente nunca mueve el
+    // brief a un estado que no sea consecuencia de su propia decisión.
+    const PERMITIDAS_PARA_CLIENTE = new Set(['client_changes_requested', 'approved']);
     for (const rule of TRANSITIONS) {
       const result = transition({ version: version(rule.from), actor: user('cliente') }, rule.to);
-      expect(result.ok, `el cliente logró ${rule.from} → ${rule.to}`).toBe(false);
+      if (rule.from === 'client_review' && PERMITIDAS_PARA_CLIENTE.has(rule.to)) {
+        expect(result.ok, `el cliente debería poder ${rule.from} → ${rule.to}`).toBe(true);
+      } else {
+        expect(result.ok, `el cliente logró ${rule.from} → ${rule.to}`).toBe(false);
+      }
     }
   });
 

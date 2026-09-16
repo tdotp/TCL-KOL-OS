@@ -26,6 +26,11 @@ export type Action =
   | 'brief:request_review'
   | 'brief:approve_internal'
   | 'brief:register_client_decision'
+  // Sprint 5: el cliente solicita cambios sobre su propia versión en
+  // `client_review` — distinta de `brief:transition` genérico, que el
+  // cliente nunca tiene, y distinta de `brief:approve_internal`, que nunca
+  // ejecuta.
+  | 'brief:request_client_changes'
   | 'brief:translate'
   | 'brief:export'
   | 'question:answer'
@@ -152,9 +157,19 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'airun:read',
   ],
   legal: ['campaign:read', 'source:read', 'brief:read', 'question:answer', 'comment:internal', 'audit:read'],
-  // El cliente TCL solo lee estado y descarga el entregable (DEC-012 / ADR-004).
-  // No aprueba dentro del sistema.
-  cliente: ['campaign:read', 'brief:read', 'brief:export'],
+  // El cliente TCL lee estado, descarga el entregable (DEC-012 / ADR-004) y,
+  // desde Sprint 5, decide sobre su propia versión en `client_review`:
+  // solicitar cambios o aprobar. Nunca `brief:transition` genérico (no puede
+  // mover el brief a ningún otro estado), nunca `comment:*` (los comentarios
+  // internos no son suyos, ni abiertos ni resueltos — decisión del product
+  // owner, Sprint 5 Fase D), nunca `field:*` ni acceso a costos/IA.
+  cliente: [
+    'campaign:read',
+    'brief:read',
+    'brief:export',
+    'brief:request_client_changes',
+    'brief:register_client_decision',
+  ],
 };
 
 /** ¿El rol tiene la capacidad, con independencia del recurso concreto? */

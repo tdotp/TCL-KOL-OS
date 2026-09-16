@@ -24,7 +24,7 @@
  * intermedio.
  */
 
-import { type Result, type User, err, ok } from '@tcl-kol-os/domain';
+import { type Result, type User, canAccessResource, err, ok } from '@tcl-kol-os/domain';
 import { assertCapability } from './authz.ts';
 import { query, transaction } from './client.ts';
 import { obtenerOCrearVersionDeTrabajo } from './brief-version.ts';
@@ -518,6 +518,29 @@ export async function versionesDelBrief(actor: User, campaignId: string): Promis
   const permitido = assertCapability(actor, 'brief:read');
   if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
 
+  // Igual que `getCampaign` (`campaigns.ts`): un `cliente` es de OTRA
+  // organización por definición (DEC-012), así que la autorización correcta
+  // es sobre la VISIBILIDAD de la campaña, no un `organization_id ===
+  // organization_id` que lo bloquearía siempre.
+  const alcance = await query<{
+    organization_id: string;
+    confidentiality_level: string;
+    visibility: string;
+  }>(`SELECT organization_id, confidentiality_level, visibility FROM campaigns WHERE id = $1`, [campaignId]);
+  const filaAlcance = alcance[0];
+  if (
+    !filaAlcance ||
+    !canAccessResource(actor, {
+      organizationId: filaAlcance.organization_id,
+      confidentialityLevel: filaAlcance.confidentiality_level as
+        'publica' | 'interna' | 'confidencial' | 'sensible',
+      visibility: filaAlcance.visibility as 'interna' | 'tcl' | 'compartida',
+      createdBy: '',
+    })
+  ) {
+    return err({ code: 'RESOURCE_NOT_FOUND', message: 'El recurso no existe o no está disponible.' });
+  }
+
   const filas = await query<{
     id: string;
     version: number;
@@ -531,9 +554,9 @@ export async function versionesDelBrief(actor: User, campaignId: string): Promis
        FROM brief_versions v
        JOIN briefs b ON b.id = v.brief_id
        LEFT JOIN ai_runs r ON r.brief_version_id = v.id AND r.task = 'extraer_campos'
-      WHERE b.campaign_id = $1 AND v.organization_id = $2
+      WHERE b.campaign_id = $1
       ORDER BY v.version DESC`,
-    [campaignId, actor.organizationId],
+    [campaignId],
   );
 
   return ok(
@@ -556,11 +579,29 @@ export async function verCamposDeVersion(
   const permitido = assertCapability(actor, 'brief:read');
   if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
 
-  const propias = await query<{ id: string }>(
-    `SELECT id FROM brief_versions WHERE id = $1 AND organization_id = $2`,
-    [versionId, actor.organizationId],
+  const alcance = await query<{
+    organization_id: string;
+    confidentiality_level: string;
+    visibility: string;
+  }>(
+    `SELECT c.organization_id, c.confidentiality_level, c.visibility
+       FROM brief_versions v
+       JOIN briefs b ON b.id = v.brief_id
+       JOIN campaigns c ON c.id = b.campaign_id
+      WHERE v.id = $1`,
+    [versionId],
   );
-  if (propias.length === 0) {
+  const filaAlcance = alcance[0];
+  if (
+    !filaAlcance ||
+    !canAccessResource(actor, {
+      organizationId: filaAlcance.organization_id,
+      confidentialityLevel: filaAlcance.confidentiality_level as
+        'publica' | 'interna' | 'confidencial' | 'sensible',
+      visibility: filaAlcance.visibility as 'interna' | 'tcl' | 'compartida',
+      createdBy: '',
+    })
+  ) {
     return err({ code: 'RESOURCE_NOT_FOUND', message: 'El recurso no existe o no está disponible.' });
   }
 

@@ -312,13 +312,19 @@ export const TRANSITIONS: readonly TransitionRule[] = [
     description: 'Aprobado internamente y enviado al cliente.',
   },
 
-  // ── Revisión del cliente (ocurre fuera del sistema; aquí se registra) ──
+  // ── Revisión del cliente ──
+  // Hasta el cierre de Sprint 4 esto ocurría fuera del sistema (DEC-012): el
+  // cliente decidía por fuera y un consultor lo registraba. Sprint 5 (Fase D)
+  // añade una vista real para el rol `cliente`, así que estas dos reglas
+  // ahora también lo autorizan directamente — nunca a ningún otro estado
+  // (`cliente` no aparece en ninguna otra regla de este archivo), y solo
+  // sobre la versión que ya está en `client_review`.
   {
     from: 'client_review',
     to: 'client_changes_requested',
-    roles: EDITORIAL_ROLES,
+    roles: [...EDITORIAL_ROLES, 'cliente'],
     guards: [],
-    description: 'Se registra que el cliente devolvió el brief con cambios.',
+    description: 'El cliente (o quien registra en su nombre) devuelve el brief con cambios.',
   },
   {
     from: 'client_changes_requested',
@@ -330,14 +336,14 @@ export const TRANSITIONS: readonly TransitionRule[] = [
   {
     from: 'client_review',
     to: 'approved',
-    roles: EDITORIAL_ROLES,
+    roles: [...EDITORIAL_ROLES, 'cliente'],
     guards: [
       guardNoUnresolvedConflicts,
       guardClaimsHaveEvidence,
       guardNoPendingCriticalQuestions,
       guardTranslationHasOrigin,
     ],
-    description: 'Se registra la aprobación del cliente (DEC-012: ocurre fuera del sistema).',
+    description: 'El cliente (o quien registra en su nombre) aprueba el brief.',
   },
 
   // ── Fin de vida ──

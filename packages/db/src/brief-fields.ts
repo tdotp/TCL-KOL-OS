@@ -13,11 +13,38 @@
  *     error accionable en vez de aplicar "el último que escribe gana".
  */
 
-import { type Result, type User, assertEditable, campoDelCatalogo, err, ok } from '@tcl-kol-os/domain';
+import {
+  type Result,
+  type User,
+  assertEditable,
+  campoDelCatalogo,
+  err,
+  ok,
+  validarValorEstructurado,
+} from '@tcl-kol-os/domain';
 import { assertCapability } from './authz.ts';
 import { recordAudit } from './audit.ts';
 import { getPool, transaction } from './client.ts';
 import { cargarVersion } from './brief-version.ts';
+
+/**
+ * Solo exige el objeto `PrecisedDate` (DEC-026) para campos `valueType:
+ * 'fecha'` — el editor manual (`CampoEditable.tsx`) solo tiene un control
+ * dedicado para ese tipo (Sprint 5, Fase A). Para el resto de tipos
+ * (`lista`, `enum`, `numero`...) el editor sigue siendo un `<input>` de
+ * texto plano sin control propio — validar su forma ahí bloquearía cualquier
+ * corrección sin ofrecer manera de satisfacerla (regresión real, encontrada
+ * al probar el editor en vivo con `practico.hitos`). Esos tipos se validan
+ * de verdad donde sí hay un control por tipo: `responderPregunta`
+ * (`local-questions.ts`, usado por `TablaPreguntas.tsx`).
+ */
+function validarSiEsFecha(key: string, value: unknown): Result<true> {
+  const catalogo = campoDelCatalogo(key);
+  if (catalogo?.valueType !== 'fecha') return ok(true as const);
+  const validacion = validarValorEstructurado(key, value);
+  if (!validacion.ok) return err({ code: 'BRIEF_FIELD_INVALID', message: validacion.mensaje });
+  return ok(true as const);
+}
 
 interface CampoObjetivo {
   readonly id: string;
@@ -109,6 +136,9 @@ export async function corregirCampo(
 
   const campo = await cargarCampoAutorizado(actor, versionId, fieldId);
   if (!campo.ok) return campo;
+
+  const validacion = validarSiEsFecha(campo.value.key, opciones.value);
+  if (!validacion.ok) return validacion;
 
   return transaction(async (client) => {
     const actualizado = await client.query<{ revision: number }>(
@@ -204,6 +234,9 @@ export async function declararExcepcionProducto(
   if (!compartido) {
     return err({ code: 'RESOURCE_NOT_FOUND', message: 'El campo compartido no existe en esta versión.' });
   }
+
+  const validacion = validarSiEsFecha(opciones.key, opciones.value);
+  if (!validacion.ok) return validacion;
 
   return transaction(async (client) => {
     // Defensa en profundidad — el trigger de la migración 005 igual lo exige.
@@ -343,6 +376,9 @@ export async function resolverConflicto(
 
   const campo = await cargarCampoAutorizado(actor, versionId, fieldId);
   if (!campo.ok) return campo;
+
+  const validacion = validarSiEsFecha(campo.value.key, opciones.value);
+  if (!validacion.ok) return validacion;
 
   return transaction(async (client) => {
     const actualizado = await client.query<{ revision: number }>(

@@ -139,23 +139,20 @@ Cada historia es una **porción vertical demoable**: atraviesa interfaz, dominio
 
 ## 8. Épica E7 — Editor de brief
 
-> **Estado (26 de agosto de 2026, corregido tras revisión del product owner):**
-> **parcial.** E7-1, E7-3 (validación contra el tipo del catálogo antes de
-> guardar, salvo fechas — ver nota), E7-4, E7-5, E7-8 y E7-9 implementadas.
-> E7-2 cubierta como autoguardado al perder foco, no como indicador de
-> guardado en curso. E7-3: `practico.fecha_inicio`/`fecha_fin` se guardan
-> como texto plano en el editor, no como el objeto `PrecisedDate` (DEC-026).
-> **E7-7 (protección contra edición concurrente) sí implementada** — vía
-> `revision` optimista (`FIELD_REVISION_CONFLICT`), no vía bloqueo de
-> edición. **E7-8 (interruptor compartido/específico por producto) sí
-> implementada** — declarar una excepción exige motivo, crea una fila nueva
-> anclada al producto sin tocar la compartida, y se puede revertir; 9
-> pruebas (`exception-por-producto.test.ts`) y verificación en vivo en el
-> navegador. Esta historia se había reportado antes como diferida — era un
-> error de reporte, estaba dentro del alcance aprobado. **Solo E7-6
-> (comentarios internos) sigue sin ninguna pieza construida**, diferida de
-> verdad. Detalle en [HANDOFF.md](../../HANDOFF.md) §5 y
-> [D0-17](D0-17-cierre-sprint4.md).
+> **Estado (15 de septiembre de 2026, cierre de Sprint 5):** **completa.**
+> E7-1, E7-4, E7-5, E7-8 y E7-9 implementadas desde Sprint 4. **E7-6
+> (comentarios internos) implementada** — crear, responder en hilo, resolver,
+> reabrir, contador de conversaciones abiertas; nunca visible para el rol
+> `cliente` (`packages/db/src/comments.ts`, migración 007). **E7-3 ahora
+> cubre fechas**: `practico.fecha_inicio`/`fecha_fin` usan el objeto
+> `PrecisedDate` (DEC-026) también en el editor manual, con el mismo control
+> que ya usaba el editor de preguntas locales; el resto de tipos (`lista`,
+> `enum`, `numero`) sigue sin control dedicado — deuda preexistente,
+> documentada en [D0-18](D0-18-cierre-sprint5.md) §8. E7-2 sigue cubierta
+> como autoguardado al perder foco, no como indicador de guardado en curso.
+> E7-7 (concurrencia optimista) y E7-8 (excepción por producto) sin cambios
+> desde Sprint 4. Detalle en [HANDOFF.md](../../HANDOFF.md) §5 y
+> [D0-18](D0-18-cierre-sprint5.md).
 
 > **Criterio (§24):** una falla del worker no impide completar y guardar el brief manualmente.
 
@@ -175,13 +172,24 @@ Cada historia es una **porción vertical demoable**: atraviesa interfaz, dominio
 
 ## 9. Épica E8 — Versionado y aprobación
 
-> **Estado (26 de agosto de 2026):** E8-1 conectada de verdad este incremento
-> — antes existía en `packages/domain` pero ningún código la invocaba fuera
-> de su propio test; ahora `transicionarBrief` (`packages/db`) es el único
-> punto que cambia `brief_versions.status`. E8-4 cubierta hasta
-> `internal_review` (UI-14 como botón condicionado por `allowedTransitions`,
-> no como pantalla dedicada). **E8-2, E8-3, E8-5 a E8-9 sin implementar** —
-> el ciclo de aprobación final queda para el siguiente incremento (DEC-027).
+> **Estado (15 de septiembre de 2026, cierre de Sprint 5):** E8-1, E8-2, E8-4
+> a E8-8 implementadas. `transicionarBrief` (`packages/db`) sigue siendo el
+> único punto que cambia `brief_versions.status`, ahora hasta `approved`
+> inclusive. E8-2 (versionado con `parentVersionId`) implementada vía
+> `crearVersionHija` (`packages/db/src/versioning.ts`, DEC-033: candado
+> atómico, dos solicitudes simultáneas no duplican). E8-4/E8-5/E8-6
+> implementadas con motivo obligatorio para devolver, registro de actor y
+> fecha. **E8-7 superada, no solo cubierta**: el pedido original era que el
+> consultor *registrara* la decisión del cliente (DEC-012, "ocurre fuera del
+> sistema"); Sprint 5 además permite que el propio cliente decida desde la
+> aplicación (`brief:request_client_changes`/`brief:register_client_decision`,
+> DEC-030) — el registro manual por el consultor sigue funcionando como vía
+> alterna. E8-8 (marcado `superseded`) implementada, misma transacción que
+> crear la hija. **E8-3 (comparador de versiones, UI-12) y E8-9 (comentarios
+> visibles para el cliente) siguen sin implementar** — fuera del alcance
+> pedido para Sprint 5; E8-9 además fue una decisión explícita del product
+> owner de NO exponer ningún comentario interno al cliente, ni siquiera
+> resuelto (ver DEC-031). Detalle en [D0-18](D0-18-cierre-sprint5.md).
 
 > **Criterio (§24):** no se puede editar una versión aprobada; una modificación crea una versión nueva.
 

@@ -29,6 +29,7 @@ export function EditorBrief({
   secciones,
   productos,
   preguntasCriticasPendientes,
+  conteosComentarios = {},
 }: {
   campaignId: string;
   versionId: string;
@@ -36,6 +37,8 @@ export function EditorBrief({
   secciones: Seccion[];
   productos: { id: string; model: string; rol: string }[];
   preguntasCriticasPendientes: number;
+  /** E7-6 · conversaciones abiertas por clave de campo. Nunca llega para el rol `cliente`. */
+  conteosComentarios?: Record<string, number>;
 }) {
   const [seccionActiva, setSeccionActiva] = useState(secciones[0]?.id ?? '');
   const [productoSeleccionado, setProductoSeleccionado] = useState<string | undefined>(productos[0]?.id);
@@ -98,6 +101,7 @@ export function EditorBrief({
             campo={c}
             versionId={versionId}
             productoSeleccionado={c.nivel === 'compartido_con_excepcion' ? productoSeleccionado : undefined}
+            conteoComentariosAbiertos={conteosComentarios[c.key] ?? 0}
           />
         ))
       )}

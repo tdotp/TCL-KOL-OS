@@ -9,7 +9,14 @@
  * manuales.
  */
 
-import { type Result, type User, campoDelCatalogo, err, ok } from '@tcl-kol-os/domain';
+import {
+  type Result,
+  type User,
+  campoDelCatalogo,
+  err,
+  ok,
+  validarValorEstructurado,
+} from '@tcl-kol-os/domain';
 import { assertCapability } from './authz.ts';
 import { recordAudit } from './audit.ts';
 import { getPool, transaction } from './client.ts';
@@ -243,90 +250,9 @@ export async function listarPreguntas(
   );
 }
 
-// ─────────────────────────── Validación estructurada (corrección 3) ───────────
-
-/**
- * Valida `answerValue` contra la definición canónica del campo antes de
- * aplicarlo. Nunca se guarda `"2026-11"` como texto libre donde el campo
- * espera un objeto de fecha con precisión — se rechaza con un mensaje
- * accionable antes de tocar la base.
- */
-function validarValorEstructurado(
-  key: string,
-  valor: unknown,
-): { ok: true } | { ok: false; mensaje: string } {
-  const campo = campoDelCatalogo(key);
-  if (!campo) return { ok: false, mensaje: `«${key}» no es un campo del catálogo del brief.` };
-
-  switch (campo.valueType) {
-    case 'texto':
-      if (typeof valor !== 'string' || valor.trim() === '') {
-        return { ok: false, mensaje: `«${campo.label}» espera un texto no vacío.` };
-      }
-      return { ok: true };
-
-    case 'numero':
-      if (typeof valor !== 'number' || Number.isNaN(valor)) {
-        return { ok: false, mensaje: `«${campo.label}» espera un número.` };
-      }
-      return { ok: true };
-
-    case 'enum':
-      if (typeof valor !== 'string' || !(campo.valoresPermitidos ?? []).includes(valor)) {
-        return {
-          ok: false,
-          mensaje: `«${campo.label}» debe ser uno de: ${(campo.valoresPermitidos ?? []).join(', ')}.`,
-        };
-      }
-      return { ok: true };
-
-    case 'lista':
-      if (!Array.isArray(valor) || valor.length === 0 || !valor.every((v) => typeof v === 'string')) {
-        return { ok: false, mensaje: `«${campo.label}» espera una lista de textos.` };
-      }
-      return { ok: true };
-
-    case 'lista_objetos':
-      if (
-        !Array.isArray(valor) ||
-        valor.length === 0 ||
-        !valor.every(
-          (v) =>
-            typeof v === 'object' &&
-            v !== null &&
-            'descripcion' in v &&
-            typeof (v as { descripcion: unknown }).descripcion === 'string',
-        )
-      ) {
-        return { ok: false, mensaje: `«${campo.label}» espera una lista de objetos con "descripcion".` };
-      }
-      return { ok: true };
-
-    case 'fecha': {
-      if (typeof valor !== 'object' || valor === null || !('tipo' in valor)) {
-        return {
-          ok: false,
-          mensaje: `«${campo.label}» espera un objeto de fecha con precisión (DEC-026), no texto libre.`,
-        };
-      }
-      const v = valor as { tipo: unknown; fecha?: unknown; inicio?: unknown; fin?: unknown };
-      const tiposValidos = ['exacta', 'mes', 'rango', 'aproximada', 'pendiente_confirmar'];
-      if (typeof v.tipo !== 'string' || !tiposValidos.includes(v.tipo)) {
-        return { ok: false, mensaje: `«${campo.label}»: tipo de precisión de fecha inválido.` };
-      }
-      if ((v.tipo === 'exacta' || v.tipo === 'mes') && typeof v.fecha !== 'string') {
-        return { ok: false, mensaje: `«${campo.label}»: falta "fecha" para el tipo «${v.tipo}».` };
-      }
-      if (v.tipo === 'rango' && (typeof v.inicio !== 'string' || typeof v.fin !== 'string')) {
-        return { ok: false, mensaje: `«${campo.label}»: el rango exige "inicio" y "fin".` };
-      }
-      return { ok: true };
-    }
-
-    default:
-      return { ok: true };
-  }
-}
+// La validación estructurada (`validarValorEstructurado`) vive ahora en
+// `packages/domain` (Sprint 5, Fase A) para que `corregirCampo` la exija
+// también — ver `packages/domain/src/field-values.ts`.
 
 // ─────────────────────────── Responder y descartar (§5.4) ─────────────────────
 

@@ -7,6 +7,8 @@ import {
   declararExcepcionDeCampo,
   revertirExcepcionDeCampo,
 } from '@/lib/actions';
+import { ControlDeFecha, type PrecisedDateValue } from '@/components/ControlDeFecha';
+import { PanelComentarios } from './PanelComentarios';
 
 export interface CampoParaEditar {
   id: string;
@@ -71,14 +73,19 @@ export function CampoEditable({
   campo,
   versionId,
   productoSeleccionado,
+  conteoComentariosAbiertos = 0,
 }: {
   campo: CampoParaEditar;
   versionId: string;
   /** Producto activo en el selector — solo relevante para campos `compartido_con_excepcion` (E7-8). */
   productoSeleccionado?: string | undefined;
+  /** E7-6 · cuántas conversaciones de este campo siguen abiertas. Nunca llega para el rol `cliente`. */
+  conteoComentariosAbiertos?: number;
 }) {
+  const esFecha = campo.valueType === 'fecha';
   const [valorTexto, setValorTexto] = useState(valorLegible(campo.value));
   const [evidenciaAbierta, setEvidenciaAbierta] = useState(false);
+  const [comentariosAbiertos, setComentariosAbiertos] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
   const [estadoCorreccion, corregir, corrigiendo] = useActionState(corregirCampoDeBrief, {});
@@ -96,8 +103,20 @@ export function CampoEditable({
     return undefined;
   }, [conflictoDeRevision]);
 
+  const valorFechaInputRef = useRef<HTMLInputElement>(null);
+
   const guardar = () => {
     if (valorTexto === valorLegible(campo.value)) return; // sin cambios, nada que guardar
+    formRef.current?.requestSubmit();
+  };
+
+  const guardarFecha = (v: PrecisedDateValue) => {
+    // El input oculto es no-controlado a propósito: se escribe directo en el DOM
+    // para que `requestSubmit` (llamado en el mismo turno) lo vea de inmediato,
+    // sin esperar el próximo render de React.
+    if (valorFechaInputRef.current) {
+      valorFechaInputRef.current.value = JSON.stringify(v);
+    }
     formRef.current?.requestSubmit();
   };
 
@@ -132,15 +151,24 @@ export function CampoEditable({
         <input type="hidden" name="versionId" value={versionId} />
         <input type="hidden" name="fieldId" value={campo.id} />
         <input type="hidden" name="revision" value={campo.revision} />
-        <input type="hidden" name="value" value={valorTexto} />
-        <input
-          value={valorTexto}
-          onChange={(e) => setValorTexto(e.target.value)}
-          onBlur={guardar}
-          placeholder={campo.status === 'not_found' ? 'Sin dato — escriba para completarlo' : undefined}
-          style={{ width: '100%', padding: '6px 8px', fontSize: 14 }}
-          disabled={corrigiendo}
-        />
+        {esFecha ? (
+          <>
+            <input type="hidden" name="value" ref={valorFechaInputRef} defaultValue="" />
+            <ControlDeFecha valorInicialProp={campo.value} onChange={guardarFecha} />
+          </>
+        ) : (
+          <>
+            <input type="hidden" name="value" value={valorTexto} />
+            <input
+              value={valorTexto}
+              onChange={(e) => setValorTexto(e.target.value)}
+              onBlur={guardar}
+              placeholder={campo.status === 'not_found' ? 'Sin dato — escriba para completarlo' : undefined}
+              style={{ width: '100%', padding: '6px 8px', fontSize: 14 }}
+              disabled={corrigiendo}
+            />
+          </>
+        )}
       </form>
 
       <div className="row" style={{ gap: 8, marginTop: 8, alignItems: 'center' }}>
@@ -177,6 +205,23 @@ export function CampoEditable({
             {evidenciaAbierta ? 'ocultar evidencia' : `ver evidencia (${campo.evidencias.length})`}
           </button>
         )}
+        <button
+          type="button"
+          onClick={() => setComentariosAbiertos((v) => !v)}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: 'var(--brand)',
+            cursor: 'pointer',
+            fontSize: 12,
+          }}
+        >
+          {comentariosAbiertos
+            ? 'ocultar comentarios'
+            : conteoComentariosAbiertos > 0
+              ? `comentarios (${conteoComentariosAbiertos})`
+              : 'comentarios'}
+        </button>
         <details style={{ fontSize: 11, color: 'var(--muted)' }}>
           <summary style={{ cursor: 'pointer' }}>clave técnica</summary>
           <span className="mono">{campo.key}</span>
@@ -219,6 +264,14 @@ export function CampoEditable({
             </div>
           ))}
         </div>
+      )}
+
+      {comentariosAbiertos && (
+        <PanelComentarios
+          versionId={versionId}
+          fieldKey={campo.key}
+          campaignProductId={campo.campaignProductId ?? undefined}
+        />
       )}
     </div>
   );
