@@ -18,6 +18,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type pg from 'pg';
 import { closePool, getPool, query, transaction } from './client.ts';
+import { eliminarCampanaDePrueba } from './test-utils.ts';
 
 let orgId: string;
 let userId: string;
@@ -112,7 +113,7 @@ afterAll(async () => {
       `DELETE FROM brief_versions WHERE brief_id = (SELECT id FROM briefs WHERE campaign_id = $1)`,
       [campanaDePrueba],
     );
-    await query(`DELETE FROM campaigns WHERE id = $1`, [campanaDePrueba]);
+    await eliminarCampanaDePrueba(campanaDePrueba);
   }
   await closePool();
 });

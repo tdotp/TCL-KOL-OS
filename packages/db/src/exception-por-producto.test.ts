@@ -12,6 +12,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { User } from '@tcl-kol-os/domain';
 import { closePool, query } from './client.ts';
+import { eliminarCampanaDePrueba } from './test-utils.ts';
 import { crearBriefManual } from './manual.ts';
 import { declararExcepcionProducto, revertirExcepcionProducto } from './brief-fields.ts';
 
@@ -70,7 +71,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await query(`DELETE FROM campaigns WHERE id = $1`, [campanaPropia]);
+  await eliminarCampanaDePrueba(campanaPropia);
   await closePool();
 });
 

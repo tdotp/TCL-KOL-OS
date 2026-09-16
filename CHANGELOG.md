@@ -22,6 +22,11 @@ Comentarios internos por campo, fechas estructuradas en el editor manual, aproba
 - El trigger `claim_exige_evidencia()` (migración 004) no tenía la excepción de DEC-028 para campos críticos resueltos por pregunta local — bloqueaba cualquier aprobación real. Corregido en migración `008_claim_exige_evidencia_excepcion_manual.sql`.
 - `listCampaigns` filtraba por la organización del actor incluso para el rol `cliente`, que es de otra organización por definición — la campaña nunca aparecía en su listado.
 
+#### Corregido — auditoría de cierre · 16 de septiembre de 2026
+
+- **CI nunca podía correr en un runner limpio**: `.github/workflows/ci.yml` levantaba el worker con `.venv/bin/python`, pero ningún paso creaba ese entorno virtual. Corregido a `python -m uvicorn`/`python -m pip install`, verificado en un contenedor recién creado sin `.venv` preexistente (DEC-035).
+- **La inmutabilidad histórica desaparecía después de `superseded`**: los triggers de `brief_fields`/`field_comments` solo protegían `approved`; `evidence`, `local_questions` y `brief_field_revisions` nunca tuvieron protección propia. Migración `009_inmutabilidad_historica.sql` extiende la protección a `approved`/`superseded`/`cancelled` en las seis tablas, con 34 pruebas SQL directas nuevas (DEC-036).
+
 ### Cierre de Sprint 3 + Sprint 4 — Brief funcional de punta a punta · 26 de agosto de 2026
 
 Épica E6 (preguntas locales) y E7 (editor estructurado), más lo que Sprint 3

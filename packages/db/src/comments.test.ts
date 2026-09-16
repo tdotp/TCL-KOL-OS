@@ -11,6 +11,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { User } from '@tcl-kol-os/domain';
 import { closePool, query } from './client.ts';
+import { eliminarCampanaDePrueba } from './test-utils.ts';
 import { crearBriefManual } from './manual.ts';
 import {
   contarConversacionesAbiertas,
@@ -77,7 +78,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await query(`DELETE FROM campaigns WHERE id = ANY($1)`, [[campanaA, campanaB]]);
+  await eliminarCampanaDePrueba([campanaA, campanaB]);
   await closePool();
 });
 

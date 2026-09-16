@@ -564,6 +564,26 @@ posterior a aprobación». 15 de septiembre de 2026.
 - **Dónde vive:** `infra/db/migrations/008_claim_exige_evidencia_excepcion_manual.sql`.
 - **Responsable de aprobación:** Gerardo Calambás.
 
+### DEC-035 — CI nunca podía correr en un runner limpio (`.venv` referenciado sin crearse)
+
+- **Fecha:** 16 de septiembre de 2026
+- **Estado:** **aprobada** — corrección de un defecto real, encontrada en auditoría independiente del ZIP de Sprint 5
+- **Origen:** `.github/workflows/ci.yml` levantaba el worker con `.venv/bin/python -m uvicorn app.main:app ...`, pero ningún paso anterior del workflow crea ese entorno virtual — `pip install -r requirements.txt` instala en el intérprete que `actions/setup-python` ya deja configurado. En cualquier checkout limpio (todo runner real de GitHub Actions, por definición), `.venv` nunca existe: ese paso habría fallado en cada corrida. Ninguna verificación anterior de este proyecto lo detectó porque todas se apoyaron en la imagen Docker del worker (`services/ai-worker/Dockerfile`), que instala e invoca `uvicorn` directo — un camino de código distinto al que `ci.yml` de verdad ejecuta.
+- **Decisión:** el workflow usa `python -m uvicorn` (el intérprete que ya está configurado, sin ruta fija a un entorno que no existe) y `python -m pip install -r requirements.txt` en los tres pasos de instalación, para eliminar la ambigüedad entre `pip` y `python -m pip`.
+- **Verificación:** reproducida la receta literal de `ci.yml` dentro de un contenedor recién creado, Python 3.11, sin ningún `.venv` preexistente — confirmado explícitamente que `.venv/bin/python` no existe ahí (el fallo exacto que habría dado el workflow original) y que el comando corregido sí levanta el worker. No se ejecutó dentro de un runner real de GitHub Actions en esta sesión (no hay remoto configurado); ver D0-18 §8 y §10.3.
+- **Dónde vive:** `.github/workflows/ci.yml`.
+- **Responsable de aprobación:** Gerardo Calambás.
+
+### DEC-036 — La inmutabilidad histórica de la base desaparecía después de `superseded`
+
+- **Fecha:** 16 de septiembre de 2026
+- **Estado:** **aprobada** — corrección de un defecto real, encontrada en auditoría independiente del ZIP de Sprint 5
+- **Origen:** `campos_de_version_aprobada_inmutables()` (migración 004) y `comentarios_de_version_aprobada_inmutables()` (migración 007) solo bloqueaban `UPDATE`/`DELETE` mientras la versión dueña estaba `approved`. Al crear una versión hija (`crearVersionHija`, Fase E de Sprint 5), la versión padre pasa a `superseded` — y ahí la protección desaparecía por completo: nada en la base impedía un `UPDATE`, `DELETE` o `INSERT` directo sobre el contenido de una versión ya reemplazada. `evidence`, `local_questions` y `brief_field_revisions` nunca habían tenido ninguna protección propia, ni siquiera para `approved`.
+- **Decisión:** migración `009_inmutabilidad_historica.sql` (nunca modifica una migración ya aplicada; redefine funciones existentes con `CREATE OR REPLACE FUNCTION`, igual que la 008). Extiende la protección a `approved`, `superseded` y `cancelled` por igual, en `brief_fields`, `evidence` (trigger nuevo), `local_questions` (trigger nuevo), `brief_field_revisions` (protección de `INSERT`/`DELETE` añadida al `UPDATE` que ya bloqueaba sin condición) y `field_comments`. `brief_versions` gana la regla explícita: un estado terminal (`superseded`/`cancelled`) nunca vuelve a ningún otro estado por SQL directo — `approved → superseded` sigue siendo la única transición que un estado cerrado admite, y solo para crear la versión hija.
+- **Un matiz que surgió al implementarlo:** un primer diseño asumía que la limpieza de campañas de prueba (`DELETE FROM campaigns`) seguiría funcionando sola porque la cascada borraría primero `brief_versions`, dejando el disparador sin nada que proteger. Es falso en general — verificado contra Postgres real, `local_questions` tiene FK directa a `campaigns` (además de a `brief_version_id`), así que su cascada puede dispararse mientras `brief_versions` todavía existe. Se resolvió con una bandera de bypass (`SET LOCAL tclkolos.permitir_borrado_historico`) acotada a una única transacción, exclusiva de `packages/db/src/test-utils.ts` (`eliminarCampanaDePrueba`) — nunca usada por ninguna ruta de la aplicación real.
+- **Dónde vive:** `infra/db/migrations/009_inmutabilidad_historica.sql`; `packages/db/src/test-utils.ts`; pruebas en `packages/db/src/immutability.test.ts` (34 casos, SQL directo, repetidos en `approved` y en `superseded`).
+- **Responsable de aprobación:** Gerardo Calambás.
+
 ---
 
 ## Decisiones pendientes que no bloquean MVP 0

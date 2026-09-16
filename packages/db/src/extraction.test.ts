@@ -27,6 +27,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { closePool, query, transaction } from './client.ts';
+import { eliminarCampanaDePrueba } from './test-utils.ts';
 import { obtenerOCrearVersionDeTrabajo } from './brief-version.ts';
 import { findUserByEmail } from './users.ts';
 import {
@@ -140,7 +141,7 @@ afterAll(async () => {
   if (campanaDePrueba) {
     // Arrastra en cascada el brief, versiones, campaign_products, fuentes y
     // fragmentos propios — nunca toca la campaña compartida.
-    await query(`DELETE FROM campaigns WHERE id = $1`, [campanaDePrueba]);
+    await eliminarCampanaDePrueba(campanaDePrueba);
   }
   await closePool();
 });

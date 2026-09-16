@@ -18,6 +18,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { User } from '@tcl-kol-os/domain';
 import { closePool, query } from './client.ts';
+import { eliminarCampanaDePrueba } from './test-utils.ts';
 import { crearBriefManual } from './manual.ts';
 import { confirmarCampo } from './brief-fields.ts';
 import { extraerBrief } from './extraction.ts';
@@ -139,7 +140,7 @@ afterAll(async () => {
       `DELETE FROM brief_versions WHERE brief_id IN (SELECT id FROM briefs WHERE campaign_id = $1)`,
       [id],
     );
-    await query(`DELETE FROM campaigns WHERE id = $1`, [id]);
+    await eliminarCampanaDePrueba(id);
   }
   await closePool();
 });

@@ -29,6 +29,7 @@ import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { User } from '@tcl-kol-os/domain';
 import { closePool, query, transaction } from './client.ts';
+import { eliminarCampanaDePrueba } from './test-utils.ts';
 import { obtenerOCrearVersionDeTrabajo, cargarVersion } from './brief-version.ts';
 import { crearBriefManual } from './manual.ts';
 import { confirmarCampo } from './brief-fields.ts';
@@ -119,9 +120,9 @@ afterAll(async () => {
   // por nombre ni por organización. La centinela se borra AL FINAL, después
   // de haber demostrado que sobrevivió intacta a todo lo demás.
   if (campanaPropia) {
-    await query(`DELETE FROM campaigns WHERE id = $1`, [campanaPropia]);
+    await eliminarCampanaDePrueba(campanaPropia);
   }
-  await query(`DELETE FROM campaigns WHERE id = $1`, [campanaCentinela]);
+  await eliminarCampanaDePrueba(campanaCentinela);
   await closePool();
 });
 

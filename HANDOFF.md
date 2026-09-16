@@ -1,13 +1,17 @@
 # Handoff — TCL KOL OS
 
-Estado a **15 de septiembre de 2026**. Base de este cierre: `106f622` (Sprint
+Estado a **16 de septiembre de 2026**. Base de este cierre: `106f622` (Sprint
 4 + Demo A + Gate INC-001B, todo en `PASS` — ver
 [D0-17](docs/product/D0-17-cierre-sprint4.md)). **Sprint 5 cerrado**: el ciclo
 completo del brief corre de punta a punta — comentarios internos, fechas
 estructuradas, aprobación interna, revisión y decisión del cliente,
-versionado posterior a aprobación — verificado con 330 pruebas automatizadas
-y dos demos reales en el navegador (Demo C, Demo D). Detalle completo y
-matriz de estado en [D0-18](docs/product/D0-18-cierre-sprint5.md).
+versionado posterior a aprobación — verificado con 364 pruebas automatizadas
+y dos demos reales en el navegador (Demo C, Demo D). Entregado en dos
+commits: `03688f1` (entrega inicial) y un commit correctivo posterior que
+cierra dos defectos que una auditoría independiente encontró en el ZIP —
+CI nunca podía correr en un runner limpio, y la inmutabilidad histórica de
+la base desaparecía tras `superseded`. Detalle completo y matriz de estado
+en [D0-18](docs/product/D0-18-cierre-sprint5.md).
 
 Este archivo existe para que una sesión nueva pueda continuar sin releer el
 historial. No repite lo que ya está en otros documentos: los enlaza.
@@ -46,18 +50,20 @@ consecuencia de eso.
 | Demo C (ciclo de aprobación) + Demo D (versión nueva) | ✅ **ejecutadas y verificadas — ver D0-18 §4** |
 | Exportación, traducción, Drive/OIDC/OCR, CRM de influencers | ⬅️ siguiente incremento |
 
-**Pruebas al cierre: 80 dominio (vitest) · 153 integración
-`packages/db` (vitest, contra Postgres real, sin ningún dato acumulado) · 97
+**Pruebas al cierre: 80 dominio (vitest) · 187 integración
+`packages/db` (vitest, contra Postgres real, sin ningún dato acumulado,
+incluidas 34 pruebas SQL directas de inmutabilidad histórica) · 97
 worker (pytest) · `ruff check .` y `mypy app` limpios sobre todo
 `services/ai-worker` · verificación cruzada de catálogo TS/Python en verde ·
 `npm run lint`, `npm run typecheck` y `npm run format:check` limpios ·
 `next build` compila, incluidas las rutas nuevas de Sprint 5. **La receta
-literal de `ci.yml` (Postgres + Redis + worker/consumidor con
-`AI_PROVIDER=fake`, todos efímeros) se corrió completa: cero fallas** —
-contra Docker local (puerto alternativo por un conflicto de otro proyecto en
-esta máquina, `.env` restaurado a sus valores originales al cerrar; no se
-corrió dentro del runner real de GitHub Actions en esta sesión — ver D0-18
-§8). Detalle completo en [D0-18](docs/product/D0-18-cierre-sprint5.md).
+literal de `ci.yml` corregida (Postgres + Redis + worker/consumidor con
+`AI_PROVIDER=fake`, todos efímeros, `python -m uvicorn` sin `.venv`) se
+reprodujo completa dentro de un contenedor Docker recién creado, sin ningún
+`.venv` preexistente: cero fallas** — no es una corrida real de GitHub
+Actions (no hay remoto configurado en esta sesión), es la misma receta
+reproducida fielmente en un contenedor limpio. Detalle completo en
+[D0-18](docs/product/D0-18-cierre-sprint5.md), especialmente §10.
 
 ### Lo que cambia respecto al HANDOFF anterior
 
@@ -203,7 +209,7 @@ próxima sesión no los redescubra por accidente:
 |---|---|
 | **Exportación, traducción, CRM de influencers, métricas de campaña, OCR, Google Drive, OIDC** | Excluidos por el alcance original de Sprint 5 (fuera del pedido explícitamente). |
 | **Control dedicado para campos `lista`/`enum`/`numero`/`lista_objetos` en el editor manual** | Sigue siendo un `<input>` de texto plano sin validación estructural, deuda ya marcada `PARTIAL` desde el cierre de Sprint 4 (E7-3) — confirmada de nuevo al acotar a propósito la validación de `PrecisedDate` en Sprint 5 a `valueType:'fecha'` (D0-18 §5, defecto 3), para no bloquear esos campos sin ofrecer un control para satisfacerlos. |
-| **Verificación de Fase J contra el runner real de GitHub Actions** | Se corrió la receta literal de `ci.yml` contra Docker local en esta sesión (puerto alternativo, ver D0-18 §8); no dentro de GitHub Actions. |
+| **Verificación de Fase J contra el runner real de GitHub Actions** | Se reprodujo la receta literal de `ci.yml` (ya corregida) dentro de un contenedor recién creado, sin `.venv` preexistente — ver D0-18 §10.3; no dentro de GitHub Actions, porque este repositorio no tiene remoto configurado en esta sesión y crear uno exige autorización de push que no se pidió. |
 | **Más de una organización cliente** | El modelo actual (`canAccessResource` para `cliente` decide por `visibility`, no por organización) asume una sola organización cliente, igual que ya asumía DEC-011. Documentado en D0-18 §8 para que no se redescubra por accidente si en el futuro hay más de un cliente. |
 
 ---
@@ -364,6 +370,35 @@ Están documentados porque cada uno costó tiempo y ninguno era obvio:
     editor en vivo, no con una prueba automatizada — ninguna prueba
     existente tocaba un campo `lista` a través de `corregirCampo`. Corregido
     acotando la validación exactamente al alcance que pidió Sprint 5.
+15. **Un `PASS` de "verifiqué contra la receta de `ci.yml`" no es lo mismo
+    que haber ejecutado los comandos que `ci.yml` realmente tiene.** La
+    verificación de Fase J de la entrega inicial de Sprint 5 usó Docker
+    Compose (`docker compose up --build worker`), que construye el worker
+    con su `Dockerfile` — un camino de instalación distinto al que
+    `ci.yml` ejecuta paso a paso. Por eso nunca se notó que
+    `.venv/bin/python -m uvicorn` en el workflow referenciaba un entorno
+    que ningún paso anterior crea: en un checkout limpio (cualquier runner
+    real), ese comando falla siempre. Lo encontró una auditoría
+    independiente del ZIP, no esta sesión. **Lección:** "correr la receta
+    de CI" significa ejecutar los comandos exactos del archivo YAML, no
+    una ruta equivalente que da el mismo resultado final por otro camino
+    — sobre todo cuando ese otro camino (aquí, el `Dockerfile`) fue escrito
+    por una razón distinta (producción/desarrollo local) y puede divergir
+    del workflow sin que nadie lo note. Corregido y re-verificado en un
+    contenedor sin `.venv` preexistente — detalle en
+    [D0-18 §10](docs/product/D0-18-cierre-sprint5.md).
+16. **Inmutabilidad sin repetir el escenario completo del ciclo de vida no
+    prueba lo que promete.** Los triggers de `brief_fields`/`field_comments`
+    llevaban desde Sprint 4/5 bloqueando `approved` correctamente, y todas
+    las pruebas que existían lo confirmaban — pero ninguna prueba había
+    llevado nunca una versión hasta `superseded` y luego intentado tocar su
+    contenido, así que nadie notó que la protección desaparecía justo ahí.
+    `evidence`/`local_questions`/`brief_field_revisions` tampoco habían
+    tenido nunca protección propia. Corregido en migración 009, con 34
+    pruebas SQL directas que repiten cada aserción en los dos estados
+    (`approved` y `superseded`) — el patrón a seguir de ahora en adelante
+    para cualquier regla de inmutabilidad nueva: probarla en TODOS los
+    estados que se supone que cubre, no solo en el primero que se piensa.
 
 ---
 
@@ -391,6 +426,9 @@ packages/db/         Aplica la política del dominio; nunca la redefine
                           solicitarCambiosCliente/aprobarComoCliente
   versioning.ts           (Sprint 5) crearVersionHija — candado atómico (DEC-033)
   comments.ts             (Sprint 5) comentarios internos por campo (E7-6)
+  test-utils.ts           (Sprint 5, correctivo) eliminarCampanaDePrueba — única
+                            función que activa el bypass de inmutabilidad (DEC-036),
+                            solo para limpieza de pruebas, nunca la app real
 
 services/ai-worker/  Único que habla con el proveedor de IA — sin cambios en Sprint 5
   brief_schema.py      Lee el catálogo único (antes: tabla propia)
@@ -408,6 +446,8 @@ apps/web/            Next.js 15. Server actions en src/lib/actions.ts
 infra/db/migrations/ 005_producto_preguntas_y_revision.sql — anclaje, revisión, brief_field_revisions
                       007_comentarios_internos.sql — field_comments (Sprint 5)
                       008_claim_exige_evidencia_excepcion_manual.sql — excepción DEC-028 (Sprint 5)
+                      009_inmutabilidad_historica.sql — protección tras superseded/
+                        cancelled en las seis tablas (Sprint 5, correctivo — DEC-036)
 docs/product/brief-schema/brief-catalog.json   Fuente única de los 41 campos
 ```
 

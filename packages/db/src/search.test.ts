@@ -24,6 +24,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { closePool, query } from './client.ts';
+import { eliminarCampanaDePrueba } from './test-utils.ts';
 import { buscarEvidencia, estadoDelIndice } from './search.ts';
 
 const DIMENSIONES = 1536;
@@ -137,7 +138,7 @@ afterAll(async () => {
     if (id) await query(`DELETE FROM source_documents WHERE id = $1`, [id]);
   }
   if (campanaPropia) {
-    await query(`DELETE FROM campaigns WHERE id = $1`, [campanaPropia]);
+    await eliminarCampanaDePrueba(campanaPropia);
   }
   await closePool();
 });

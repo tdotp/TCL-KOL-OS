@@ -14,6 +14,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { User } from '@tcl-kol-os/domain';
 import { closePool, query } from './client.ts';
+import { eliminarCampanaDePrueba } from './test-utils.ts';
 import { archiveCampaign, createCampaign, getCampaign, listCampaigns } from './campaigns.ts';
 import { findUserByEmail } from './users.ts';
 
@@ -215,7 +216,7 @@ describe('auditoría (§10.3, regla 4)', () => {
     // Limpieza por id propio (INC-001A): el evento de auditoría es de solo
     // inserción y sobrevive a propósito; la campaña que esta prueba creó no
     // debe acumularse en corridas sucesivas.
-    await query(`DELETE FROM campaigns WHERE id = $1`, [creada.value.id]);
+    await eliminarCampanaDePrueba(creada.value.id);
   });
 
   it('la auditoría no admite modificación posterior', async () => {

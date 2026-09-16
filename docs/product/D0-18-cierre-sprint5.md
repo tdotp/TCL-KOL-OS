@@ -1,10 +1,10 @@
 # D0-18 — Cierre de Sprint 5: ciclo completo del brief, de `internal_review` a `approved`
 
-**Fecha:** 15–16 de septiembre de 2026. **Commit base:** `106f622cf6e168e99e24d82cb9bff04ce604cc55` (estado aprobado del cierre de Sprint 4, ver [D0-17](D0-17-cierre-sprint4.md)). **Commit final:** ver entrega §9.
+**Fecha:** 15–16 de septiembre de 2026, con corrección de cierre el 16 de septiembre de 2026. **Commit base:** `106f622cf6e168e99e24d82cb9bff04ce604cc55` (estado aprobado del cierre de Sprint 4, ver [D0-17](D0-17-cierre-sprint4.md)). **Commit de la entrega inicial de Sprint 5:** `03688f18b70e65968420c547d7ef4e79816516de`. **Commit correctivo** (esta versión del documento): ver §10 — corrige dos defectos de cierre encontrados en auditoría independiente del ZIP de la entrega inicial, sin ampliar alcance.
 
 Formato de estado, sin excepción: **PASS** (implementado, probado, con evidencia real, sin condiciones pendientes) · **PARTIAL** (implementado con un corte de alcance explícito y documentado) · **FAIL** (no cumple, o diferido sin implementar) · **BLOCKED** (depende de algo fuera de mi control). No se usa `PASS` sin prueba y evidencia.
 
-**Estado general: CERRADO.** Los tres flujos pedidos — aprobación interna con motivo, revisión y decisión del cliente, y versionado posterior a aprobación — corren de punta a punta en la aplicación real, verificados dos veces: con la suite automatizada (330 pruebas) y con dos demostraciones manuales completas en el navegador (Demo C y Demo D), durante las cuales se encontraron y corrigieron seis defectos reales que ninguna prueba anterior había ejercitado, porque ninguna transición había llegado nunca a `approved`.
+**Estado general: CERRADO**, con la corrección de auditoría incorporada. Los tres flujos pedidos — aprobación interna con motivo, revisión y decisión del cliente, y versionado posterior a aprobación — corren de punta a punta en la aplicación real, verificados con la suite automatizada (**364 pruebas** tras la corrección, ver §6) y con dos demostraciones manuales completas en el navegador (Demo C y Demo D). La entrega inicial encontró y corrigió seis defectos reales al ejercitar `approved` por primera vez en la vida del proyecto (§5); la auditoría de cierre encontró dos defectos más — uno en el workflow de CI, otro en la inmutabilidad histórica de la base tras `superseded` — ambos corregidos aquí, ver §10.
 
 ---
 
@@ -18,6 +18,7 @@ El cierre de Sprint 4 dejaba el brief funcional hasta `internal_review`; el cicl
 - Añade la vista de solo lectura y decisión del cliente (ampliación de ADR-004), con permisos nuevos y acotados.
 - Añade la creación de versión hija tras una aprobación (DEC-027), con candado de concurrencia.
 - **Al ejercitar por primera vez estos caminos con datos reales** (no solo con datos en memoria de una prueba de dominio), aparecieron seis defectos reales, cada uno documentado en el decision-log (DEC-032 a DEC-034 y esta sección) y corregido antes de cerrar — el mismo patrón que Demo A de Sprint 4 ya había dejado como lección: *un camino nunca ejercitado no está probado, esté o no cubierto por una prueba en memoria*.
+- **Una auditoría independiente posterior a la entrega inicial (`03688f1`) encontró dos defectos de cierre más**, ninguno de alcance nuevo: el workflow de CI nunca podía correr en un runner limpio (`.venv` referenciado sin crearse nunca), y la inmutabilidad histórica de la base desaparecía por completo después de `superseded` — justo el estado al que llega una versión `approved` al crear su hija (Fase E, este mismo incremento). Ambos corregidos, ver §10.
 
 ---
 
@@ -48,6 +49,7 @@ El cierre de Sprint 4 dejaba el brief funcional hasta `internal_review`; el cicl
 |---|---|
 | `007_comentarios_internos.sql` | Tabla `field_comments` (E7-6): ancla a `(brief_version_id, field_key)`, no a `brief_fields.id`, para sobrevivir a una versión hija. Trigger de inmutabilidad igual al de `brief_fields` (ADR-003). |
 | `008_claim_exige_evidencia_excepcion_manual.sql` | Corrige `claim_exige_evidencia()` (migración 004): le faltaba la excepción de DEC-028 (un campo `critico` no técnico resuelto por pregunta local, `provenance_type='manual_local'`, no exige evidencia documental). Defecto real, ver §5 punto 2. |
+| `009_inmutabilidad_historica.sql` | Corrección de auditoría (§10). Cierra el hueco de inmutabilidad tras `superseded`/`cancelled`: `brief_fields`, `evidence` (nunca protegida), `local_questions` (nunca protegida), `brief_field_revisions` (solo `UPDATE` protegido) y `field_comments` ahora bloquean `INSERT`/`UPDATE`/`DELETE` directos en los tres estados cerrados, no solo `approved`. Incluye una bandera de bypass (`SET LOCAL tclkolos.permitir_borrado_historico`) acotada a una transacción, exclusiva de la limpieza de datos de prueba — nunca usada por la aplicación real. |
 
 Ninguna migración modifica el pipeline de extracción ni el esquema del catálogo.
 
@@ -81,6 +83,8 @@ Campaña desechable «Sprint 5 · Demo C — ciclo de aprobación» (producto TC
 
 **Estado: PASS.**
 
+**Evidencia:** cada paso de las dos demos quedó capturado como texto completo de pantalla (`get_page_text`) y verificado por consulta directa a la base de datos, ambos transcritos en la sesión de trabajo — es la evidencia primaria, más fuerte que una imagen porque prueba el estado real, no solo el renderizado. Además se capturaron y mostraron en pantalla, dentro de esa misma sesión, capturas de los estados finales clave (brief `aprobado` con el botón «Crear nueva revisión», y la vista del cliente sobre esa misma versión) — no se exportaron como archivos de imagen al repositorio porque la herramienta de navegador de esta sesión no ofrece una ruta de exportación a disco; quedan como parte del historial de esa conversación, ubicación identificable para quien tenga acceso a ella. Si se necesitan como archivos independientes, se pueden volver a capturar y exportar en una sesión futura.
+
 ---
 
 ## 5. Defectos reales encontrados durante Demo C/D (no en la suite automatizada) y corregidos
@@ -110,10 +114,11 @@ Todos los seis quedan con prueba de regresión donde aplica (defectos 2, 3, 4) o
 | Versionado posterior a aprobación (Fase E) | `packages/db/src/versioning.ts` (nuevo) | 11 | **PASS** |
 | Comentarios internos (Fase B) | `packages/db/src/comments.test.ts` (nuevo) | 11 | **PASS** |
 | Fechas en el editor manual, regresión Demo A/B | `packages/db/src/brief-fields.test.ts` (2 casos nuevos) | 6 | **PASS** |
+| **Inmutabilidad histórica tras `superseded`/`cancelled` (corrección de auditoría, §10)** | `packages/db/src/immutability.test.ts` (nuevo) — SQL directo contra `brief_fields`, `evidence`, `field_comments`, `local_questions`, `brief_field_revisions` y `brief_versions`, repetido en `approved` y en `superseded` | 34 | **PASS** |
 | El resto de `packages/db` (sin cambios de comportamiento) | 12 archivos | 111 | **PASS** |
-| **Total `packages/db`** | 16 archivos | **153** | **PASS** |
+| **Total `packages/db`** | 17 archivos | **187** | **PASS** |
 | `services/ai-worker` (sin tocar) | 9 archivos | 97 | **PASS** |
-| **Total general** | — | **330** | **PASS** |
+| **Total general** | — | **364** | **PASS** |
 
 Catálogo TS/Python: coincide (41 claves). `ruff check .`: limpio. `mypy app`: limpio. `next build`: compila las 13 rutas, incluida `VistaCliente`/`PanelComentarios`. `npm run lint`: limpio (`--max-warnings=0`). `npm run format:check`: limpio.
 
@@ -129,16 +134,16 @@ Catálogo TS/Python: coincide (41 claves). `ruff check .`: limpio. `mypy app`: l
 | Fase D — revisión y decisión del cliente | **PASS** |
 | Fase E — versionado posterior a aprobación (DEC-027) | **PASS** |
 | Fase F — interfaz (reutiliza diseño existente, sin rediseño) | **PASS** |
-| Fase G — seguridad e integridad | **PASS** — ver requisito 13/14 de la matriz §2 |
-| Fase H — pruebas obligatorias | **PASS** — 330 pruebas, ver §6 |
+| Fase G — seguridad e integridad | **PASS** — ver requisito 13/14 de la matriz §2, más la inmutabilidad histórica de §10 |
+| Fase H — pruebas obligatorias | **PASS** — 364 pruebas, ver §6 |
 | Fase I — demos | **PASS** — Demo C y Demo D, ver §4 |
-| Fase J — verificación final desde infraestructura limpia | **PARTIAL** — ver §8 |
+| Fase J — verificación final desde infraestructura limpia | **PASS** — receta de CI reproducida en contenedor limpio, ver §10.3. No se ejecutó dentro de GitHub Actions real — ver la precisión exacta en §8 |
 
 ---
 
 ## 8. Limitaciones y riesgos
 
-- **Fase J no se corrió contra infraestructura recién creada por `ci.yml` en GitHub Actions dentro de esta sesión** — se corrió la receta completa (Postgres, Redis, worker+consumidor con `AI_PROVIDER=fake`, migrar, sembrar, lint, typecheck, las 330 pruebas, `next build`, `format:check`, verificación de catálogo) contra contenedores Docker locales, en un puerto alternativo (`5544`) porque el puerto 5432 por defecto estaba ocupado por un contenedor de otro proyecto en esta máquina — nunca tocado, para no interferir con trabajo ajeno. El `.env` del repositorio quedó restaurado a sus valores originales (`5432`) al cerrar. Recomendado antes de considerar esto `PASS` sin condición: una corrida real en el runner de GitHub Actions.
+- **Fase J se corrió completa contra un contenedor recién creado sin `.venv` preexistente, reproduciendo literalmente los comandos de `ci.yml`** (ver §10.3) — pero **no dentro de un runner real de GitHub Actions**: este repositorio no tiene un remoto de GitHub configurado en esta sesión, y crear uno y hacerle push exige autorización explícita que no se pidió en este incremento. La reproducción en contenedor limpio usa exactamente los mismos comandos, la misma versión de Python (3.11) y Node (22), y verifica en particular el defecto exacto reportado (`python -m uvicorn` sin `.venv`) — pero sigue siendo una simulación, no la ejecución real de Actions. Queda como comprobación operativa pendiente para cuando exista un remoto.
 - **`practico.hitos` y el resto de campos `lista`/`enum`/`numero`/`lista_objetos` siguen sin control dedicado en el editor manual** (`CampoEditable.tsx`) — deuda preexistente desde antes de este incremento (D0-17 §2.4, E7-3 ya la marcaba `PARTIAL`), confirmada de nuevo al acotar la validación de Fase A (defecto 3, §5). No se resuelve aquí: el pedido de Sprint 5 solo pidió fechas.
 - **La demo se ejecutó con un solo cliente (`marena@tcl.com`, TCL Colombia)** — `canAccessResource` para el rol `cliente` decide por `visibility`, no por `organization_id` (correcto para DEC-012, donde el cliente es de otra organización por definición); con más de una organización cliente en el futuro, dos organizaciones cliente distintas verían la misma campaña compartida como `tcl`. No es un defecto de este incremento — es el mismo modelo de una sola organización cliente que ya asumía DEC-011, documentado aquí para que no se redescubra por accidente.
 
@@ -147,9 +152,54 @@ Catálogo TS/Python: coincide (41 claves). `ruff check .`: limpio. `mypy app`: l
 ## 9. Entrega
 
 - **Commit base:** `106f622cf6e168e99e24d82cb9bff04ce604cc55`.
-- **Commit final:** ver mensaje de cierre de esta sesión.
-- **Migraciones nuevas:** `007_comentarios_internos.sql`, `008_claim_exige_evidencia_excepcion_manual.sql`.
-- **Conteo exacto de pruebas:** 330 (80 dominio + 153 `packages/db` + 97 worker).
+- **Commit de la entrega inicial de Sprint 5:** `03688f18b70e65968420c547d7ef4e79816516de`.
+- **Commit correctivo (esta versión):** ver el hash reportado en el resumen de entrega de esta corrección — un commit separado sobre `03688f1`, nunca un `--amend`.
+- **Migraciones nuevas:** `007_comentarios_internos.sql`, `008_claim_exige_evidencia_excepcion_manual.sql`, `009_inmutabilidad_historica.sql`.
+- **Conteo exacto de pruebas:** 364 (80 dominio + 187 `packages/db`, incluidas las 34 nuevas de inmutabilidad + 97 worker).
 - **Demo C:** PASS, ver §4.
 - **Demo D:** PASS, ver §4.
-- **`git status` al cerrar:** limpio, salvo `TCL-sprint4-cierre.zip` y `docs/product/pantallas-y-animaciones.md` (preservados sin tocar, por instrucción explícita).
+- **`git status` al cerrar:** limpio, salvo `TCL-sprint4-cierre.zip`, `TCL-sprint5-cierre.zip` y `docs/product/pantallas-y-animaciones.md` (preservados sin tocar, por instrucción explícita).
+
+---
+
+## 10. Corrección de auditoría (16 de septiembre de 2026)
+
+Una auditoría independiente del ZIP de la entrega inicial (`03688f1`) encontró dos defectos de cierre reales, ninguno de alcance nuevo — ambos corregidos aquí, sin tocar ninguna migración ya aplicada ni ampliar lo que pidió Sprint 5.
+
+### 10.1 — CI nunca podía correr en un runner limpio
+
+`.github/workflows/ci.yml` levantaba el worker con `.venv/bin/python -m uvicorn app.main:app ...`, pero ningún paso anterior del workflow crea un entorno virtual — `pip install -r requirements.txt` instala en el intérprete que `actions/setup-python` ya deja configurado. En cualquier checkout limpio (que es, por definición, todo runner de GitHub Actions), `.venv` nunca existe: ese paso habría fallado con "no such file or directory" en cada corrida real. Ninguna verificación anterior de este proyecto (ni la de Sprint 4, ni la primera de Sprint 5) lo detectó porque todas se apoyaron en la imagen Docker del worker (`services/ai-worker/Dockerfile`), que instala e invoca `uvicorn` directo, sin pasar nunca por `.venv` — un camino de código distinto al que `ci.yml` realmente ejecuta.
+
+**Corrección:** `python -m uvicorn app.main:app ...` (el intérprete que ya está configurado, sin ruta fija a un entorno que no existe) y `python -m pip install -r requirements.txt` en los tres pasos de instalación del workflow, para eliminar la ambigüedad entre `pip` y `python -m pip`.
+
+**Verificación:** ver §10.3 — reproducido en un contenedor recién creado, con Python 3.11 y sin ningún `.venv` preexistente; el arranque del worker con el comando corregido funciona; se confirmó además, de forma explícita, que `.venv/bin/python` no existe en ese contenedor (el fallo exacto que habría dado el workflow original).
+
+### 10.2 — La inmutabilidad histórica desaparecía después de `superseded`
+
+`campos_de_version_aprobada_inmutables()` (migración 004) y `comentarios_de_version_aprobada_inmutables()` (migración 007) solo bloqueaban `UPDATE`/`DELETE` mientras la versión dueña estaba `approved`. Al crear una versión hija (`crearVersionHija`, Fase E de este mismo incremento), la versión padre pasa a `superseded` — y en ese momento la protección desaparecía por completo: nada en la base impedía un `UPDATE`, `DELETE` o `INSERT` directo sobre el contenido de una versión ya reemplazada. `evidence`, `local_questions` y `brief_field_revisions` nunca habían tenido ninguna protección propia, ni siquiera para `approved`.
+
+**Corrección:** migración `009_inmutabilidad_historica.sql` (`CREATE OR REPLACE FUNCTION` sobre las funciones existentes, nunca modifica una migración ya aplicada). Extiende la protección a `approved`, `superseded` y `cancelled` por igual, en `brief_fields`, `evidence` (trigger nuevo), `local_questions` (trigger nuevo), `brief_field_revisions` (protección de `INSERT`/`DELETE`, además del `UPDATE` que ya bloqueaba sin condición) y `field_comments`. `brief_versions` gana además la regla explícita: un estado terminal (`superseded`/`cancelled`) nunca vuelve a ningún otro estado por SQL directo — `approved → superseded` sigue siendo la única transición que un estado ya cerrado admite, y solo para crear la versión hija.
+
+Un primer diseño asumía que la limpieza de campañas de prueba (`DELETE FROM campaigns`, usada en el `afterAll` de toda la suite) seguiría funcionando sola porque la cascada borraría primero `brief_versions` y, con la fila padre ya inexistente, el disparador no encontraría nada que proteger. **Es falso en general**, verificado contra Postgres real: `local_questions` tiene FK directa a `campaigns` (además de a `brief_version_id`), así que su cascada puede dispararse mientras `brief_versions` todavía existe. La solución: una bandera de bypass (`SET LOCAL tclkolos.permitir_borrado_historico = 'on'`), acotada a una única transacción, que solo usa `packages/db/src/test-utils.ts` (`eliminarCampanaDePrueba`) — nunca ninguna ruta de la aplicación real. Verificado en los dos sentidos: sin la bandera, la limpieza se bloquea igual que cualquier otro intento directo; con ella, procede, y al cerrar la transacción la bandera se revierte sola.
+
+**Pruebas:** `packages/db/src/immutability.test.ts` (34 casos nuevos) — SQL directo contra `brief_fields`, `evidence`, `field_comments`, `local_questions` y `brief_field_revisions`, cada bloque de aserciones repetido dos veces sobre la misma fila: una vez con la versión `approved`, otra después de convertirla en `superseded`. Incluye además: que `cancelled` tampoco admite volver a otro estado; que la bandera de bypass no se escapa de su transacción; y que `crearVersionHija` (el flujo legítimo) sigue funcionando sin que el nuevo trigger lo bloquee — confirmado también por los 11 casos, ya existentes, de `versioning.test.ts`, que se repitieron después de aplicar la migración 009 y siguen en verde.
+
+### 10.3 — Verificación final: contenedor limpio, sin `.venv` preexistente
+
+Reproducida la receta literal de `ci.yml` (job `web` y job `worker`) dentro de un contenedor Docker construido para esta verificación — `node:22-bookworm` con Python 3.11 instalado aparte (sin el marcador `EXTERNALLY-MANAGED` de Debian, que no existe en el Python que `actions/setup-python` instala realmente; quitarlo hace que el contenedor se comporte como el runner real en ese único aspecto, sin cambiar ningún comando del workflow), Postgres (`pgvector/pgvector:pg16`) y Redis (`redis:7-alpine`) recién creados en red propia, y una copia limpia del árbol de trabajo (sin `node_modules`, sin `.venv`, sin `.next`, sin `.git`).
+
+| Paso | Resultado |
+|---|---|
+| `npm ci` | **PASS** |
+| `npm run lint` | **PASS** |
+| `npm run typecheck` | **PASS** (3 workspaces) |
+| Extensiones de Postgres + `migrate` (9 migraciones, incluida la 009) + `seed` | **PASS** |
+| Instalar dependencias del worker (`python -m pip install -r requirements.txt`) | **PASS** — sin `.venv`, confirmado que no existe |
+| Levantar worker + consumidor (`python -m uvicorn app.main:app ...`, `AI_PROVIDER=fake`) | **PASS** — `/ready` responde; **este es el paso que fallaba antes de la corrección** |
+| `npm test` (dominio + `packages/db`) | **PASS** — 80 + 187 = 267 |
+| `npm run build` | **PASS** |
+| `npm run format:check` | **PASS** |
+| Catálogo TS/Python | **PASS** — coincide |
+| `ruff check .` / `mypy app` / `pytest` (job `worker`) | **PASS** — 97/97 |
+
+**PASS — receta de CI reproducida en contenedor limpio.** No se afirma que GitHub Actions se haya ejecutado realmente — ver la precisión en §8.

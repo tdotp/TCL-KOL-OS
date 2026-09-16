@@ -99,7 +99,7 @@ jobs:
 
       - name: Instalar dependencias del worker
         working-directory: services/ai-worker
-        run: pip install -r requirements.txt
+        run: python -m pip install -r requirements.txt
 
       - name: Levantar worker + consumidor (AI_PROVIDER=fake)
         working-directory: services/ai-worker
@@ -120,7 +120,7 @@ jobs:
           LOG_LEVEL: INFO
         run: |
           mkdir -p "$STORAGE_LOCAL_PATH"
-          PYTHONPATH=. nohup .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 \
+          PYTHONPATH=. nohup python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 \
             > /tmp/worker-http.log 2>&1 &
           PYTHONPATH=. nohup python worker.py --intervalo 2 > /tmp/worker-consumidor.log 2>&1 &
           for i in $(seq 1 30); do
@@ -164,7 +164,7 @@ jobs:
           cache: pip
           cache-dependency-path: services/ai-worker/requirements.txt
 
-      - run: pip install -r requirements.txt
+      - run: python -m pip install -r requirements.txt
 
       - name: Lint
         run: ruff check .
