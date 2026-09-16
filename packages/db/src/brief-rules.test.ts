@@ -103,16 +103,12 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (campanaDePrueba) {
-    // `evidence.source_id` es `ON DELETE RESTRICT` — borrar `campaigns`
-    // directamente puede intentar borrar `source_documents` antes de que la
-    // cascada por el otro camino (brief_versions → brief_fields → evidence)
-    // termine de vaciar `evidence`, y el RESTRICT lo rechaza. Se borran
-    // primero las versiones (arrastran campos y evidencias en cascada), y
-    // solo entonces la campaña — mismo ajuste que ya usa `end-to-end.test.ts`.
-    await query(
-      `DELETE FROM brief_versions WHERE brief_id = (SELECT id FROM briefs WHERE campaign_id = $1)`,
-      [campanaDePrueba],
-    );
+    // `eliminarCampanaDePrueba` ya borra `briefs` (que arrastra en cascada
+    // `brief_versions → brief_fields → evidence`) antes que `campaigns` —
+    // en ese orden, `evidence` está vacía para cuando la cascada de
+    // `campaigns` llega a `source_documents` (RESTRICT). No hace falta un
+    // `DELETE FROM brief_versions` aparte: fuera de esta transacción con
+    // bypass, la migración 010 (hallazgo 2) lo rechazaría igual.
     await eliminarCampanaDePrueba(campanaDePrueba);
   }
   await closePool();

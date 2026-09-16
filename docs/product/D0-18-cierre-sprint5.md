@@ -50,6 +50,7 @@ El cierre de Sprint 4 dejaba el brief funcional hasta `internal_review`; el cicl
 | `007_comentarios_internos.sql` | Tabla `field_comments` (E7-6): ancla a `(brief_version_id, field_key)`, no a `brief_fields.id`, para sobrevivir a una versión hija. Trigger de inmutabilidad igual al de `brief_fields` (ADR-003). |
 | `008_claim_exige_evidencia_excepcion_manual.sql` | Corrige `claim_exige_evidencia()` (migración 004): le faltaba la excepción de DEC-028 (un campo `critico` no técnico resuelto por pregunta local, `provenance_type='manual_local'`, no exige evidencia documental). Defecto real, ver §5 punto 2. |
 | `009_inmutabilidad_historica.sql` | Corrección de auditoría (§10). Cierra el hueco de inmutabilidad tras `superseded`/`cancelled`: `brief_fields`, `evidence` (nunca protegida), `local_questions` (nunca protegida), `brief_field_revisions` (solo `UPDATE` protegido) y `field_comments` ahora bloquean `INSERT`/`UPDATE`/`DELETE` directos en los tres estados cerrados, no solo `approved`. Incluye una bandera de bypass (`SET LOCAL tclkolos.permitir_borrado_historico`) acotada a una transacción, exclusiva de la limpieza de datos de prueba — nunca usada por la aplicación real. |
+| `010_inmutabilidad_bypass_restringido.sql` | Segunda corrección de auditoría (§11). Restringe técnicamente el bypass de la 009 a bases cuyo nombre termine en `_test` (hallazgo 1); añade `BEFORE DELETE` sobre `brief_versions` en estados terminales, cubriendo también la cascada desde `briefs`/`campaigns` (hallazgo 2); y redefine `version_aprobada_inmutable()` para congelar la fila completa — ninguna columna aparte de `status` puede cambiar, ni siquiera con la versión `approved` (hallazgo 3). |
 
 Ninguna migración modifica el pipeline de extracción ni el esquema del catálogo.
 
@@ -115,10 +116,11 @@ Todos los seis quedan con prueba de regresión donde aplica (defectos 2, 3, 4) o
 | Comentarios internos (Fase B) | `packages/db/src/comments.test.ts` (nuevo) | 11 | **PASS** |
 | Fechas en el editor manual, regresión Demo A/B | `packages/db/src/brief-fields.test.ts` (2 casos nuevos) | 6 | **PASS** |
 | **Inmutabilidad histórica tras `superseded`/`cancelled` (corrección de auditoría, §10)** | `packages/db/src/immutability.test.ts` (nuevo) — SQL directo contra `brief_fields`, `evidence`, `field_comments`, `local_questions`, `brief_field_revisions` y `brief_versions`, repetido en `approved` y en `superseded` | 34 | **PASS** |
+| **Bypass restringido a `_test`, `DELETE` de `brief_versions` y congelamiento total de la fila (segunda corrección de auditoría, §11)** | `packages/db/src/immutability.test.ts` (20 casos añadidos a los 34 anteriores) | 20 | **PASS** |
 | El resto de `packages/db` (sin cambios de comportamiento) | 12 archivos | 111 | **PASS** |
-| **Total `packages/db`** | 17 archivos | **187** | **PASS** |
+| **Total `packages/db`** | 17 archivos | **207** | **PASS** |
 | `services/ai-worker` (sin tocar) | 9 archivos | 97 | **PASS** |
-| **Total general** | — | **364** | **PASS** |
+| **Total general** | — | **384** | **PASS** |
 
 Catálogo TS/Python: coincide (41 claves). `ruff check .`: limpio. `mypy app`: limpio. `next build`: compila las 13 rutas, incluida `VistaCliente`/`PanelComentarios`. `npm run lint`: limpio (`--max-warnings=0`). `npm run format:check`: limpio.
 
@@ -135,9 +137,9 @@ Catálogo TS/Python: coincide (41 claves). `ruff check .`: limpio. `mypy app`: l
 | Fase E — versionado posterior a aprobación (DEC-027) | **PASS** |
 | Fase F — interfaz (reutiliza diseño existente, sin rediseño) | **PASS** |
 | Fase G — seguridad e integridad | **PASS** — ver requisito 13/14 de la matriz §2, más la inmutabilidad histórica de §10 |
-| Fase H — pruebas obligatorias | **PASS** — 364 pruebas, ver §6 |
+| Fase H — pruebas obligatorias | **PASS** — 384 pruebas, ver §6 |
 | Fase I — demos | **PASS** — Demo C y Demo D, ver §4 |
-| Fase J — verificación final desde infraestructura limpia | **PASS** — receta de CI reproducida en contenedor limpio, ver §10.3. No se ejecutó dentro de GitHub Actions real — ver la precisión exacta en §8 |
+| Fase J — verificación final desde infraestructura limpia | **PASS** — receta de CI reproducida en contenedor limpio, ver §10.3 y §11.4. No se ejecutó dentro de GitHub Actions real — ver la precisión exacta en §8 |
 
 ---
 
@@ -153,12 +155,13 @@ Catálogo TS/Python: coincide (41 claves). `ruff check .`: limpio. `mypy app`: l
 
 - **Commit base:** `106f622cf6e168e99e24d82cb9bff04ce604cc55`.
 - **Commit de la entrega inicial de Sprint 5:** `03688f18b70e65968420c547d7ef4e79816516de`.
-- **Commit correctivo (esta versión):** ver el hash reportado en el resumen de entrega de esta corrección — un commit separado sobre `03688f1`, nunca un `--amend`.
-- **Migraciones nuevas:** `007_comentarios_internos.sql`, `008_claim_exige_evidencia_excepcion_manual.sql`, `009_inmutabilidad_historica.sql`.
-- **Conteo exacto de pruebas:** 364 (80 dominio + 187 `packages/db`, incluidas las 34 nuevas de inmutabilidad + 97 worker).
+- **Commit del primer correctivo:** `a9eefe400790ed229f9009caeb76e5fbbf407960` (CI en runner limpio + migración 009).
+- **Commit del segundo correctivo (esta versión):** ver el hash reportado en el resumen de entrega de esta corrección — un commit nuevo sobre `a9eefe4`, nunca un `--amend`; ver §11.
+- **Migraciones nuevas:** `007_comentarios_internos.sql`, `008_claim_exige_evidencia_excepcion_manual.sql`, `009_inmutabilidad_historica.sql`, `010_inmutabilidad_bypass_restringido.sql`.
+- **Conteo exacto de pruebas:** 384 (80 dominio + 207 `packages/db`, incluidas las 34 de la primera corrección de inmutabilidad y las 20 de la segunda + 97 worker).
 - **Demo C:** PASS, ver §4.
 - **Demo D:** PASS, ver §4.
-- **`git status` al cerrar:** limpio, salvo `TCL-sprint4-cierre.zip`, `TCL-sprint5-cierre.zip` y `docs/product/pantallas-y-animaciones.md` (preservados sin tocar, por instrucción explícita).
+- **`git status` al cerrar:** limpio, salvo `TCL-sprint4-cierre.zip`, `TCL-sprint5-cierre.zip`, `docs/product/pantallas-y-animaciones.md` y `HANDOFF-nuevo-chat.md` (preservados sin tocar, por instrucción explícita).
 
 ---
 
@@ -200,6 +203,52 @@ Reproducida la receta literal de `ci.yml` (job `web` y job `worker`) dentro de u
 | `npm run build` | **PASS** |
 | `npm run format:check` | **PASS** |
 | Catálogo TS/Python | **PASS** — coincide |
+| `ruff check .` / `mypy app` / `pytest` (job `worker`) | **PASS** — 97/97 |
+
+**PASS — receta de CI reproducida en contenedor limpio.** No se afirma que GitHub Actions se haya ejecutado realmente — ver la precisión en §8.
+
+---
+
+## 11. Segunda corrección de auditoría (16 de septiembre de 2026, tarde) — tres huecos residuales de la migración 009
+
+Una segunda auditoría independiente, ya sobre el commit `a9eefe4` (el del primer correctivo), encontró tres huecos residuales en la migración 009 — ninguno de alcance nuevo, los tres corregidos en `010_inmutabilidad_bypass_restringido.sql` sin tocar ninguna migración ya aplicada.
+
+### 11.1 — El bypass no estaba restringido técnicamente a pruebas (hallazgo 1)
+
+`inmutabilidad_bypass_activo()` (migración 009) solo comprobaba la bandera de sesión `tclkolos.permitir_borrado_historico`. Que hoy solo `packages/db/src/test-utils.ts` la active era una convención de la aplicación, no una restricción de la base: cualquier conexión con permiso para ejecutar SQL —desarrollo, staging o, en el peor caso, producción— podía hacer `SET LOCAL tclkolos.permitir_borrado_historico = 'on'` y desactivar los triggers de inmutabilidad para esa transacción.
+
+**Corrección:** `inmutabilidad_bypass_activo()` ahora exige, además de la bandera, que el nombre de la base actual termine exactamente en `_test` — la misma convención que INC-001A ya exige en `packages/db/vitest.setup.ts` para `TEST_DATABASE_URL`. En cualquier base cuyo nombre no termine en `_test` (desarrollo, staging, producción, o cualquier otro nombre), la función devuelve `false` sin importar el valor de la bandera — no hay forma de activar el bypass ahí, ni siquiera manualmente.
+
+### 11.2 — `brief_versions` seguía admitiendo `DELETE` directo (hallazgo 2)
+
+La protección de `brief_versions` (migración 004, ampliada en la 009) solo estaba conectada a `BEFORE UPDATE`. Nada impedía un `DELETE FROM brief_versions WHERE id = ...` directo sobre una fila `approved`, `superseded` o `cancelled` —que además arrastraría en cascada todo su contenido histórico—, ni tampoco borrar una campaña o un brief completos si eso terminaba arrastrando versiones históricas por la cascada de Postgres.
+
+**Corrección:** nuevo disparador `BEFORE DELETE` (`version_terminal_no_admite_delete`) sobre `brief_versions`, que rechaza cualquier `DELETE` mientras el estado sea `approved`, `superseded` o `cancelled` — salvo con el bypass activo (y ahora acotado a `_test`, §11.1). Como un disparador de fila se dispara igual para las filas que Postgres borra por cascada, esta única protección cubre tanto el `DELETE` directo como el borrado en cascada de una campaña o un brief.
+
+### 11.3 — La fila histórica no estaba congelada del todo (hallazgo 3)
+
+`version_aprobada_inmutable()` solo comparaba `version`, `brief_id`, `language`, `parent_version_id` y `approved_at`. Columnas como `organization_id`, `created_by`, `translation_of_id` o `created_at` podían modificarse por `UPDATE` directo sin que ningún disparador se diera cuenta.
+
+**Corrección:** la función redefinida distingue tres casos. `superseded`/`cancelled`: cualquier `UPDATE` se rechaza sin excepción, incluso uno que no cambie ningún valor — son estados terminales, su fila ya no admite ninguna escritura. `approved`, sin cambio de estado: también se rechaza cualquier `UPDATE` — una versión aprobada no se reescribe a sí misma. `approved → superseded` (la única transición que usa `crearVersionHija`) o `approved → cancelled` (el único otro destino que un estado terminal admite a nivel de base, aunque el dominio actual —`packages/domain/src/brief-states.ts`, lista `CANCELLABLE`— no enruta esa transición específica hoy): se permite, pero únicamente si `status` es la única columna que cambia; toda la demás identidad de la fila debe permanecer exactamente igual.
+
+Al escribir la verificación, esta corrección expuso dos usos de `eliminarCampanaDePrueba` que hacían un `DELETE FROM brief_versions` aparte, fuera de la transacción con bypass (`packages/db/src/brief-rules.test.ts` y `packages/db/src/end-to-end.test.ts`, ambos con un comentario que databa de antes de que la 009 resolviera el orden de la cascada) — redundante desde que `eliminarCampanaDePrueba` ya borra `briefs` primero, arrastrando `brief_versions` en cascada dentro de la misma transacción con bypass. Se quitaron esas dos líneas; ambas suites verificadas en verde con el disparador nuevo activo.
+
+### 11.4 — Verificación final: contenedor limpio, sin `.venv` preexistente
+
+Misma receta que §10.3, repetida completa desde cero: `node:22-bookworm` con Python 3.11 del sistema (símbolo `python` enlazado a `python3`, dependencias del worker instaladas con `--break-system-packages` porque el Python de Debian bookworm bloquea `pip install` fuera de un entorno virtual por PEP 668 — el Python que `actions/setup-python` instala en un runner real no tiene ese bloqueo; se documenta la diferencia con honestidad, no se oculta), Postgres (`pgvector/pgvector:pg16`) y Redis (`redis:7-alpine`) recién creados en red Docker propia, y una copia limpia del árbol de trabajo (sin `node_modules`, sin `.venv`, sin `.next`).
+
+| Paso | Resultado |
+|---|---|
+| `npm ci` | **PASS** |
+| `npm run lint` | **PASS** |
+| `npm run typecheck` | **PASS** (3 workspaces) |
+| Extensiones de Postgres + `migrate` (10 migraciones, incluida la 010) + `seed` | **PASS** |
+| Instalar dependencias del worker (`python -m pip install -r requirements.txt`) | **PASS** — sin `.venv`, confirmado que no existe |
+| Levantar worker + consumidor (`python -m uvicorn app.main:app ...`, `AI_PROVIDER=fake`) | **PASS** — `/ready` responde |
+| `npm test` (dominio + `packages/db`) | **PASS** — 80 + 207 = 287 |
+| `npm run build` | **PASS** |
+| `npm run format:check` | **PASS** (tras `prettier --write` sobre `immutability.test.ts`, reformateado y reverificado) |
+| Catálogo TS/Python | **PASS** — 41 claves, coincide |
 | `ruff check .` / `mypy app` / `pytest` (job `worker`) | **PASS** — 97/97 |
 
 **PASS — receta de CI reproducida en contenedor limpio.** No se afirma que GitHub Actions se haya ejecutado realmente — ver la precisión en §8.

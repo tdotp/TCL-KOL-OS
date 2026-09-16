@@ -306,4 +306,189 @@ describe('la bandera de bypass (SET LOCAL) no se escapa de su transacción', () 
       query(`UPDATE brief_fields SET value = '"hackeado"'::jsonb WHERE id = $1`, [campoId]),
     ).rejects.toThrow(/no admiten UPDATE/);
   });
+
+  it('al terminar la transacción, la bandera queda desactivada para la siguiente conexión', async () => {
+    const [fila] = await query<{ activo: boolean }>(`SELECT inmutabilidad_bypass_activo() AS activo`);
+    expect(fila!.activo).toBe(false);
+  });
+});
+
+// ─────────────────── Sprint 5 correctivo, hallazgo 1 — bypass restringido a `_test` ──
+
+describe('hallazgo 1 · el bypass solo puede activarse en una base "_test"', () => {
+  it('la base de pruebas actual termina en "_test" (precondición de esta suite)', async () => {
+    const [fila] = await query<{ base: string }>(`SELECT current_database() AS base`);
+    expect(fila!.base.endsWith('_test')).toBe(true);
+  });
+
+  it('activar la bandera en la base "_test" actual sí habilita el bypass', async () => {
+    await transaction(async (client) => {
+      await client.query(`SET LOCAL tclkolos.permitir_borrado_historico = 'on'`);
+      const resultado = await client.query<{ activo: boolean }>(
+        `SELECT inmutabilidad_bypass_activo() AS activo`,
+      );
+      expect(resultado.rows[0]!.activo).toBe(true);
+    });
+  });
+
+  it('la comprobación de nombre de base es literal: exige terminar en "_test", no solo contenerlo', async () => {
+    // No hay forma de crear una base efímera no-test desde esta suite sin
+    // permisos de superusuario sobre el clúster completo — se verifica
+    // aquí el mismo criterio (`right(current_database(), 5) = '_test'`) que
+    // usa la función, contra nombres que a propósito NO terminan en
+    // "_test" aunque lo contengan.
+    const [fila] = await query<{ resultado: boolean }>(`SELECT right($1::text, 5) = '_test' AS resultado`, [
+      'tclkolos_test_pero_no',
+    ]);
+    expect(fila!.resultado).toBe(false);
+  });
+});
+
+// ─────────────────── Sprint 5 correctivo, hallazgo 2 — DELETE directo de brief_versions ──
+
+describe('hallazgo 2 · brief_versions no admite DELETE directo en un estado terminal', () => {
+  let versionParaBorrar: string;
+
+  beforeAll(async () => {
+    const [version] = await query<{ id: string }>(
+      `INSERT INTO brief_versions (brief_id, organization_id, version, language, status, created_by)
+       VALUES ($1, $2, 3, 'es', 'draft', $3) RETURNING id`,
+      [briefId, orgId, userId],
+    );
+    versionParaBorrar = version!.id;
+  });
+
+  it('rechaza DELETE sobre una versión approved', async () => {
+    await query(`UPDATE brief_versions SET status = 'approved', approved_at = now() WHERE id = $1`, [
+      versionParaBorrar,
+    ]);
+    await expect(query(`DELETE FROM brief_versions WHERE id = $1`, [versionParaBorrar])).rejects.toThrow(
+      /no admite DELETE directo/,
+    );
+  });
+
+  it('rechaza DELETE sobre esa misma versión ya superseded', async () => {
+    await query(`UPDATE brief_versions SET status = 'superseded' WHERE id = $1 AND status = 'approved'`, [
+      versionParaBorrar,
+    ]);
+    await expect(query(`DELETE FROM brief_versions WHERE id = $1`, [versionParaBorrar])).rejects.toThrow(
+      /no admite DELETE directo/,
+    );
+  });
+
+  it('rechaza DELETE sobre una versión cancelled', async () => {
+    const [otraVersion] = await query<{ id: string }>(
+      `INSERT INTO brief_versions (brief_id, organization_id, version, language, status, created_by)
+       VALUES ($1, $2, 4, 'es', 'cancelled', $3) RETURNING id`,
+      [briefId, orgId, userId],
+    );
+    await expect(query(`DELETE FROM brief_versions WHERE id = $1`, [otraVersion!.id])).rejects.toThrow(
+      /no admite DELETE directo/,
+    );
+  });
+});
+
+// ─────────────────── Sprint 5 correctivo, hallazgo 3 — congelamiento total de la fila ──
+
+describe('hallazgo 3 · una versión approved o superseded congela la fila completa', () => {
+  let versionCongelada: string;
+
+  beforeAll(async () => {
+    const [version] = await query<{ id: string }>(
+      `INSERT INTO brief_versions (brief_id, organization_id, version, language, status, created_by, approved_at)
+       VALUES ($1, $2, 5, 'es', 'approved', $3, now()) RETURNING id`,
+      [briefId, orgId, userId],
+    );
+    versionCongelada = version!.id;
+  });
+
+  describe('mientras está approved: se permite transicionar, no reescribir', () => {
+    it('rechaza modificar organization_id', async () => {
+      await expect(
+        query(`UPDATE brief_versions SET organization_id = $1 WHERE id = $2`, [orgId, versionCongelada]),
+      ).rejects.toThrow(/ningún valor puede cambiar/);
+    });
+
+    it('rechaza modificar created_by', async () => {
+      await expect(
+        query(`UPDATE brief_versions SET created_by = $1 WHERE id = $2`, [userId, versionCongelada]),
+      ).rejects.toThrow(/ningún valor puede cambiar/);
+    });
+
+    it('rechaza modificar translation_of_id', async () => {
+      await expect(
+        query(`UPDATE brief_versions SET translation_of_id = $1 WHERE id = $2`, [
+          versionCongelada,
+          versionCongelada,
+        ]),
+      ).rejects.toThrow(/ningún valor puede cambiar/);
+    });
+
+    it('rechaza modificar created_at', async () => {
+      await expect(
+        query(`UPDATE brief_versions SET created_at = now() WHERE id = $1`, [versionCongelada]),
+      ).rejects.toThrow(/ningún valor puede cambiar/);
+    });
+
+    it('rechaza modificar approved_at', async () => {
+      await expect(
+        query(`UPDATE brief_versions SET approved_at = now() WHERE id = $1`, [versionCongelada]),
+      ).rejects.toThrow(/ningún valor puede cambiar/);
+    });
+
+    it('rechaza un UPDATE que "no cambia nada" (mismo status, sin otros valores)', async () => {
+      await expect(
+        query(`UPDATE brief_versions SET status = 'approved' WHERE id = $1`, [versionCongelada]),
+      ).rejects.toThrow(/ningún valor puede cambiar/);
+    });
+
+    it('permite la transición approved → superseded cambiando solo status', async () => {
+      const resultado = await query<{ id: string }>(
+        `UPDATE brief_versions SET status = 'superseded' WHERE id = $1 AND status = 'approved' RETURNING id`,
+        [versionCongelada],
+      );
+      expect(resultado).toHaveLength(1);
+    });
+  });
+
+  describe('una vez superseded: absolutamente ningún UPDATE procede, ni siquiera sin cambios', () => {
+    it('rechaza modificar organization_id', async () => {
+      await expect(
+        query(`UPDATE brief_versions SET organization_id = $1 WHERE id = $2`, [orgId, versionCongelada]),
+      ).rejects.toThrow(/estado terminal/);
+    });
+
+    it('rechaza modificar created_by', async () => {
+      await expect(
+        query(`UPDATE brief_versions SET created_by = $1 WHERE id = $2`, [userId, versionCongelada]),
+      ).rejects.toThrow(/estado terminal/);
+    });
+
+    it('rechaza modificar translation_of_id', async () => {
+      await expect(
+        query(`UPDATE brief_versions SET translation_of_id = $1 WHERE id = $2`, [
+          versionCongelada,
+          versionCongelada,
+        ]),
+      ).rejects.toThrow(/estado terminal/);
+    });
+
+    it('rechaza modificar created_at', async () => {
+      await expect(
+        query(`UPDATE brief_versions SET created_at = now() WHERE id = $1`, [versionCongelada]),
+      ).rejects.toThrow(/estado terminal/);
+    });
+
+    it('rechaza modificar approved_at', async () => {
+      await expect(
+        query(`UPDATE brief_versions SET approved_at = now() WHERE id = $1`, [versionCongelada]),
+      ).rejects.toThrow(/estado terminal/);
+    });
+
+    it('rechaza un UPDATE sin cambiar el estado, incluso si no cambia ningún otro valor', async () => {
+      await expect(
+        query(`UPDATE brief_versions SET status = 'superseded' WHERE id = $1`, [versionCongelada]),
+      ).rejects.toThrow(/estado terminal/);
+    });
+  });
 });

@@ -5,13 +5,16 @@ Estado a **16 de septiembre de 2026**. Base de este cierre: `106f622` (Sprint
 [D0-17](docs/product/D0-17-cierre-sprint4.md)). **Sprint 5 cerrado**: el ciclo
 completo del brief corre de punta a punta — comentarios internos, fechas
 estructuradas, aprobación interna, revisión y decisión del cliente,
-versionado posterior a aprobación — verificado con 364 pruebas automatizadas
-y dos demos reales en el navegador (Demo C, Demo D). Entregado en dos
-commits: `03688f1` (entrega inicial) y un commit correctivo posterior que
-cierra dos defectos que una auditoría independiente encontró en el ZIP —
-CI nunca podía correr en un runner limpio, y la inmutabilidad histórica de
-la base desaparecía tras `superseded`. Detalle completo y matriz de estado
-en [D0-18](docs/product/D0-18-cierre-sprint5.md).
+versionado posterior a aprobación — verificado con 384 pruebas automatizadas
+y dos demos reales en el navegador (Demo C, Demo D). Entregado en tres
+commits: `03688f1` (entrega inicial), `a9eefe4` (primer correctivo — CI en
+runner limpio + inmutabilidad tras `superseded`, DEC-035/DEC-036) y un
+segundo commit correctivo sobre `a9eefe4` que cierra tres huecos residuales
+de esa misma migración de inmutabilidad, encontrados en una segunda
+auditoría independiente — el bypass no estaba restringido técnicamente a
+bases de pruebas, `brief_versions` admitía `DELETE` directo, y la fila
+histórica no quedaba congelada por completo (DEC-037). Detalle completo y
+matriz de estado en [D0-18](docs/product/D0-18-cierre-sprint5.md) §11.
 
 Este archivo existe para que una sesión nueva pueda continuar sin releer el
 historial. No repite lo que ya está en otros documentos: los enlaza.
@@ -448,6 +451,10 @@ infra/db/migrations/ 005_producto_preguntas_y_revision.sql — anclaje, revisió
                       008_claim_exige_evidencia_excepcion_manual.sql — excepción DEC-028 (Sprint 5)
                       009_inmutabilidad_historica.sql — protección tras superseded/
                         cancelled en las seis tablas (Sprint 5, correctivo — DEC-036)
+                      010_inmutabilidad_bypass_restringido.sql — bypass acotado a
+                        bases "_test", DELETE de brief_versions bloqueado, fila
+                        histórica congelada por completo (Sprint 5, segundo
+                        correctivo — DEC-037)
 docs/product/brief-schema/brief-catalog.json   Fuente única de los 41 campos
 ```
 

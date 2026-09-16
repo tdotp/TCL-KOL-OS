@@ -130,16 +130,12 @@ beforeAll(async () => {
 
 afterAll(async () => {
   for (const id of campanasCreadas) {
-    // La evidencia tiene dos padres: `brief_field_id` (CASCADE) y `source_id`
-    // (RESTRICT, a propósito — un documento en uso no se borra por accidente).
-    // Cuando la fuente que respalda la evidencia vive en la MISMA campaña que
-    // se está borrando, hay que quitar primero las versiones (que arrastran
-    // la evidencia por el lado CASCADE) para que el borrado de las fuentes,
-    // más abajo, ya no choque con el RESTRICT.
-    await query(
-      `DELETE FROM brief_versions WHERE brief_id IN (SELECT id FROM briefs WHERE campaign_id = $1)`,
-      [id],
-    );
+    // `eliminarCampanaDePrueba` ya borra `briefs` (que arrastra en cascada
+    // `brief_versions → brief_fields → evidence`, por el lado CASCADE) antes
+    // que `campaigns` (que arrastra `source_documents`, por el lado
+    // RESTRICT) — ese orden basta para que el RESTRICT nunca choque. Un
+    // `DELETE FROM brief_versions` aparte, fuera de esa transacción con
+    // bypass, lo rechazaría la migración 010 (hallazgo 2).
     await eliminarCampanaDePrueba(id);
   }
   await closePool();

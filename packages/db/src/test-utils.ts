@@ -5,11 +5,19 @@
  * `tclkolos.permitir_borrado_historico` (migración 009) — nunca ninguna
  * ruta de la aplicación real lo hace. Existe porque la limpieza de una
  * campaña de prueba (`afterAll`) legítimamente necesita borrar en cascada
- * el contenido de versiones `approved`/`superseded`, que la migración 009
- * protege a propósito contra `UPDATE`/`INSERT`/`DELETE` directos — la
- * bandera, activada solo dentro de esta transacción vía `SET LOCAL`, es la
- * salida explícita y acotada para ese caso, nunca un debilitamiento general
- * de la protección (ver comentario largo en la propia migración 009).
+ * el contenido de versiones `approved`/`superseded`, que las migraciones
+ * 009 y 010 protegen a propósito contra `UPDATE`/`INSERT`/`DELETE`
+ * directos — la bandera, activada solo dentro de esta transacción vía
+ * `SET LOCAL`, es la salida explícita y acotada para ese caso, nunca un
+ * debilitamiento general de la protección.
+ *
+ * Que solo esta función la active es una convención de la aplicación, no
+ * la restricción real: la migración 010 (Sprint 5 correctivo, hallazgo 1)
+ * hace que `inmutabilidad_bypass_activo()` exija además que el nombre de
+ * la base actual termine en `_test` — la misma convención que INC-001A ya
+ * exige en `vitest.setup.ts`. En cualquier base que no termine en `_test`
+ * (desarrollo, staging, producción), esta bandera no tiene ningún efecto,
+ * la active quien la active.
  */
 
 import { transaction } from './client.ts';

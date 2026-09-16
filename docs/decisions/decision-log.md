@@ -584,6 +584,18 @@ posterior a aprobación». 15 de septiembre de 2026.
 - **Dónde vive:** `infra/db/migrations/009_inmutabilidad_historica.sql`; `packages/db/src/test-utils.ts`; pruebas en `packages/db/src/immutability.test.ts` (34 casos, SQL directo, repetidos en `approved` y en `superseded`).
 - **Responsable de aprobación:** Gerardo Calambás.
 
+### DEC-037 — El bypass de inmutabilidad no estaba restringido a bases de pruebas, `brief_versions` admitía `DELETE` directo y la fila histórica no quedaba congelada del todo
+
+- **Fecha:** 16 de septiembre de 2026 (tarde)
+- **Estado:** **aprobada** — corrección de tres defectos reales, encontrados en una segunda auditoría independiente sobre el commit `a9eefe4` (el del correctivo de DEC-035/DEC-036)
+- **Origen (hallazgo 1):** `inmutabilidad_bypass_activo()` (migración 009) solo comprobaba la bandera de sesión `tclkolos.permitir_borrado_historico`. Que solo `packages/db/src/test-utils.ts` la activara era una convención de la aplicación, no una restricción de la base — cualquier conexión con permiso para ejecutar SQL podía activarla en cualquier entorno, incluida producción.
+- **Origen (hallazgo 2):** la protección de `brief_versions` solo estaba conectada a `BEFORE UPDATE`. Un `DELETE FROM brief_versions` directo sobre una fila `approved`/`superseded`/`cancelled` no tenía ningún obstáculo, y arrastraría en cascada todo su contenido histórico — lo mismo si el `DELETE` llegaba en cascada desde borrar una campaña o un brief.
+- **Origen (hallazgo 3):** `version_aprobada_inmutable()` solo comparaba `version`, `brief_id`, `language`, `parent_version_id` y `approved_at` — `organization_id`, `created_by`, `translation_of_id` y `created_at` podían modificarse por `UPDATE` directo sin que ningún disparador lo notara.
+- **Decisión:** migración `010_inmutabilidad_bypass_restringido.sql` (nunca modifica una migración ya aplicada). (1) `inmutabilidad_bypass_activo()` ahora exige además que el nombre de la base termine en `_test`, la misma convención de INC-001A — en cualquier otra base la función devuelve `false` aunque la bandera esté activa. (2) Nuevo disparador `BEFORE DELETE` sobre `brief_versions` que rechaza cualquier `DELETE` en un estado terminal, salvo con el bypass activo — cubre tanto el `DELETE` directo como la cascada desde `briefs`/`campaigns`. (3) `version_aprobada_inmutable()` redefinida: `superseded`/`cancelled` rechazan cualquier `UPDATE` sin excepción; `approved` sin cambio de estado también rechaza cualquier `UPDATE`; `approved → superseded`/`cancelled` se permite solo si `status` es la única columna que cambia.
+- **Un matiz que surgió al verificarlo:** dos suites (`brief-rules.test.ts`, `end-to-end.test.ts`) hacían un `DELETE FROM brief_versions` aparte en su limpieza, fuera de la transacción con bypass — redundante desde que `eliminarCampanaDePrueba` ya borra `briefs` primero, arrastrando `brief_versions` en cascada dentro de esa misma transacción. Se quitaron esas dos líneas sueltas.
+- **Dónde vive:** `infra/db/migrations/010_inmutabilidad_bypass_restringido.sql`; `packages/db/src/test-utils.ts` (comentario actualizado); pruebas en `packages/db/src/immutability.test.ts` (20 casos nuevos).
+- **Responsable de aprobación:** Gerardo Calambás.
+
 ---
 
 ## Decisiones pendientes que no bloquean MVP 0
