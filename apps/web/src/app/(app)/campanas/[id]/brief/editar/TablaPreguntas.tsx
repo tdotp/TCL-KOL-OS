@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { descartarPreguntaLocal, responderPreguntaLocal } from '@/lib/actions';
-import { ControlDeFecha } from '@/components/ControlDeFecha';
+import { ControlDeRespuesta } from '@/components/ControlDeRespuesta';
 
 interface CampoCatalogo {
   key: string;
@@ -41,67 +41,6 @@ const ETIQUETA_ESTADO: Record<string, string> = {
   descartada: 'descartada',
 };
 
-/** Construye el control correcto según `valueType` — nunca un textarea genérico para todo (§5.3). */
-function ControlDeRespuesta({
-  campo,
-  onChange,
-}: {
-  campo: CampoCatalogo | undefined;
-  onChange: (v: unknown) => void;
-}) {
-  const tipo = campo?.valueType ?? 'texto';
-
-  if (tipo === 'enum' && campo?.valoresPermitidos) {
-    return (
-      <select onChange={(e) => onChange(e.target.value)} defaultValue="">
-        <option value="" disabled>
-          Elija un valor…
-        </option>
-        {campo.valoresPermitidos.map((v) => (
-          <option key={v} value={v}>
-            {v}
-          </option>
-        ))}
-      </select>
-    );
-  }
-
-  if (tipo === 'numero') {
-    return <input type="number" onChange={(e) => onChange(Number(e.target.value))} />;
-  }
-
-  if (tipo === 'lista') {
-    return (
-      <input
-        placeholder="Un valor por línea, o separados por coma"
-        onChange={(e) =>
-          onChange(
-            e.target.value
-              .split(/[\n,]/)
-              .map((v) => v.trim())
-              .filter((v) => v !== ''),
-          )
-        }
-      />
-    );
-  }
-
-  if (tipo === 'lista_objetos') {
-    return (
-      <input
-        placeholder="Descripción (queda como un mandatorio de categoría 'mensaje')"
-        onChange={(e) => onChange([{ categoria: 'mensaje', descripcion: e.target.value }])}
-      />
-    );
-  }
-
-  if (tipo === 'fecha') {
-    return <ControlDeFecha onChange={onChange} />;
-  }
-
-  return <input placeholder="Escribir la respuesta…" onChange={(e) => onChange(e.target.value)} />;
-}
-
 /**
  * Rediseño: cada pregunta local es un hilo de chat propio — el sistema
  * "pregunta" en un mensaje (nunca inventa: siempre dice por qué), y la
@@ -118,7 +57,10 @@ function FilaPregunta({ pregunta, campaignId }: { pregunta: Pregunta; campaignId
 
   return (
     <div className="card question-thread-card" style={{ marginBottom: 12, padding: 16 }}>
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+      <div
+        className="row"
+        style={{ justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}
+      >
         <div className="row" style={{ gap: 4 }}>
           <strong style={{ fontSize: 13.5 }}>{pregunta.label}</strong>
           {pregunta.criticidad === 'critico' && <span className="pill bad">crítica</span>}
@@ -126,7 +68,9 @@ function FilaPregunta({ pregunta, campaignId }: { pregunta: Pregunta; campaignId
           {pregunta.campaignProductId !== null && (
             <span className="pill neutro">producto {pregunta.campaignProductId.slice(0, 8)}</span>
           )}
-          <span className={`pill ${pregunta.status === 'pendiente' ? 'neutro' : pregunta.status === 'respondida' ? 'ok' : 'warn'}`}>
+          <span
+            className={`pill ${pregunta.status === 'pendiente' ? 'neutro' : pregunta.status === 'respondida' ? 'ok' : 'warn'}`}
+          >
             {ETIQUETA_ESTADO[pregunta.status]}
           </span>
         </div>

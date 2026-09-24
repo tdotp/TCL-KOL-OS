@@ -459,7 +459,14 @@ export async function responderPreguntaLocal(
   const resultado = await responderPregunta(user, questionId, { answerValue, answer });
   if (!resultado.ok) return { error: resultado.error.message };
 
-  if (campaignId !== '') revalidatePath(`/campanas/${campaignId}/brief/editar`);
+  if (campaignId !== '') {
+    revalidatePath(`/campanas/${campaignId}/brief/editar`);
+    // Sprint 6, Fase C: el workspace guiado (`BRIEF_WORKSPACE_V2`) lee la
+    // misma pregunta a través de `obtenerBriefWorkspace` — sin esto, la
+    // tarea recién respondida seguiría apareciendo en la cola hasta el
+    // próximo refresh manual.
+    revalidatePath(`/campanas/${campaignId}/brief/workspace`);
+  }
   return { ok: true };
 }
 
@@ -479,7 +486,10 @@ export async function descartarPreguntaLocal(
   const resultado = await descartarPregunta(user, questionId, justificacion);
   if (!resultado.ok) return { error: resultado.error.message };
 
-  if (campaignId !== '') revalidatePath(`/campanas/${campaignId}/brief/editar`);
+  if (campaignId !== '') {
+    revalidatePath(`/campanas/${campaignId}/brief/editar`);
+    revalidatePath(`/campanas/${campaignId}/brief/workspace`);
+  }
   return { ok: true };
 }
 
