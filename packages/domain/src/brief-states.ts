@@ -59,7 +59,15 @@ interface TransitionRule {
  * *encontrado* en una fuente sí sigue exigiéndola — ahí "encontrado" es
  * exactamente el tipo de afirmación que el sistema nunca inventa.
  */
-function requiresEvidence(field: BriefField): boolean {
+/**
+ * Exportada desde Sprint 6 (Fase B): `obtenerBriefWorkspace`
+ * (`packages/db/src/brief-workspace.ts`) la reutiliza para contar
+ * `evidencePending` en el progreso del workspace — el mismo criterio que
+ * bloquea `internal_review` vía `guardClaimsHaveEvidence`, nunca una segunda
+ * regla que se pueda desincronizar de esta. Tipo reducido a `Pick<...>` a
+ * propósito: el llamador no siempre tiene un `BriefField` completo a mano.
+ */
+export function requiresEvidence(field: Pick<BriefField, 'criticidad' | 'provenanceType'>): boolean {
   if (field.criticidad === 'claim') return true;
   return field.criticidad === 'critico' && field.provenanceType !== 'manual_local';
 }

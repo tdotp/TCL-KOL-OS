@@ -107,3 +107,48 @@ export async function listAudit(
   );
   return rows;
 }
+
+/**
+ * Auditoría de una campaña concreta (Sprint 6, Fase B — `BriefWorkspace.activity`).
+ *
+ * `audit_events.entity_id` es heterogéneo a propósito (§10.3): según la
+ * mutación, apunta a la campaña, una versión, un campo, una pregunta o un
+ * comentario — nunca hay una FK directa a `campaign_id` en la tabla de
+ * auditoría porque no toda mutación ocurre sobre un recurso que la tenga.
+ * Esta consulta reconstruye la pertenencia a la campaña por cada tipo de
+ * entidad, en un solo viaje a la base — "no crear otra fuente paralela de
+ * auditoría, esta vista se deriva de registros existentes" (Sprint 6 §6.3).
+ */
+export async function listBriefActivity(
+  client: pg.Pool | pg.PoolClient,
+  organizationId: string,
+  campaignId: string,
+  limit = 30,
+): Promise<AuditEventRow[]> {
+  const { rows } = await client.query<AuditEventRow>(
+    `WITH version_ids AS (
+       SELECT v.id FROM brief_versions v JOIN briefs b ON b.id = v.brief_id WHERE b.campaign_id = $2
+     ), field_ids AS (
+       SELECT id FROM brief_fields WHERE brief_version_id IN (SELECT id FROM version_ids)
+     ), question_ids AS (
+       SELECT id FROM local_questions WHERE campaign_id = $2
+     ), comment_ids AS (
+       SELECT id FROM field_comments WHERE brief_version_id IN (SELECT id FROM version_ids)
+     )
+     SELECT a.id, u.name AS actor_name, a.action, a.entity_type, a.entity_id, a.metadata, a.created_at
+       FROM audit_events a
+       LEFT JOIN users u ON u.id = a.actor_id
+      WHERE a.organization_id = $1
+        AND (
+          (a.entity_type = 'campaign' AND a.entity_id = $2)
+          OR (a.entity_type = 'brief_version' AND a.entity_id IN (SELECT id FROM version_ids))
+          OR (a.entity_type = 'brief_field' AND a.entity_id IN (SELECT id FROM field_ids))
+          OR (a.entity_type = 'local_question' AND a.entity_id IN (SELECT id FROM question_ids))
+          OR (a.entity_type = 'field_comment' AND a.entity_id IN (SELECT id FROM comment_ids))
+        )
+      ORDER BY a.created_at DESC
+      LIMIT $3`,
+    [organizationId, campaignId, limit],
+  );
+  return rows;
+}

@@ -21,4 +21,5 @@ export * from './local-questions.ts';
 export * from './comments.ts';
 export * from './client-review.ts';
 export * from './versioning.ts';
+export * from './brief-workspace.ts';
 export { migrate } from './migrate.ts';

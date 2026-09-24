@@ -508,6 +508,7 @@ export interface VersionDelBrief {
   readonly id: string;
   readonly version: number;
   readonly status: string;
+  readonly language: string;
   readonly createdAt: Date;
   readonly modelo: string | null;
   readonly costoUsd: number | null;
@@ -545,11 +546,12 @@ export async function versionesDelBrief(actor: User, campaignId: string): Promis
     id: string;
     version: number;
     status: string;
+    language: string;
     created_at: Date;
     modelo: string | null;
     costo: string | null;
   }>(
-    `SELECT v.id, v.version, v.status::text, v.created_at,
+    `SELECT v.id, v.version, v.status::text, v.language::text, v.created_at,
             r.model AS modelo, r.cost_usd::text AS costo
        FROM brief_versions v
        JOIN briefs b ON b.id = v.brief_id
@@ -563,6 +565,7 @@ export async function versionesDelBrief(actor: User, campaignId: string): Promis
     filas.map((f) => ({
       id: f.id,
       version: f.version,
+      language: f.language,
       status: f.status,
       createdAt: f.created_at,
       modelo: f.modelo,
