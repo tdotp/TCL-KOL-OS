@@ -4,6 +4,24 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [No publicado]
 
+### Sprint 6 (Fase B + C) — Brief Workspace: contrato consolidado y completado guiado · 24 de septiembre de 2026
+
+`obtenerBriefWorkspace` como único modelo de lectura del brief, y una primera experiencia de completado guiada detrás de `BRIEF_WORKSPACE_V2`. Exportación PDF/DOCX, revisión/actividad como pantallas propias y pruebas de navegador quedan para el siguiente incremento. Detalle completo en [D0-19](docs/product/D0-19-cierre-sprint6.md).
+
+#### Añadido
+
+- **`BriefWorkspace` (DEC-038)**: contrato de lectura único — progreso, secciones, tareas pendientes, actividad derivada de `audit_events` y acciones permitidas — compuesto sobre funciones de repositorio ya existentes, sin SQL propio contra campos/preguntas/comentarios (`packages/db/src/brief-workspace.ts`, `packages/domain/src/workspace.ts`).
+- **Workspace guiado de completado (DEC-039)**, detrás de `BRIEF_WORKSPACE_V2`: una tarea a la vez, tomada de la cola real de `local_questions`, resuelta con las mismas server actions que ya existían — ninguna escritura nueva a la base (`/campanas/[id]/brief/workspace`).
+- `requiresEvidence` exportada desde `packages/domain/src/brief-states.ts` (antes privada) para que el progreso del workspace cuente `evidencePending` con la misma regla que bloquea `internal_review` — nunca una segunda regla.
+- `ControlDeRespuesta` extraído de `TablaPreguntas.tsx` a componente compartido (`apps/web/src/components/ControlDeRespuesta.tsx`) — el workspace guiado usa el mismo control por tipo de dato, no uno reimplementado.
+- `listBriefActivity` (`packages/db/src/audit.ts`) — auditoría de una campaña concreta, reconstruida por tipo de entidad desde `audit_events` existentes; nunca una segunda fuente de auditoría.
+- 12 pruebas de integración nuevas (`packages/db/src/brief-workspace.test.ts`): sin brief, extracción parcial, multiproducto, campo por producto, críticos pendientes, claim sin evidencia, pregunta respondida/descartada, comentarios abiertos/resueltos, permisos por rol (consultor vs. director), cliente sin datos internos, aislamiento entre organizaciones, versión aprobada inmutable.
+
+#### Movido (sin cambiar comportamiento)
+
+- `ORDEN_DE_SECCIONES`, `TITULO_SECCION`, `ESTADO_EN_ESPANOL`, `TEXTO_DEL_BOTON`: de `apps/web/src/lib/*` a `packages/domain/src/brief-presentation.ts` (reexportadas desde `apps/web` para no romper imports) — `packages/db` no puede depender de `apps/web` (ADR-008) y el nuevo workspace necesita agrupar por sección y describir transiciones igual que la UI ya lo hacía.
+- `versionesDelBrief` ahora también devuelve `language` (columna ya existía; el `SELECT` no la pedía).
+
 ### Cierre de Sprint 5 — Ciclo completo del brief: de `internal_review` a `approved` · 15 de septiembre de 2026
 
 Comentarios internos por campo, fechas estructuradas en el editor manual, aprobación interna con motivo, revisión y decisión del cliente, y versionado posterior a aprobación. Detalle completo en [D0-18](docs/product/D0-18-cierre-sprint5.md).

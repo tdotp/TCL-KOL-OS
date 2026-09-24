@@ -464,4 +464,25 @@ docs/product/brief-schema/brief-catalog.json   Fuente única de los 41 campos
 [D0-11 backlog](docs/product/D0-11-backlog-mvp1.md) ·
 [INC-001](docs/incidents/INC-001-test-data-collision.md) ·
 [D0-17 — cierre de Sprint 4](docs/product/D0-17-cierre-sprint4.md) ·
-[D0-18 — cierre de este incremento](docs/product/D0-18-cierre-sprint5.md)
+[D0-18 — cierre de Sprint 5](docs/product/D0-18-cierre-sprint5.md) ·
+[D0-19 — cierre de Sprint 6 (Fase B+C)](docs/product/D0-19-cierre-sprint6.md)
+
+## Sprint 6 (Fase B + C) — Brief Workspace
+
+Encima del rediseño de UI que ya estaba en el repo (`AppShell`, workspace de
+3 columnas del editor, etc.), Sprint 6 añade un **contrato de lectura único**
+del brief y una **experiencia de completado guiada**, sin tocar dominio,
+migraciones ni el flujo anterior. Detalle completo en
+[D0-19](docs/product/D0-19-cierre-sprint6.md); resumen rápido:
+
+- `obtenerBriefWorkspace(actor, campaignId)` (`packages/db/src/brief-workspace.ts`)
+  — un único modelo (`BriefWorkspace`, `packages/domain/src/workspace.ts`) que
+  compone `getCampaign`/`verCamposDeVersion`/`listarPreguntas`/
+  `contarConversacionesAbiertas`/`allowedTransitions`, nunca SQL propio.
+- `/campanas/[id]/brief/workspace` — una tarea a la vez, detrás de la
+  variable de entorno `BRIEF_WORKSPACE_V2` (`true` la activa; apagada o
+  ausente, reenvía a `/brief/editar` de siempre). Responde/descarta con las
+  mismas server actions de `TablaPreguntas.tsx` — ninguna mutación nueva.
+- Pendiente para el siguiente incremento: exportación PDF/DOCX, y "Revisar
+  brief"/"Actividad" como pantallas propias del workspace (el dato ya está
+  en el contrato, falta la UI).

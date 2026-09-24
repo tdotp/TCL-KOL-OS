@@ -596,6 +596,28 @@ posterior a aprobación». 15 de septiembre de 2026.
 - **Dónde vive:** `infra/db/migrations/010_inmutabilidad_bypass_restringido.sql`; `packages/db/src/test-utils.ts` (comentario actualizado); pruebas en `packages/db/src/immutability.test.ts` (20 casos nuevos).
 - **Responsable de aprobación:** Gerardo Calambás.
 
+### DEC-038 — `BriefWorkspace` como único contrato de lectura del workspace, nunca ensamblado en React
+
+- **Fecha:** 24 de septiembre de 2026
+- **Estado:** **aprobada** — Sprint 6, Fase B
+- **Origen:** la interfaz del brief exponía directamente los 41 campos, las claves técnicas, los doce estados internos y varias rutas distintas para lo mismo — no porque faltara lógica de dominio (ya existía completa desde Sprint 5), sino porque cada pantalla la volvía a ensamblar a mano con sus propias llamadas sueltas a `verCamposDeVersion`, `listarPreguntas`, `contarConversacionesAbiertas`, etc.
+- **Decisión:** `obtenerBriefWorkspace(actor, campaignId)` (`packages/db/src/brief-workspace.ts`) es la única función que compone esas llamadas y las reduce a un modelo estable (`BriefWorkspace`, `packages/domain/src/workspace.ts`): progreso, secciones, tareas pendientes, actividad derivada de `audit_events` y acciones permitidas. No ejecuta SQL propio contra campos/preguntas/comentarios y no reimplementa ninguna guarda — `allowedTransitions` y `requiresEvidence` (recién exportada, antes privada en `brief-states.ts`) son las mismas del dominio real. `ORDEN_DE_SECCIONES`, `TITULO_SECCION`, `ESTADO_EN_ESPANOL` y `TEXTO_DEL_BOTON` se movieron de `apps/web/src/lib/*` a `packages/domain/src/brief-presentation.ts` (con reexport desde `apps/web` para no romper imports existentes) porque `packages/db` no puede depender de `apps/web` (ADR-008).
+- **Dos proyecciones a propósito:** este contrato es el interno. Cuando el actor es `cliente`, los comentarios internos ni siquiera se consultan (nunca una propiedad presente que se "esconde" en la UI) — si el cliente necesitara su propia proyección de este mismo dato en el futuro, debe ser un tipo explícito nuevo, nunca este con menos campos poblados.
+- **Verificación:** 12 pruebas de integración nuevas (`packages/db/src/brief-workspace.test.ts`) — sin brief, extracción parcial, multiproducto, campo por producto, críticos pendientes, claim sin evidencia, pregunta respondida/descartada, comentario abierto/resuelto, consultor sin `approve_internal` vs. director con él, cliente sin comentarios internos, aislamiento entre organizaciones, versión aprobada inmutable. 80 dominio + 219 `packages/db` en verde.
+- **Dónde vive:** `packages/domain/src/workspace.ts`, `packages/domain/src/brief-presentation.ts`, `packages/db/src/brief-workspace.ts`, `packages/db/src/brief-workspace.test.ts`.
+- **Responsable de aprobación:** Gerardo Calambás.
+
+### DEC-039 — El workspace guiado resuelve la cola de `local_questions` existente; "saltar" nunca toca el servidor
+
+- **Fecha:** 24 de septiembre de 2026
+- **Estado:** **aprobada** — Sprint 6, Fase C
+- **Origen:** el pedido de este incremento es que la conversación construya el brief, sin introducir todavía un agente autónomo ni una tabla de mensajes genérica — la cola de trabajo debía ser la que ya existe, no una nueva.
+- **Decisión:** `WorkspaceGuiado.tsx` (`apps/web/.../brief/workspace/`) muestra una tarea a la vez tomada de `workspace.tasks` — que no es más que `local_questions` pendientes, ya generadas por `generarPreguntas` (Sprint 4). Responder o descartar llama exactamente a las mismas server actions que ya alimentaban `TablaPreguntas.tsx` (`responderPreguntaLocal`, `descartarPreguntaLocal`) — ninguna acción nueva escribe en la base. Un claim (`criticidad: 'claim'`) nunca se ofrece para responder inline: siempre exige evidencia documental (§3.3, sin excepción aunque la respuesta venga de una persona), así que la tarea remite al editor en vez de fingir que un texto libre la resuelve. "Saltar por ahora" es estado del navegador únicamente (reordena qué se muestra primero dentro de esta sesión) — nunca persiste, nunca es una acción de dominio.
+- **Feature flag:** toda la superficie vive detrás de `BRIEF_WORKSPACE_V2` (env var, sin tabla nueva). Apagada (por defecto), `/campanas/[id]/brief/workspace` reenvía a `/brief/editar` sin cambiar nada del flujo anterior; el enlace de entrada en el overview de campaña tampoco aparece. Ninguna ruta ni componente anterior se retiró.
+- **Verificación:** recorrido completo en vivo contra datos reales (login → overview de campaña → workspace guiado → responder una pregunta crítica de texto → progreso y contador se actualizan → "saltar" reordena sin tocar el servidor → siguiente pregunta con un control distinto, `ControlDeRespuesta` extraído a componente compartido). Con la bandera apagada, la misma URL reenvía limpio a `/brief/editar` — confirmado navegando directo a la ruta.
+- **Dónde vive:** `apps/web/src/app/(app)/campanas/[id]/brief/workspace/page.tsx`, `WorkspaceGuiado.tsx`; `apps/web/src/components/ControlDeRespuesta.tsx` (extraído de `TablaPreguntas.tsx`).
+- **Responsable de aprobación:** Gerardo Calambás.
+
 ---
 
 ## Decisiones pendientes que no bloquean MVP 0
