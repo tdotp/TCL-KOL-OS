@@ -1,22 +1,34 @@
 import { redirect } from 'next/navigation';
-import { listCampaigns, listarPreguntas } from '@tcl-kol-os/db';
+import { getPool, listAudit, listCampaigns, listarPreguntas } from '@tcl-kol-os/db';
 import { currentUser } from '@/lib/session';
 import { TablaCampanas } from './TablaCampanas';
 
 export const dynamic = 'force-dynamic';
 
-/**
- * UI-03 · Lista de campañas, con próximas acciones reales al lado (solo las
- * de la organización del usuario, E2-4). "Next actions" del mockup de
- * referencia se deriva de preguntas críticas pendientes — no es una entidad
- * nueva ni un dato inventado.
- */
-export default async function CampanasPage() {
+function accionLegible(action: string): string {
+  const conocidas: Record<string, string> = {
+    'campaign.create': 'Creó una campaña',
+    'campaign.archive': 'Archivó una campaña',
+    'source.upload': 'Cargó una fuente',
+    'source.retry': 'Reintentó una fuente',
+    'brief.transition': 'Actualizó el estado de un brief',
+    'brief.field.correct': 'Corrigió un campo del brief',
+    'brief.field.confirm': 'Confirmó un campo del brief',
+    'comment.create': 'Añadió un comentario',
+    'question.answer': 'Respondió una pregunta',
+  };
+  return conocidas[action] ?? action.replaceAll('.', ' · ');
+}
+
+/** Lista de campañas + trabajo operativo derivado exclusivamente de datos reales. */
+export default async function CampanasPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const user = await currentUser();
+  const { q } = await searchParams;
   if (user === undefined) redirect('/login');
 
   const resultado = await listCampaigns(user);
   const campanas = resultado.ok ? resultado.value : [];
+  const actividad = user.role === 'cliente' ? [] : await listAudit(getPool(), user.organizationId, 6);
 
   const activas = campanas.filter((c) => c.status === 'activa').slice(0, 6);
   const proximasAcciones =
@@ -33,61 +45,108 @@ export default async function CampanasPage() {
         ).filter((x): x is { campana: (typeof activas)[number]; criticas: number } => x !== undefined);
 
   return (
-    <div className="content">
-      <div className="page-head">
+    <div className="content content-wide ui-enter">
+      <div className="page-head page-head-spacious">
         <div>
+          <div className="eyebrow">Workspace</div>
           <h1>Campañas</h1>
-          <p className="sub">Organización: {user.organizationId.slice(0, 8)}…</p>
+          <p className="sub">Administra y sigue el avance de todas las campañas KOL visibles para tu rol.</p>
         </div>
         {user.role !== 'cliente' && (
           <a className="btn pri" href="/campanas/nueva">
-            + Nueva campaña
+            <span className="btn-plus">＋</span> Nueva campaña
           </a>
         )}
       </div>
 
-      <div className="grid-2">
-        <div className="card" style={{ padding: 18 }}>
+      <div className="grid-2 campaigns-layout">
+        <section className="card campaigns-card">
           {!resultado.ok ? (
             <div className="aviso error">
               <strong>Sin acceso</strong>
               {resultado.error.message}
             </div>
           ) : campanas.length === 0 ? (
-            <p className="vacio">
-              No hay campañas visibles para tu rol.
-              {user.role === 'cliente' && ' Verás las campañas cuando se te compartan.'}
-            </p>
+            <div className="empty-state">
+              <div className="empty-state-mark" aria-hidden="true">▤</div>
+              <h2>No hay campañas todavía</h2>
+              <p>
+                {user.role === 'cliente'
+                  ? 'Verás las campañas cuando se compartan contigo.'
+                  : 'Crea la primera campaña para empezar a organizar fuentes, preguntas y brief.'}
+              </p>
+              {user.role !== 'cliente' && (
+                <a className="btn pri" href="/campanas/nueva">
+                  Crear campaña
+                </a>
+              )}
+            </div>
           ) : (
-            <TablaCampanas campanas={campanas} />
+            <TablaCampanas campanas={campanas} initialSearch={q ?? ''} />
           )}
-        </div>
+        </section>
 
-        <aside className="side-stack">
+        <aside className="side-stack campaigns-side">
           {user.role !== 'cliente' && (
-            <div className="card" style={{ padding: 18 }}>
-              <h3 className="section-title">Próximas acciones</h3>
+            <section className="card side-card">
+              <div className="side-card-head">
+                <div>
+                  <div className="eyebrow">Prioridad</div>
+                  <h3 className="section-title">Próximas acciones</h3>
+                </div>
+              </div>
               {proximasAcciones.length === 0 ? (
-                <p className="sub" style={{ margin: 0 }}>
-                  Sin preguntas críticas pendientes en tus campañas activas.
-                </p>
+                <div className="quiet-state">
+                  <span className="status-mark status-mark-ok" />
+                  <div>
+                    <strong>Todo al día</strong>
+                    <p>Sin preguntas críticas pendientes en campañas activas.</p>
+                  </div>
+                </div>
               ) : (
                 <div className="action-list">
                   {proximasAcciones.map(({ campana, criticas }) => (
-                    <div className="action-row primary" key={campana.id}>
+                    <a
+                      className="action-row action-row-link"
+                      key={campana.id}
+                      href={`/campanas/${campana.id}/brief/editar?panel=preguntas`}
+                    >
                       <div className="action-ico">?</div>
-                      <a href={`/campanas/${campana.id}/brief/editar?panel=preguntas`}>
+                      <div className="action-copy">
                         <b>
-                          {criticas} pregunta{criticas > 1 ? 's' : ''} crítica{criticas > 1 ? 's' : ''}{' '}
-                          pendiente{criticas > 1 ? 's' : ''}
+                          {criticas} pregunta{criticas > 1 ? 's' : ''} crítica{criticas > 1 ? 's' : ''}
                         </b>
                         <span className="detalle">{campana.name}</span>
-                      </a>
-                    </div>
+                      </div>
+                      <span className="action-arrow">→</span>
+                    </a>
                   ))}
                 </div>
               )}
-            </div>
+            </section>
+          )}
+
+          {actividad.length > 0 && (
+            <section className="card side-card">
+              <div className="side-card-head">
+                <div>
+                  <div className="eyebrow">Auditoría</div>
+                  <h3 className="section-title">Actividad reciente</h3>
+                </div>
+              </div>
+              <div className="activity-list">
+                {actividad.map((a) => (
+                  <div className="activity-item" key={a.id}>
+                    <span className="activity-avatar">{(a.actor_name ?? 'S').slice(0, 2).toUpperCase()}</span>
+                    <div>
+                      <strong>{a.actor_name ?? 'Sistema'}</strong>
+                      <p>{accionLegible(a.action)}</p>
+                      <time>{new Date(a.created_at).toLocaleString('es-CO')}</time>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
           )}
         </aside>
       </div>

@@ -28,8 +28,9 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <h1 style={{ fontSize: 34 }}>Bienvenido</h1>
-          <p className="sub">Plataforma interna de SmartPR para coordinar campañas KOL de TCL.</p>
+          <div className="eyebrow">Acceso</div>
+          <h1 style={{ fontSize: 34 }}>Bienvenido de nuevo</h1>
+          <p className="sub">Continúa a TCL KOL OS para gestionar campañas, fuentes y briefs en un solo lugar.</p>
 
           <form action={accion} style={{ marginTop: 28 }}>
             {estado.error !== undefined && (
@@ -66,12 +67,12 @@ export default function LoginPage() {
           <div className="login-statement">
             <div className="login-eyebrow">TCL KOL OS</div>
             <h2>
-              Campañas KOL,
+              Menos fricción,
               <br />
-              <span>de fuente a brief aprobado</span>
+              <span>más claridad operativa</span>
             </h2>
             <p className="sub">
-              Extracción con evidencia, revisión por rol y un historial que nunca se reescribe.
+              Fuentes, preguntas, evidencia y revisión conectadas en un mismo flujo.
             </p>
           </div>
         </div>

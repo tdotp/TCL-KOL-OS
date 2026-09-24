@@ -10,19 +10,11 @@ import { campoDelCatalogo, type BriefStatus } from '@tcl-kol-os/domain';
 import { currentUser } from '@/lib/session';
 import { ORDEN_DE_SECCIONES, TITULO_SECCION } from '@/lib/brief-sections';
 import { ESTADO_EN_ESPANOL } from '@/lib/brief-ui';
+import { monogramaColor, monogramaIniciales } from '@/lib/monograma';
 import { EditorBrief } from './EditorBrief';
 
 export const dynamic = 'force-dynamic';
 
-/**
- * UI-10 · Editor estructurado del brief (Épica E7) + UI-09 · Preguntas
- * locales (Épica E6), fusionadas en un único workspace: navega por los diez
- * bloques canónicos más un panel de preguntas pendientes, nunca por la lista
- * plana de 41 claves técnicas (sección 6 del pedido). La validación contra
- * el esquema no se reimplementa aquí: el botón de "Enviar a revisión
- * interna" llama a la misma `transicionarBrief` de siempre, y lo que el
- * dominio rechace se muestra tal cual (ADR-008).
- */
 export default async function EditorBriefPage({
   params,
   searchParams,
@@ -47,10 +39,8 @@ export default async function EditorBriefPage({
   const camposResultado = await verCamposDeVersion(user, ultima.id);
   const campos = camposResultado.ok ? camposResultado.value : [];
 
-  const filtroPreguntas: { status?: 'pendiente' | 'respondida' | 'descartada'; campaignProductId?: string } =
-    {};
-  if (status === 'pendiente' || status === 'respondida' || status === 'descartada')
-    filtroPreguntas.status = status;
+  const filtroPreguntas: { status?: 'pendiente' | 'respondida' | 'descartada'; campaignProductId?: string } = {};
+  if (status === 'pendiente' || status === 'respondida' || status === 'descartada') filtroPreguntas.status = status;
   if (producto !== undefined && producto !== '') filtroPreguntas.campaignProductId = producto;
 
   const [preguntasPendientesResultado, preguntasFiltradasResultado] = await Promise.all([
@@ -84,32 +74,33 @@ export default async function EditorBriefPage({
     };
   });
 
-  const secciones = ORDEN_DE_SECCIONES.filter((s) => camposConCatalogo.some((c) => c.section === s)).map(
-    (s) => ({
-      id: s,
-      titulo: TITULO_SECCION[s] ?? s,
-      campos: camposConCatalogo.filter((c) => c.section === s),
-    }),
-  );
+  const secciones = ORDEN_DE_SECCIONES.filter((s) => camposConCatalogo.some((c) => c.section === s)).map((s) => ({
+    id: s,
+    titulo: TITULO_SECCION[s] ?? s,
+    campos: camposConCatalogo.filter((c) => c.section === s),
+  }));
 
   const productos = campana.value.productos.map((p) => ({ id: p.id, model: p.model, rol: p.rol }));
 
   return (
-    <div className="content" style={{ maxWidth: 1280 }}>
-      <p className="sub" style={{ marginBottom: 4 }}>
-        <a href={`/campanas/${id}/brief`}>← Volver a la extracción</a>
-      </p>
-      <h1>Editor del brief</h1>
-      <p className="sub">
-        {campana.value.campaign.name} · versión {ultima.version} · estado{' '}
-        <span className="pill">{ESTADO_EN_ESPANOL[ultima.status as BriefStatus] ?? ultima.status}</span>
-      </p>
+    <div className="content content-workspace ui-enter">
+      <a className="back-link" href={`/campanas/${id}/brief`}>← Volver al brief</a>
+
+      <header className="brief-editor-header">
+        <span className={`monogram lg ${monogramaColor(id)}`}>{monogramaIniciales(campana.value.campaign.name)}</span>
+        <div>
+          <div className="eyebrow">Brief workspace</div>
+          <h1>{campana.value.campaign.name}</h1>
+          <p>Versión {ultima.version} · <span className="status-inline">{ESTADO_EN_ESPANOL[ultima.status as BriefStatus] ?? ultima.status}</span></p>
+        </div>
+        <div className="brief-editor-header-actions">
+          <a className="btn" href={`/campanas/${id}/fuentes`}>Fuentes</a>
+          <a className="btn" href={`/campanas/${id}/brief`}>Revisión</a>
+        </div>
+      </header>
 
       {error !== undefined && (
-        <div className="aviso error">
-          <strong>No se pudo completar la acción</strong>
-          {decodeURIComponent(error)}
-        </div>
+        <div className="aviso error"><strong>No se pudo completar la acción</strong>{decodeURIComponent(error)}</div>
       )}
 
       <EditorBrief

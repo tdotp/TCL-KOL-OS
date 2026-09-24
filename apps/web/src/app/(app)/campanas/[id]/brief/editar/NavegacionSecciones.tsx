@@ -18,10 +18,12 @@ export function NavegacionSecciones({
           onClick={() => onSeleccionar(s.id)}
           className={activa === s.id ? 'active' : undefined}
         >
-          <span className="section-number">{i + 1}</span>
+          <span className={`section-number ${s.pendientes === 0 ? 'complete' : ''}`}>
+            {s.pendientes === 0 ? '✓' : i + 1}
+          </span>
           <span>
             <b>{s.titulo}</b>
-            <span className="detalle">{s.pendientes > 0 ? `${s.pendientes} pendiente(s)` : 'completa'}</span>
+            <span className="detalle">{s.pendientes > 0 ? `${s.pendientes} pendiente${s.pendientes > 1 ? 's' : ''}` : 'completa'}</span>
           </span>
         </button>
       ))}

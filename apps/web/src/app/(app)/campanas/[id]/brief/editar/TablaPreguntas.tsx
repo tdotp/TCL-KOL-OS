@@ -117,7 +117,7 @@ function FilaPregunta({ pregunta, campaignId }: { pregunta: Pregunta; campaignId
   const [mostrarDescarte, setMostrarDescarte] = useState(false);
 
   return (
-    <div className="card" style={{ marginBottom: 12, padding: 16 }}>
+    <div className="card question-thread-card" style={{ marginBottom: 12, padding: 16 }}>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
         <div className="row" style={{ gap: 4 }}>
           <strong style={{ fontSize: 13.5 }}>{pregunta.label}</strong>
@@ -138,7 +138,7 @@ function FilaPregunta({ pregunta, campaignId }: { pregunta: Pregunta; campaignId
       <div className="chat-hilo" style={{ maxHeight: 'none', padding: 0 }}>
         {/* El sistema "pregunta" — nunca inventa: siempre explica de dónde sale la duda. */}
         <div className="chat-msg sistema">
-          <div className="chat-avatar">IA</div>
+          <div className="chat-avatar">OS</div>
           <div style={{ flex: 1 }}>
             <div className="chat-bubble">
               <div className="chat-texto">{pregunta.question}</div>

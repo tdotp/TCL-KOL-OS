@@ -124,7 +124,7 @@ export function CampoEditable({
 
   if (conflictoDeRevision) {
     return (
-      <div className="card" style={{ marginBottom: 10 }}>
+      <div className="card brief-field-card" style={{ marginBottom: 10 }}>
         <span className="pill warn">este campo cambió en otra pestaña — recargando…</span>
       </div>
     );
@@ -164,14 +164,14 @@ export function CampoEditable({
               onChange={(e) => setValorTexto(e.target.value)}
               onBlur={guardar}
               placeholder={campo.status === 'not_found' ? 'Sin dato — escriba para completarlo' : undefined}
-              style={{ width: '100%', padding: '6px 8px', fontSize: 14 }}
+              className="brief-field-input"
               disabled={corrigiendo}
             />
           </>
         )}
       </form>
 
-      <div className="row" style={{ gap: 8, marginTop: 8, alignItems: 'center' }}>
+      <div className="row field-meta-actions" style={{ gap: 8, marginTop: 8, alignItems: 'center' }}>
         <span style={{ fontSize: 12, color: 'var(--muted)' }}>
           {corrigiendo ? 'guardando…' : estadoCorreccion.ok ? 'guardado' : ''}
         </span>

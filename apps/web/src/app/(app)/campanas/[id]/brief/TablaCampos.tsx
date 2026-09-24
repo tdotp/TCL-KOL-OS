@@ -205,8 +205,9 @@ export function TablaCampos({
     .sort((a, b) => prioridad(a) - prioridad(b) || a.key.localeCompare(b.key));
 
   return (
-    <div className="card">
-      <h2>Campos extraídos</h2>
+    <div className="card review-fields-card">
+      <div className="eyebrow">Campos</div>
+      <h2>Contenido a revisar</h2>
 
       <label style={{ display: 'block', margin: '8px 0 16px', fontSize: 14 }}>
         <input
@@ -223,7 +224,7 @@ export function TablaCampos({
       ) : (
         // La tabla tiene muchas columnas y valores largos: en pantallas
         // estrechas se desborda. Que scrolee ella y no el documento entero.
-        <div style={{ overflowX: 'auto' }}>
+        <div className="review-table-shell">
           <table style={{ minWidth: 980 }}>
             <thead>
               <tr>

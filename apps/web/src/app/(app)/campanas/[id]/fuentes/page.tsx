@@ -1,28 +1,27 @@
 import { notFound, redirect } from 'next/navigation';
-import { getCampaign, listSources } from '@tcl-kol-os/db';
+import { getCampaign, listSources, versionesDelBrief } from '@tcl-kol-os/db';
+import type { BriefStatus } from '@tcl-kol-os/domain';
 import { currentUser } from '@/lib/session';
+import { ETAPAS, etapaDeStatus } from '@/lib/brief-ui';
+import { monogramaColor, monogramaIniciales } from '@/lib/monograma';
 import { FormularioFuente } from './FormularioFuente';
 import { TablaFuentes } from './TablaFuentes';
 
 export const dynamic = 'force-dynamic';
 
-/**
- * UI-06 · Carga de fuentes y UI-07 · Estado de procesamiento.
- *
- * Van juntas a propósito: quien acaba de cargar un archivo quiere ver en qué va,
- * y separarlo en dos pantallas obligaría a navegar para saberlo.
- */
 export default async function FuentesPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await currentUser();
   if (user === undefined) redirect('/login');
 
   const { id } = await params;
-
   const campana = await getCampaign(user, id);
   if (!campana.ok) notFound();
 
-  const fuentes = await listSources(user, id);
+  const [fuentes, versiones] = await Promise.all([listSources(user, id), versionesDelBrief(user, id)]);
   const filas = fuentes.ok ? fuentes.value : [];
+  const versionActual = versiones.ok ? versiones.value[0] : undefined;
+  const etapaActual = etapaDeStatus(versionActual?.status as BriefStatus | undefined);
+  const indiceEtapaActual = ETAPAS.findIndex((e) => e.id === etapaActual);
 
   const resumen = {
     procesado: filas.filter((f) => f.status === 'procesado').length,
@@ -31,59 +30,76 @@ export default async function FuentesPage({ params }: { params: Promise<{ id: st
     fallido: filas.filter((f) => f.status === 'fallido').length,
   };
   const total = filas.length;
-  // Segmentos del donut en el mismo orden que la leyenda — porcentajes
-  // acumulados reales, nunca aproximados a ojo.
-  const segmentos: Array<[number, string]> = [
-    [resumen.procesado, 'var(--ok)'],
-    [resumen.procesando, 'var(--warn)'],
-    [resumen.pendiente, 'var(--muted-soft)'],
-    [resumen.fallido, 'var(--bad)'],
-  ];
-  let acumulado = 0;
-  const stops = segmentos
-    .map(([cantidad, color]) => {
-      const desde = acumulado;
-      acumulado += total === 0 ? 0 : (cantidad / total) * 100;
-      return `${color} ${desde}% ${acumulado}%`;
-    })
-    .join(', ');
+  const procesadosPct = total === 0 ? 0 : Math.round((resumen.procesado / total) * 100);
 
   return (
-    <div className="content">
-      <p className="sub" style={{ marginBottom: 4 }}>
-        <a href={`/campanas/${id}`}>← {campana.value.campaign.name}</a>
-      </p>
-      <h1>Fuentes</h1>
-      <p className="sub">
-        El material que alimenta el brief: PPT de TCL China, fichas técnicas y briefs del cliente.
-      </p>
+    <div className="content content-wide ui-enter">
+      <a className="back-link" href={`/campanas/${id}`}>← {campana.value.campaign.name}</a>
 
-      <div className="grid-2">
-        <div>{user.role !== 'cliente' && <FormularioFuente campaignId={id} />}</div>
-        <aside className="side-stack">
-          <div className="card side-card">
-            <h3 className="section-title">Resumen</h3>
-            {filas.length === 0 ? (
-              <p className="sub" style={{ margin: 0 }}>
-                Todavía no hay fuentes cargadas.
-              </p>
-            ) : (
-              <div className="row" style={{ gap: 18, alignItems: 'center' }}>
-                <div className="ring" style={{ background: `conic-gradient(${stops})` }}>
-                  <div>
-                    <strong>{total}</strong>
-                    <span>archivos</span>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <span className="status-dot ok">{resumen.procesado} procesado(s)</span>
-                  <span className="status-dot warn">{resumen.procesando} procesando</span>
-                  <span className="status-dot">{resumen.pendiente} en cola</span>
-                  {resumen.fallido > 0 && <span className="status-dot bad">{resumen.fallido} fallido(s)</span>}
-                </div>
-              </div>
-            )}
+      <header className="campaign-header compact-campaign-header">
+        <span className={`monogram lg ${monogramaColor(id)}`}>{monogramaIniciales(campana.value.campaign.name)}</span>
+        <div className="campaign-heading-copy">
+          <div className="campaign-kickers"><span className="status-dot ok">{campana.value.campaign.status}</span></div>
+          <h1>{campana.value.campaign.name}</h1>
+          <p>{campana.value.campaign.market} · {campana.value.campaign.category ?? 'Sin categoría'}</p>
+        </div>
+        <div className="campaign-header-actions">
+          <a className="btn" href={`/campanas/${id}`}>Resumen</a>
+          <a className="btn pri" href={`/campanas/${id}/brief`}>Abrir brief →</a>
+        </div>
+      </header>
+
+      <nav className="campaign-context-nav" aria-label="Secciones de campaña">
+        <a href={`/campanas/${id}`}>Resumen</a>
+        <a className="active" href={`/campanas/${id}/fuentes`}>Fuentes <span>{filas.length}</span></a>
+        <a href={`/campanas/${id}/brief`}>Brief</a>
+        {user.role !== 'cliente' && <a href={`/campanas/${id}/brief/editar`}>Editar</a>}
+      </nav>
+
+      <div className="stepper campaign-stepper">
+        {ETAPAS.map((etapa, i) => (
+          <div key={etapa.id} className={`step ${i < indiceEtapaActual ? 'done' : i === 0 || i === indiceEtapaActual ? 'current' : ''}`}>
+            <div className="step-num">{i < indiceEtapaActual ? '✓' : i + 1}</div>
+            <div className="step-name">{etapa.nombre}</div>
           </div>
+        ))}
+      </div>
+
+      <div className="sources-layout">
+        <section>
+          {user.role !== 'cliente' && <FormularioFuente campaignId={id} />}
+        </section>
+        <aside className="side-stack">
+          <section className="card side-card sources-summary-card">
+            <div className="eyebrow">Fuentes</div>
+            <h3 className="section-title">Resumen</h3>
+            <div className="source-summary-main">
+              <div className="source-number"><strong>{total}</strong><span>archivos</span></div>
+              <div className="source-progress-copy"><strong>{procesadosPct}%</strong><span>procesado</span></div>
+            </div>
+            <div className="progreso"><span style={{ width: `${procesadosPct}%` }} /></div>
+            <div className="source-summary-lines">
+              <span><i className="status-mark status-mark-ok" />{resumen.procesado} procesados</span>
+              <span><i className="status-mark status-mark-neutral" />{resumen.procesando} procesando</span>
+              <span><i className="status-mark status-mark-neutral" />{resumen.pendiente} en cola</span>
+              {resumen.fallido > 0 && <span><i className="status-mark status-mark-bad" />{resumen.fallido} fallidos</span>}
+            </div>
+          </section>
+
+          {(resumen.procesando > 0 || resumen.pendiente > 0 || resumen.fallido > 0) && (
+            <section className="card side-card">
+              <div className="eyebrow">Atención</div>
+              <h3 className="section-title">Próximas acciones</h3>
+              <div className="action-list">
+                {resumen.procesando + resumen.pendiente > 0 && (
+                  <div className="action-row"><div className="action-ico">◷</div><div className="action-copy"><b>{resumen.procesando + resumen.pendiente} en proceso</b><span className="detalle">La página se actualiza automáticamente.</span></div></div>
+                )}
+                {resumen.fallido > 0 && (
+                  <div className="action-row"><div className="action-ico">!</div><div className="action-copy"><b>{resumen.fallido} con error</b><span className="detalle">Revisa el detalle y vuelve a intentar.</span></div></div>
+                )}
+              </div>
+            </section>
+          )}
         </aside>
       </div>
 

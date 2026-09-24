@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
-import { getCampaign, listarPreguntas, verCamposDeVersion, versionesDelBrief } from '@tcl-kol-os/db';
+import { getCampaign, listSources, listarPreguntas, verCamposDeVersion, versionesDelBrief } from '@tcl-kol-os/db';
 import { allowedTransitions, type BriefStatus } from '@tcl-kol-os/domain';
 import { currentUser } from '@/lib/session';
 import { archivarCampana, crearBriefManualDeCampana } from '@/lib/actions';
@@ -9,12 +9,13 @@ import { monogramaColor, monogramaIniciales } from '@/lib/monograma';
 
 export const dynamic = 'force-dynamic';
 
-/**
- * UI-05 · Detalle de campaña.
- *
- * Una campaña de otra organización llega aquí como 404, igual que una que no
- * existe. Es deliberado: distinguirlas revelaría que el recurso existe (S-01).
- */
+function fecha(valor: Date | null): string {
+  return valor === null
+    ? '—'
+    : new Date(valor).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/** Centro operativo de una campaña; todo lo mostrado proviene del estado real. */
 export default async function DetalleCampanaPage({
   params,
   searchParams,
@@ -30,11 +31,11 @@ export default async function DetalleCampanaPage({
 
   const resultado = await getCampaign(user, id);
   if (!resultado.ok) notFound();
-
   const { campaign, productos, avisoPresupuesto } = resultado.value;
 
-  const versiones = await versionesDelBrief(user, id);
+  const [versiones, fuentes] = await Promise.all([versionesDelBrief(user, id), listSources(user, id)]);
   const versionActual = versiones.ok ? versiones.value[0] : undefined;
+  const filasFuentes = fuentes.ok ? fuentes.value : [];
 
   const preguntas = await listarPreguntas(user, id, { status: 'pendiente' });
   const preguntasCriticasPendientes = preguntas.ok
@@ -43,63 +44,72 @@ export default async function DetalleCampanaPage({
 
   const campos = versionActual === undefined ? undefined : await verCamposDeVersion(user, versionActual.id);
   const listaCampos = campos !== undefined && campos.ok ? campos.value : [];
-  const progresoBrief =
-    listaCampos.length === 0 ? 0 : Math.round((listaCampos.filter((c) => c.status === 'found').length / listaCampos.length) * 100);
+  const encontrados = listaCampos.filter((c) => c.status === 'found').length;
+  const progresoBrief = listaCampos.length === 0 ? 0 : Math.round((encontrados / listaCampos.length) * 100);
 
   const estadoBrief = versionActual?.status as BriefStatus | undefined;
   const etapaActual = etapaDeStatus(estadoBrief);
   const indiceEtapaActual = ETAPAS.findIndex((e) => e.id === etapaActual);
-
-  const transicionesPosibles =
-    versionActual !== undefined ? allowedTransitions(versionActual.status as BriefStatus, user) : [];
+  const transicionesPosibles = versionActual !== undefined ? allowedTransitions(versionActual.status as BriefStatus, user) : [];
   const proximaTransicion = transicionesPosibles.find((t) => t in TEXTO_DEL_BOTON);
 
-  // Próxima acción — un único enlace, prioridad: preguntas críticas > sin
-  // versión todavía > siguiente transición permitida por el flujo real. Las
-  // preguntas locales son un artefacto interno del editor: al cliente nunca
-  // se le ofrece ese enlace (el editor lo redirige fuera de todos modos).
   const siguienteAccion =
     user.role !== 'cliente' && preguntasCriticasPendientes > 0
       ? {
-          label: `Responder ${preguntasCriticasPendientes} pregunta(s) crítica(s)`,
+          label: `Responder ${preguntasCriticasPendientes} pregunta${preguntasCriticasPendientes > 1 ? 's' : ''} crítica${preguntasCriticasPendientes > 1 ? 's' : ''}`,
+          detalle: 'Bloquean el avance del brief',
           href: `/campanas/${campaign.id}/brief/editar?panel=preguntas`,
         }
       : versionActual === undefined
-        ? { label: 'Cargar fuentes o iniciar el brief', href: `/campanas/${campaign.id}/fuentes` }
+        ? user.role === 'cliente'
+          ? undefined
+          : {
+              label: 'Preparar el brief',
+              detalle: 'Carga fuentes o inicia una versión manual',
+              href: `/campanas/${campaign.id}/fuentes`,
+            }
         : proximaTransicion !== undefined
-          ? { label: TEXTO_DEL_BOTON[proximaTransicion]!, href: `/campanas/${campaign.id}/brief` }
+          ? {
+              label: TEXTO_DEL_BOTON[proximaTransicion]!,
+              detalle: ESTADO_EN_ESPANOL[versionActual.status as BriefStatus],
+              href: `/campanas/${campaign.id}/brief`,
+            }
           : undefined;
 
+  const fuentesProcesadas = filasFuentes.filter((f) => f.status === 'procesado').length;
+  const fuentesEnProceso = filasFuentes.filter((f) => f.status === 'pendiente' || f.status === 'procesando').length;
+  const fuentesFallidas = filasFuentes.filter((f) => f.status === 'fallido').length;
+
   return (
-    <div className="content">
-      <div className="campaign-header">
-        <span className={`monogram lg ${monogramaColor(campaign.id)}`}>{monogramaIniciales(campaign.name)}</span>
-        <div style={{ flex: 1 }}>
-          <div className="row" style={{ gap: 8 }}>
-            <span className={`pill ${campaign.status === 'activa' ? 'ok' : 'neutro'}`}>{campaign.status}</span>
+    <div className="content content-wide ui-enter">
+      <a className="back-link" href="/campanas">← Campañas</a>
+
+      <header className="campaign-header campaign-header-large">
+        <span className={`monogram xl ${monogramaColor(campaign.id)}`}>{monogramaIniciales(campaign.name)}</span>
+        <div className="campaign-heading-copy">
+          <div className="campaign-kickers">
+            <span className={`status-dot ${campaign.status === 'activa' ? 'ok' : ''}`}>{campaign.status}</span>
             {campaign.category !== null && <span className="pill neutro">{campaign.category}</span>}
           </div>
-          <h1 style={{ margin: '8px 0 4px' }}>{campaign.name}</h1>
-          <p className="sub" style={{ margin: 0 }}>
-            {campaign.market} · responsable {campaign.owner_name}
-          </p>
+          <h1>{campaign.name}</h1>
+          <p>{campaign.market} · {campaign.owner_name}</p>
         </div>
-        <div className="row" style={{ gap: 8 }}>
-          <a className="btn" href={`/campanas/${campaign.id}/fuentes`}>
-            Fuentes
-          </a>
-          <a className="btn pri" href={`/campanas/${campaign.id}/brief`}>
-            Abrir brief
-          </a>
+        <div className="campaign-header-actions">
+          <a className="btn" href={`/campanas/${campaign.id}/fuentes`}>Fuentes</a>
+          <a className="btn pri" href={`/campanas/${campaign.id}/brief`}>Abrir brief →</a>
         </div>
-      </div>
+      </header>
 
-      <div className="stepper">
+      <nav className="campaign-context-nav" aria-label="Secciones de campaña">
+        <a className="active" href={`/campanas/${campaign.id}`}>Resumen</a>
+        <a href={`/campanas/${campaign.id}/fuentes`}>Fuentes <span>{filasFuentes.length}</span></a>
+        <a href={`/campanas/${campaign.id}/brief`}>Brief</a>
+        {user.role !== 'cliente' && <a href={`/campanas/${campaign.id}/brief/editar`}>Editar</a>}
+      </nav>
+
+      <div className="stepper campaign-stepper">
         {ETAPAS.map((etapa, i) => (
-          <div
-            key={etapa.id}
-            className={`step ${i < indiceEtapaActual ? 'done' : i === indiceEtapaActual ? 'current' : ''}`}
-          >
+          <div key={etapa.id} className={`step ${i < indiceEtapaActual ? 'done' : i === indiceEtapaActual ? 'current' : ''}`}>
             <div className="step-num">{i < indiceEtapaActual ? '✓' : i + 1}</div>
             <div className="step-name">{etapa.nombre}</div>
           </div>
@@ -107,180 +117,144 @@ export default async function DetalleCampanaPage({
       </div>
 
       {error === 'no_permitido' && (
-        <div className="aviso error">
-          <strong>Acción no permitida</strong>
-          Tu rol no puede ejecutar esa acción sobre esta campaña.
-        </div>
+        <div className="aviso error"><strong>Acción no permitida</strong>Tu rol no puede ejecutar esa acción sobre esta campaña.</div>
       )}
       {error !== undefined && error !== 'no_permitido' && (
-        <div className="aviso error">
-          <strong>No se pudo completar la acción</strong>
-          {decodeURIComponent(error)}
-        </div>
+        <div className="aviso error"><strong>No se pudo completar la acción</strong>{decodeURIComponent(error)}</div>
       )}
       {avisoPresupuesto !== undefined && (
-        <div className="aviso">
-          <strong>Revisar el reparto de presupuesto</strong>
-          {avisoPresupuesto} Puede ser deliberado; se registra tal como se declaró.
-        </div>
+        <div className="aviso"><strong>Revisar reparto de presupuesto</strong>{avisoPresupuesto}</div>
       )}
 
-      <div className="grid-2">
-        <div>
-          <div className="card">
-            <h2>Brief</h2>
+      <div className="grid-2 campaign-overview-layout">
+        <div className="campaign-overview-main">
+          <section className="card overview-card">
+            <div className="overview-card-head">
+              <div>
+                <div className="eyebrow">Estado actual</div>
+                <h2 className="plain-heading">Brief</h2>
+                <p className="sub">Avance de la versión vigente y el trabajo que sigue.</p>
+              </div>
+              {versionActual !== undefined && (
+                <span className="pill curso">{ESTADO_EN_ESPANOL[versionActual.status as BriefStatus] ?? versionActual.status}</span>
+              )}
+            </div>
+
             {versionActual === undefined ? (
-              <>
-                <p className="sub" style={{ marginTop: 0 }}>
-                  Todavía no hay ninguna versión. Cargue fuentes y extraiga, o empiece el brief a mano — la
-                  asistencia de IA nunca es requisito para avanzar.
-                </p>
-                <div className="row" style={{ gap: 8 }}>
-                  <a className="btn" href={`/campanas/${campaign.id}/fuentes`}>
-                    Ir a fuentes →
-                  </a>
-                  {user.role !== 'cliente' && (
-                    <form action={crearBriefManualDeCampana}>
-                      <input type="hidden" name="campaignId" value={campaign.id} />
-                      <button className="btn pri" type="submit">
-                        Empezar el brief a mano
-                      </button>
-                    </form>
-                  )}
+              <div className="brief-empty-inline">
+                <div className="empty-state-mark">B</div>
+                <div>
+                  <strong>Todavía no hay una versión del brief.</strong>
+                  <p>Carga fuentes y extrae contenido, o empieza el brief manualmente.</p>
                 </div>
-              </>
+                {user.role !== 'cliente' && (
+                  <form action={crearBriefManualDeCampana}>
+                    <input type="hidden" name="campaignId" value={campaign.id} />
+                    <button className="btn pri" type="submit">Empezar a mano</button>
+                  </form>
+                )}
+              </div>
             ) : (
-              <div className="row" style={{ gap: 20, alignItems: 'center' }}>
-                <div className="ring" style={{ background: `conic-gradient(var(--brand) 0 ${progresoBrief}%, var(--chip) ${progresoBrief}% 100%)` }}>
-                  <div>
-                    <strong>{progresoBrief}%</strong>
-                    <span>campos con dato</span>
-                  </div>
+              <div className="overview-progress-grid">
+                <div className="ring ring-lg" style={{ background: `conic-gradient(var(--brand) 0 ${progresoBrief}%, var(--chip) ${progresoBrief}% 100%)` }}>
+                  <div><strong>{progresoBrief}%</strong><span>campos con dato</span></div>
                 </div>
-                <p className="sub" style={{ margin: 0 }}>
-                  Versión {versionActual.version} · estado{' '}
-                  <span className="pill">
-                    {ESTADO_EN_ESPANOL[versionActual.status as BriefStatus] ?? versionActual.status}
-                  </span>
-                  <br />
-                  {listaCampos.filter((c) => c.status === 'found').length} / {listaCampos.length} campo(s) con
-                  dato
-                </p>
+                <div className="overview-metrics">
+                  <div><span>Versión</span><strong>v{versionActual.version}</strong></div>
+                  <div><span>Campos</span><strong>{encontrados} / {listaCampos.length}</strong></div>
+                  <div><span>Preguntas críticas</span><strong>{preguntasCriticasPendientes}</strong></div>
+                </div>
+                {siguienteAccion !== undefined && (
+                  <a className="next-action-card" href={siguienteAccion.href}>
+                    <span className="next-action-icon">→</span>
+                    <span><small>Siguiente acción</small><strong>{siguienteAccion.label}</strong><em>{siguienteAccion.detalle}</em></span>
+                    <b>→</b>
+                  </a>
+                )}
               </div>
             )}
-          </div>
+          </section>
 
-          <div className="card">
-            <h2>Productos ({productos.length})</h2>
-            <table>
-              <thead>
-                <tr>
-                  <th>Producto</th>
-                  <th>Categoría</th>
-                  <th>Rol</th>
-                  <th>Prioridad</th>
-                  <th>% presupuesto</th>
-                </tr>
-              </thead>
-              <tbody>
-                {productos.map((p) => (
-                  <tr key={p.id}>
-                    <td style={{ fontWeight: 600 }}>{p.model}</td>
-                    <td>{p.category}</td>
-                    <td>
-                      <span className={`pill ${p.rol === 'flagship' ? 'curso' : 'neutro'}`}>{p.rol}</span>
-                    </td>
-                    <td>{p.prioridad}</td>
-                    <td>
-                      {p.participacion_presupuesto === null
-                        ? '—'
-                        : `${Math.round(Number(p.participacion_presupuesto) * 100)}%`}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <section className="card campaign-data-card">
+            <div className="eyebrow">Información</div>
+            <h2 className="plain-heading">Datos de campaña</h2>
+            <dl className="campaign-facts">
+              <div><dt>Mercado</dt><dd>{campaign.market}</dd></div>
+              <div><dt>Responsable</dt><dd>{campaign.owner_name}</dd></div>
+              <div><dt>Inicio</dt><dd>{fecha(campaign.start_date)}</dd></div>
+              <div><dt>Fin</dt><dd>{fecha(campaign.end_date)}</dd></div>
+              <div><dt>Confidencialidad</dt><dd>{campaign.confidentiality_level}</dd></div>
+              <div><dt>Visibilidad</dt><dd>{campaign.visibility}</dd></div>
+            </dl>
+          </section>
 
-          <div className="card">
-            <h2>Datos</h2>
-            <table>
-              <tbody>
-                <tr>
-                  <td style={{ color: 'var(--muted)', width: 180 }}>Identificador</td>
-                  <td className="mono">{campaign.id}</td>
-                </tr>
-                <tr>
-                  <td style={{ color: 'var(--muted)' }}>Fechas</td>
-                  <td>
-                    {campaign.start_date === null
-                      ? '—'
-                      : `${new Date(campaign.start_date).toLocaleDateString('es-CO')} → ${
-                          campaign.end_date === null
-                            ? '…'
-                            : new Date(campaign.end_date).toLocaleDateString('es-CO')
-                        }`}
-                  </td>
-                </tr>
-                <tr>
-                  <td style={{ color: 'var(--muted)' }}>Confidencialidad</td>
-                  <td>
-                    <span className="pill neutro">{campaign.confidentiality_level}</span>{' '}
-                    <span className="pill neutro">visibilidad: {campaign.visibility}</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <section className="card products-card">
+            <div className="overview-card-head">
+              <div><div className="eyebrow">Scope</div><h2 className="plain-heading">Productos <span className="heading-count">{productos.length}</span></h2></div>
+            </div>
+            <div className="product-list-clean">
+              {productos.map((p) => (
+                <div className="product-row-clean" key={p.id}>
+                  <span className="product-glyph" aria-hidden="true">▭</span>
+                  <div><strong>{p.model}</strong><span>{p.brand} · {p.category}</span></div>
+                  <span className="product-role">{p.rol}</span>
+                  <span className="product-priority">Prioridad {p.prioridad}</span>
+                  <span className="product-budget">{p.participacion_presupuesto === null ? '—' : `${Math.round(Number(p.participacion_presupuesto) * 100)}%`}</span>
+                </div>
+              ))}
+            </div>
+          </section>
         </div>
 
-        <aside className="side-stack">
-          {siguienteAccion !== undefined && (
-            <div className="card side-card">
-              <h3 className="section-title">Siguiente acción</h3>
-              <div className="action-list">
-                <div className="action-row primary">
-                  <div className="action-ico">→</div>
-                  <a href={siguienteAccion.href}>
-                    <b>{siguienteAccion.label}</b>
-                  </a>
-                </div>
-              </div>
+        <aside className="side-stack campaign-overview-side">
+          <section className="card side-card deadline-card">
+            <div className="eyebrow">Fecha de cierre</div>
+            <div className="side-big-value">{fecha(campaign.end_date)}</div>
+            <p>Inicio · {fecha(campaign.start_date)}</p>
+          </section>
+
+          <section className="card side-card">
+            <div className="side-card-head"><div><div className="eyebrow">Fuentes</div><h3 className="section-title">{filasFuentes.length} archivos</h3></div><a href={`/campanas/${campaign.id}/fuentes`}>Ver →</a></div>
+            <div className="source-summary-lines">
+              <span><i className="status-mark status-mark-ok" />{fuentesProcesadas} procesadas</span>
+              <span><i className="status-mark status-mark-neutral" />{fuentesEnProceso} en proceso</span>
+              {fuentesFallidas > 0 && <span><i className="status-mark status-mark-bad" />{fuentesFallidas} con error</span>}
             </div>
+          </section>
+
+          {siguienteAccion !== undefined && (
+            <section className="card side-card">
+              <div className="eyebrow">Prioridad</div>
+              <h3 className="section-title">Siguiente acción</h3>
+              <a className="action-row action-row-link" href={siguienteAccion.href}>
+                <div className="action-ico">→</div>
+                <div className="action-copy"><b>{siguienteAccion.label}</b><span className="detalle">{siguienteAccion.detalle}</span></div>
+                <span className="action-arrow">→</span>
+              </a>
+            </section>
           )}
 
-          <div className="card side-card">
-            <h3 className="section-title">Fuentes</h3>
-            <p className="sub" style={{ margin: '0 0 10px' }}>
-              PPT de TCL China, fichas técnicas y briefs del cliente: el material del que sale el brief.
-            </p>
-            <a className="btn" href={`/campanas/${campaign.id}/fuentes`} style={{ width: '100%' }}>
-              Ver y cargar fuentes
-            </a>
-          </div>
-
-          {campaign.status === 'activa' && (
-            <div className="card side-card">
-              <h3 className="section-title">Archivar</h3>
-              <p className="sub" style={{ margin: '0 0 10px' }}>
-                No borra nada — solo la saca del listado activo.
-              </p>
+          {campaign.status === 'activa' && user.role !== 'cliente' && (
+            <section className="card side-card archive-card">
+              <div className="eyebrow">Administración</div>
+              <h3 className="section-title">Archivar campaña</h3>
+              <p>Conserva fuentes, brief e historial; solo sale del listado activo.</p>
               <form action={archivarCampana}>
                 <input type="hidden" name="id" value={campaign.id} />
                 <ConfirmarAccion
-                  etiqueta="Archivar campaña"
+                  etiqueta="Archivar"
                   titulo={`¿Archivar "${campaign.name}"?`}
                   consecuencias={[
                     'La campaña deja de aparecer como activa en el listado.',
-                    'Las fuentes, el brief y su historial se conservan — no se borra nada.',
-                    'Para reactivarla habrá que hacerlo desde el mismo lugar.',
+                    'Las fuentes, el brief y su historial se conservan.',
+                    'Podrá reactivarse posteriormente.',
                   ]}
                   textoConfirmar="Sí, archivar"
                   peligro
                   className="btn"
                 />
               </form>
-            </div>
+            </section>
           )}
         </aside>
       </div>

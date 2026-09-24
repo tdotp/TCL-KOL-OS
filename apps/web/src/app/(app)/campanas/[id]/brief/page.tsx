@@ -9,7 +9,8 @@ import {
 import { allowedTransitions, campoDelCatalogo, type BriefStatus } from '@tcl-kol-os/domain';
 import { currentUser } from '@/lib/session';
 import { ORDEN_DE_SECCIONES, TITULO_SECCION } from '@/lib/brief-sections';
-import { ESTADO_EN_ESPANOL, TEXTO_DEL_BOTON } from '@/lib/brief-ui';
+import { ESTADO_EN_ESPANOL, ETAPAS, TEXTO_DEL_BOTON, etapaDeStatus } from '@/lib/brief-ui';
+import { monogramaColor, monogramaIniciales } from '@/lib/monograma';
 import {
   crearBriefManualDeCampana,
   crearVersionHijaDeCampana,
@@ -23,6 +24,62 @@ import { FormularioSolicitarCambiosInternos } from './FormularioSolicitarCambios
 import { VistaCliente, type CampoParaCliente } from './VistaCliente';
 
 export const dynamic = 'force-dynamic';
+
+
+function CabeceraBrief({
+  id,
+  name,
+  market,
+  category,
+  status,
+  cliente = false,
+}: {
+  id: string;
+  name: string;
+  market: string;
+  category: string | null;
+  status: BriefStatus | undefined;
+  cliente?: boolean;
+}) {
+  const etapa = etapaDeStatus(status);
+  const indice = ETAPAS.findIndex((e) => e.id === etapa);
+  return (
+    <>
+      <a className="back-link" href={`/campanas/${id}`}>← {name}</a>
+      <header className="campaign-header compact-campaign-header review-campaign-header">
+        <span className={`monogram lg ${monogramaColor(id)}`}>{monogramaIniciales(name)}</span>
+        <div className="campaign-heading-copy">
+          <div className="campaign-kickers">
+            <span className="pill neutro">{cliente ? 'Vista cliente' : 'Review workspace'}</span>
+            {status !== undefined && <span className="status-dot">{ESTADO_EN_ESPANOL[status] ?? status}</span>}
+          </div>
+          <h1>{name}</h1>
+          <p>{market} · {category ?? 'Sin categoría'}</p>
+        </div>
+        {!cliente && (
+          <div className="campaign-header-actions">
+            <a className="btn" href={`/campanas/${id}/fuentes`}>Fuentes</a>
+            <a className="btn" href={`/campanas/${id}/brief/editar`}>Editar brief</a>
+          </div>
+        )}
+      </header>
+      <nav className="campaign-context-nav" aria-label="Secciones de campaña">
+        <a href={`/campanas/${id}`}>Resumen</a>
+        <a href={`/campanas/${id}/fuentes`}>Fuentes</a>
+        <a className="active" href={`/campanas/${id}/brief`}>Brief</a>
+        {!cliente && <a href={`/campanas/${id}/brief/editar`}>Editar</a>}
+      </nav>
+      <div className="stepper campaign-stepper">
+        {ETAPAS.map((item, i) => (
+          <div key={item.id} className={`step ${i < indice ? 'done' : i === indice ? 'current' : ''}`}>
+            <div className="step-num">{i < indice ? '✓' : i + 1}</div>
+            <div className="step-name">{item.nombre}</div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
 
 /**
  * UI-08 · Revisión de extracción, con UI-11 · Evidencias integradas.
@@ -100,11 +157,15 @@ export default async function BriefPage({
     }));
 
     return (
-      <div className="content">
-        <p className="sub" style={{ marginBottom: 4 }}>
-          <a href={`/campanas/${id}`}>← {campana.value.campaign.name}</a>
-        </p>
-        <h1>Brief</h1>
+      <div className="content content-wide ui-enter">
+        <CabeceraBrief
+          id={id}
+          name={campana.value.campaign.name}
+          market={campana.value.campaign.market}
+          category={campana.value.campaign.category}
+          status={ultima?.status as BriefStatus | undefined}
+          cliente
+        />
 
         {error !== undefined && (
           <div className="aviso error">
@@ -155,15 +216,19 @@ export default async function BriefPage({
       : [];
 
   return (
-    <div className="content" style={{ maxWidth: 1280 }}>
-      <p className="sub" style={{ marginBottom: 4 }}>
-        <a href={`/campanas/${id}`}>← {campana.value.campaign.name}</a>
-      </p>
-      <h1>Brief</h1>
-      <p className="sub">
-        Campos propuestos a partir de las fuentes cargadas. Cada afirmación abre el documento, la ubicación y
-        la frase exacta de donde salió.
-      </p>
+    <div className="content content-wide ui-enter">
+      <CabeceraBrief
+        id={id}
+        name={campana.value.campaign.name}
+        market={campana.value.campaign.market}
+        category={campana.value.campaign.category}
+        status={ultima?.status as BriefStatus | undefined}
+      />
+      <div className="review-intro">
+        <div className="eyebrow">Revisión estructurada</div>
+        <h2>Contenido y decisión</h2>
+        <p>Verifica cada afirmación con su evidencia y avanza únicamente con las transiciones reales del workflow.</p>
+      </div>
 
       {error !== undefined && (
         <div className="bloqueo">

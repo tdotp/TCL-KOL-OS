@@ -71,7 +71,8 @@ export function VistaCliente({
 
   return (
     <>
-      <div className="card">
+      <div className="card client-review-decision">
+        <div className="eyebrow">Decisión</div>
         <h2 style={{ margin: 0 }}>
           Versión {version} <span className="pill info">revisión del cliente</span>
         </h2>
@@ -166,7 +167,7 @@ export function VistaCliente({
         );
         if (camposVisibles.length === 0) return null;
         return (
-          <div className="card" key={seccion.id}>
+          <div className="card client-brief-section" key={seccion.id}>
             <h2 style={{ marginTop: 0 }}>{seccion.titulo}</h2>
             {camposVisibles.map((c) => {
               const vacio = c.value === null || c.value === undefined || c.value === '';

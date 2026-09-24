@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useMemo, useState } from 'react';
 import { crearCampana } from '@/lib/actions';
 
 interface Producto {
@@ -10,108 +10,156 @@ interface Producto {
   readonly model: string;
 }
 
-/**
- * Formulario de campaña multiproducto (DEC-016, historia E3-8).
- *
- * Aquí solo se eligen los productos. El reparto de presupuesto NO se pide:
- * al crear la campaña ese dato todavía no existe —llega en el brief del
- * cliente— y pedirlo obligaría a inventarlo. Se extrae del brief cuando esté
- * (DEC-017).
- */
 export function FormularioCampana({ productos }: { productos: readonly Producto[] }) {
   const [estado, accion, enviando] = useActionState(crearCampana, {});
   const [elegidos, setElegidos] = useState<string[]>([]);
+  const [nombre, setNombre] = useState('');
+  const [categoria, setCategoria] = useState('');
+  const [mercado, setMercado] = useState('CO');
+  const [inicio, setInicio] = useState('');
+  const [fin, setFin] = useState('');
 
   const alternar = (id: string) => {
     setElegidos((previos) => (previos.includes(id) ? previos.filter((p) => p !== id) : [...previos, id]));
   };
 
+  const productosElegidos = useMemo(
+    () => elegidos.map((id) => productos.find((p) => p.id === id)).filter((p): p is Producto => p !== undefined),
+    [elegidos, productos],
+  );
+
   return (
-    <form action={accion}>
-      {estado.error !== undefined && (
-        <div className="aviso error">
-          <strong>No se pudo crear la campaña</strong>
-          {estado.error}
-        </div>
-      )}
+    <form action={accion} className="create-layout">
+      <div className="create-main">
+        {estado.error !== undefined && (
+          <div className="aviso error">
+            <strong>No se pudo crear la campaña</strong>
+            {estado.error}
+          </div>
+        )}
 
-      <div className="card">
-        <h2>Datos de la campaña</h2>
-        <div className="fld">
-          <label htmlFor="name">Nombre *</label>
-          <input id="name" name="name" required placeholder="Lanzamiento línea P80" />
-        </div>
-        <div className="g2">
-          <div className="fld">
-            <label htmlFor="category">Categoría</label>
-            <input id="category" name="category" placeholder="Smartphones" />
+        <section className="card form-section">
+          <div className="form-section-head">
+            <div>
+              <div className="eyebrow">01</div>
+              <h2>Datos de la campaña</h2>
+              <p>Nombre, mercado y fechas. Solo información que existe realmente en el dominio.</p>
+            </div>
           </div>
-          <div className="fld">
-            <label htmlFor="market">Mercado</label>
-            <input id="market" name="market" defaultValue="CO" />
-          </div>
-          <div className="fld">
-            <label htmlFor="startDate">Fecha de inicio</label>
-            <input id="startDate" name="startDate" type="date" />
-          </div>
-          <div className="fld">
-            <label htmlFor="endDate">Fecha de fin</label>
-            <input id="endDate" name="endDate" type="date" />
-          </div>
-        </div>
-      </div>
 
-      <div className="card">
-        <h2>Productos ({elegidos.length})</h2>
-        <p className="sub" style={{ marginBottom: 12 }}>
-          El primero que selecciones queda como <strong>flagship</strong>.
-        </p>
+          <div className="form-grid">
+            <div className="fld form-span-2">
+              <label htmlFor="name">Nombre *</label>
+              <input
+                id="name"
+                name="name"
+                required
+                placeholder="Ej. Lanzamiento línea P80"
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+              />
+            </div>
+            <div className="fld">
+              <label htmlFor="category">Categoría</label>
+              <input
+                id="category"
+                name="category"
+                placeholder="Ej. Smartphones"
+                value={categoria}
+                onChange={(e) => setCategoria(e.target.value)}
+              />
+            </div>
+            <div className="fld">
+              <label htmlFor="market">Mercado</label>
+              <input id="market" name="market" value={mercado} onChange={(e) => setMercado(e.target.value)} />
+            </div>
+            <div className="fld">
+              <label htmlFor="startDate">Fecha de inicio</label>
+              <input id="startDate" name="startDate" type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} />
+            </div>
+            <div className="fld">
+              <label htmlFor="endDate">Fecha de fin</label>
+              <input id="endDate" name="endDate" type="date" value={fin} onChange={(e) => setFin(e.target.value)} />
+            </div>
+          </div>
+        </section>
 
-        <table>
-          <tbody>
+        <section className="card form-section">
+          <div className="form-section-head products-head">
+            <div>
+              <div className="eyebrow">02</div>
+              <h2>Productos</h2>
+              <p>El primero que selecciones queda como flagship. No usamos fotos: el producto se identifica por modelo y categoría.</p>
+            </div>
+            <span className="selection-counter">{elegidos.length} seleccionados</span>
+          </div>
+
+          <div className="product-selector">
             {productos.map((p) => {
               const activo = elegidos.includes(p.id);
               const orden = elegidos.indexOf(p.id);
               return (
-                <tr key={p.id}>
-                  <td style={{ width: 30 }}>
-                    <input
-                      type="checkbox"
-                      name="productos"
-                      value={p.id}
-                      checked={activo}
-                      onChange={() => alternar(p.id)}
-                      aria-label={`Incluir ${p.brand} ${p.model}`}
-                    />
-                  </td>
-                  <td>
+                <label className={`product-option ${activo ? 'selected' : ''}`} key={p.id}>
+                  <input
+                    type="checkbox"
+                    name="productos"
+                    value={p.id}
+                    checked={activo}
+                    onChange={() => alternar(p.id)}
+                    aria-label={`Incluir ${p.brand} ${p.model}`}
+                  />
+                  <span className="product-glyph" aria-hidden="true">▭</span>
+                  <span className="product-option-copy">
                     <strong>{p.model}</strong>
-                    <div style={{ color: 'var(--muted)', fontSize: 12.5 }}>
-                      {p.brand} · {p.category}
-                    </div>
-                  </td>
-                  <td style={{ width: 110 }}>
-                    {activo && (
-                      <span className={`pill ${orden === 0 ? 'info' : ''}`}>
-                        {elegidos.length === 1 ? 'único' : orden === 0 ? 'flagship' : 'secundario'}
-                      </span>
-                    )}
-                  </td>
-                </tr>
+                    <span>{p.brand} · {p.category}</span>
+                  </span>
+                  {activo && (
+                    <span className="product-role">
+                      {elegidos.length === 1 ? 'único' : orden === 0 ? 'flagship' : 'secundario'}
+                    </span>
+                  )}
+                </label>
               );
             })}
-          </tbody>
-        </table>
+          </div>
+        </section>
+
+        <div className="form-actions-dock">
+          <a className="btn" href="/campanas">Cancelar</a>
+          <button className="btn pri" type="submit" disabled={enviando || elegidos.length === 0}>
+            {enviando ? 'Creando…' : 'Crear campaña →'}
+          </button>
+        </div>
       </div>
 
-      <div className="row">
-        <button className="btn pri" type="submit" disabled={enviando || elegidos.length === 0}>
-          {enviando ? 'Creando…' : 'Crear campaña'}
-        </button>
-        <a className="btn" href="/campanas">
-          Cancelar
-        </a>
-      </div>
+      <aside className="create-side">
+        <section className="card summary-card sticky-card">
+          <div className="eyebrow">Resumen</div>
+          <h3>Campaña</h3>
+          <dl className="summary-list">
+            <div><dt>Nombre</dt><dd>{nombre.trim() || '—'}</dd></div>
+            <div><dt>Categoría</dt><dd>{categoria.trim() || '—'}</dd></div>
+            <div><dt>Mercado</dt><dd>{mercado.trim() || '—'}</dd></div>
+            <div><dt>Fechas</dt><dd>{inicio || fin ? `${inicio || '…'} → ${fin || '…'}` : '—'}</dd></div>
+            <div><dt>Productos</dt><dd>{productosElegidos.length === 0 ? 'Ninguno' : `${productosElegidos.length} seleccionados`}</dd></div>
+          </dl>
+          {productosElegidos.length > 0 && (
+            <div className="summary-products">
+              {productosElegidos.map((p, i) => (
+                <div key={p.id}><span>{p.model}</span><small>{i === 0 && productosElegidos.length > 1 ? 'flagship' : p.category}</small></div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="card quiet-tip">
+          <div className="tip-mark">i</div>
+          <div>
+            <strong>Menos datos, mejor.</strong>
+            <p>Presupuesto, objetivos y mensajes llegan desde el brief cuando existan. No los inventamos al crear la campaña.</p>
+          </div>
+        </section>
+      </aside>
     </form>
   );
 }
