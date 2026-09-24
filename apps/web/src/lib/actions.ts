@@ -424,11 +424,13 @@ export async function generarPreguntasDeBrief(formData: FormData): Promise<void>
 
   const resultado = await generarPreguntas(user, versionId);
   if (!resultado.ok) {
-    redirect(`/campanas/${campaignId}/preguntas?error=${encodeURIComponent(resultado.error.message)}`);
+    redirect(
+      `/campanas/${campaignId}/brief/editar?panel=preguntas&error=${encodeURIComponent(resultado.error.message)}`,
+    );
   }
 
-  revalidatePath(`/campanas/${campaignId}/preguntas`);
-  redirect(`/campanas/${campaignId}/preguntas`);
+  revalidatePath(`/campanas/${campaignId}/brief/editar`);
+  redirect(`/campanas/${campaignId}/brief/editar?panel=preguntas`);
 }
 
 export async function responderPreguntaLocal(
@@ -457,7 +459,7 @@ export async function responderPreguntaLocal(
   const resultado = await responderPregunta(user, questionId, { answerValue, answer });
   if (!resultado.ok) return { error: resultado.error.message };
 
-  if (campaignId !== '') revalidatePath(`/campanas/${campaignId}/preguntas`);
+  if (campaignId !== '') revalidatePath(`/campanas/${campaignId}/brief/editar`);
   return { ok: true };
 }
 
@@ -477,7 +479,7 @@ export async function descartarPreguntaLocal(
   const resultado = await descartarPregunta(user, questionId, justificacion);
   if (!resultado.ok) return { error: resultado.error.message };
 
-  if (campaignId !== '') revalidatePath(`/campanas/${campaignId}/preguntas`);
+  if (campaignId !== '') revalidatePath(`/campanas/${campaignId}/brief/editar`);
   return { ok: true };
 }
 

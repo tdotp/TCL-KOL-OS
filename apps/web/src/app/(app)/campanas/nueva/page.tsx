@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { listProducts } from '@tcl-kol-os/db';
-import { Encabezado } from '@/components/Encabezado';
 import { currentUser } from '@/lib/session';
 import { FormularioCampana } from './FormularioCampana';
 
@@ -14,16 +13,16 @@ export default async function NuevaCampanaPage() {
   const productos = await listProducts();
 
   return (
-    <>
-      <Encabezado user={user} />
-      <main style={{ maxWidth: 720 }}>
-        <h1>Nueva campaña</h1>
-        <p className="sub">
-          Una campaña puede cubrir varios productos: una línea con gamas, productos complementarios o una
-          campaña de temporada.
-        </p>
-        <FormularioCampana productos={productos} />
-      </main>
-    </>
+    <div className="content" style={{ maxWidth: 760 }}>
+      <p className="sub" style={{ marginBottom: 4 }}>
+        <a href="/campanas">← Campañas</a>
+      </p>
+      <h1>Nueva campaña</h1>
+      <p className="sub">
+        Una campaña puede cubrir varios productos: una línea con gamas, productos complementarios o una
+        campaña de temporada.
+      </p>
+      <FormularioCampana productos={productos} />
+    </div>
   );
 }

@@ -131,7 +131,7 @@ export function CampoEditable({
   }
 
   return (
-    <div className="card" style={{ marginBottom: 10 }}>
+    <div className="card" id={`campo-${campo.key}`} style={{ marginBottom: 10 }}>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <strong>{campo.label}</strong>
         <div className="row" style={{ gap: 4 }}>

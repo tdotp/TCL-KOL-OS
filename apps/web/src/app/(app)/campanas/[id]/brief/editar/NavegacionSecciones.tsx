@@ -10,17 +10,19 @@ export function NavegacionSecciones({
   onSeleccionar: (id: string) => void;
 }) {
   return (
-    <nav className="row" style={{ gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
-      {secciones.map((s) => (
+    <nav className="section-nav">
+      {secciones.map((s, i) => (
         <button
           key={s.id}
           type="button"
           onClick={() => onSeleccionar(s.id)}
-          className={`pill ${activa === s.id ? 'ok' : s.pendientes > 0 ? 'warn' : ''}`}
-          style={{ cursor: 'pointer', border: 'none' }}
+          className={activa === s.id ? 'active' : undefined}
         >
-          {s.titulo}
-          {s.pendientes > 0 && ` (${s.pendientes})`}
+          <span className="section-number">{i + 1}</span>
+          <span>
+            <b>{s.titulo}</b>
+            <span className="detalle">{s.pendientes > 0 ? `${s.pendientes} pendiente(s)` : 'completa'}</span>
+          </span>
         </button>
       ))}
     </nav>

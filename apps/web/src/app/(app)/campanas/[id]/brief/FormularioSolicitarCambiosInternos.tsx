@@ -16,7 +16,7 @@ export function FormularioSolicitarCambiosInternos({
 
   if (!abierto) {
     return (
-      <button type="button" className="btn" onClick={() => setAbierto(true)}>
+      <button type="button" className="btn" style={{ width: '100%' }} onClick={() => setAbierto(true)}>
         Solicitar cambios internos
       </button>
     );

@@ -246,7 +246,7 @@ export function TablaCampos({
 
                 return (
                   <Fragment key={c.id}>
-                    <tr>
+                    <tr id={`campo-${c.key}`}>
                       <td style={{ fontFamily: 'monospace', fontSize: 12 }}>
                         {c.key}
                         {c.campaignProductId !== null && (

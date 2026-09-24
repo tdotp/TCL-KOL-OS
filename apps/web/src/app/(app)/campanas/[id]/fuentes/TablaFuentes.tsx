@@ -27,7 +27,7 @@ const ETIQUETA_TIPO: Record<string, string> = {
 
 const ESTADO: Record<string, { texto: string; clase: string }> = {
   pendiente: { texto: 'en cola', clase: '' },
-  procesando: { texto: 'procesando', clase: 'info' },
+  procesando: { texto: 'procesando', clase: 'warn' },
   procesado: { texto: 'procesado', clase: 'ok' },
   fallido: { texto: 'fallido', clase: 'bad' },
 };
@@ -62,7 +62,7 @@ export function TablaFuentes({ campaignId, fuentes }: { campaignId: string; fuen
     <div className="card">
       <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
         <h2 style={{ margin: 0 }}>Fuentes cargadas ({fuentes.length})</h2>
-        {hayTrabajo && <span className="pill info">actualizando cada 2 s…</span>}
+        {hayTrabajo && <span className="status-dot warn">actualizando cada 2 s…</span>}
       </div>
 
       <table>
@@ -99,12 +99,12 @@ export function TablaFuentes({ campaignId, fuentes }: { campaignId: string; fuen
                     </div>
                   )}
                 </td>
-                <td>
-                  <span className="pill">{ETIQUETA_TIPO[f.mime_type] ?? f.mime_type}</span>
+                <td style={{ color: 'var(--muted)', fontSize: 12.5 }}>
+                  {ETIQUETA_TIPO[f.mime_type] ?? f.mime_type}
                 </td>
                 <td style={{ color: 'var(--muted)' }}>{mb} MB</td>
                 <td>
-                  <span className={`pill ${estado.clase}`}>{estado.texto}</span>
+                  <span className={`status-dot ${estado.clase}`}>{estado.texto}</span>
                 </td>
                 <td>{f.fragmentos > 0 ? f.fragmentos : '—'}</td>
                 <td>

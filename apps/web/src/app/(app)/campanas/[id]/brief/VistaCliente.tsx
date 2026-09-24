@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { aprobarComoClienteDeCampana, solicitarCambiosClienteDeCampana } from '@/lib/actions';
+import { ConfirmarAccion } from '@/components/ConfirmarAccion';
 
 export interface CampoParaCliente {
   key: string;
@@ -90,14 +91,22 @@ export function VistaCliente({
         )}
 
         {puedeDecidir && (
-          <div className="row" style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+          <div className="row" style={{ gap: 20, marginTop: 16, flexWrap: 'wrap', alignItems: 'center' }}>
             <form action={aprobarComoClienteDeCampana}>
               <input type="hidden" name="versionId" value={versionId} />
               <input type="hidden" name="campaignId" value={campaignId} />
-              <button className="btn pri" type="submit">
-                Aprobar
-              </button>
+              <ConfirmarAccion
+                etiqueta="Aprobar"
+                titulo={`¿Aprobar el brief v${version}?`}
+                consecuencias={[
+                  'Queda aprobado de inmediato — nadie podrá volver a editar sus campos.',
+                  'El equipo de SmartPR ya puede usarlo como referencia final para el contenido.',
+                  'Si más adelante hace falta un cambio, tendrán que crear una versión nueva.',
+                ]}
+                textoConfirmar="Sí, aprobar"
+              />
             </form>
+            <span style={{ width: 1, height: 24, background: 'var(--line)' }} />
             <button type="button" className="btn" onClick={() => setMostrarSolicitud((v) => !v)}>
               Solicitar cambios
             </button>
@@ -105,10 +114,7 @@ export function VistaCliente({
         )}
 
         {puedeDecidir && mostrarSolicitud && (
-          <form
-            action={solicitar}
-            style={{ marginTop: 10, padding: 10, background: 'var(--chip)', borderRadius: 6 }}
-          >
+          <form action={solicitar} className="inline-form">
             <input type="hidden" name="versionId" value={versionId} />
             <input type="hidden" name="campaignId" value={campaignId} />
             {[...camposSenalados].map((k) => (
@@ -121,7 +127,7 @@ export function VistaCliente({
               name="motivo"
               required
               placeholder="¿Qué debe cambiar? (obligatorio)"
-              style={{ width: '100%', padding: 6, minHeight: 60 }}
+              style={{ width: '100%', padding: '8px 10px', minHeight: 70, border: '1px solid var(--line)', borderRadius: 6, font: 'inherit', fontSize: 13.5 }}
             />
             <div className="row" style={{ gap: 8, marginTop: 8 }}>
               <button className="btn pri" type="submit" disabled={solicitando}>
@@ -144,9 +150,9 @@ export function VistaCliente({
             <button
               key={p.id}
               type="button"
-              className={`pill ${productoActivo === p.id ? 'ok' : ''}`}
+              className={`pill ${productoActivo === p.id ? 'curso' : 'neutro'}`}
               onClick={() => setProductoActivo(p.id)}
-              style={{ cursor: 'pointer', border: 'none' }}
+              style={{ cursor: 'pointer' }}
             >
               {p.model}
             </button>
@@ -161,51 +167,56 @@ export function VistaCliente({
         if (camposVisibles.length === 0) return null;
         return (
           <div className="card" key={seccion.id}>
-            <h3 style={{ marginTop: 0 }}>{seccion.titulo}</h3>
-            {camposVisibles.map((c) => (
-              <div key={c.key} style={{ padding: '8px 0', borderTop: '1px solid var(--line)' }}>
-                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <strong>{c.label}</strong>
-                  {puedeDecidir && mostrarSolicitud && (
-                    <label style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center' }}>
-                      <input
-                        type="checkbox"
-                        checked={camposSenalados.has(c.key)}
-                        onChange={() => toggleCampo(c.key)}
-                      />
-                      señalar
-                    </label>
+            <h2 style={{ marginTop: 0 }}>{seccion.titulo}</h2>
+            {camposVisibles.map((c) => {
+              const vacio = c.value === null || c.value === undefined || c.value === '';
+              return (
+                <div key={c.key} style={{ padding: '10px 0', borderTop: '1px solid var(--line-soft)' }}>
+                  <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <strong style={{ fontSize: 14 }}>{c.label}</strong>
+                    {puedeDecidir && mostrarSolicitud && (
+                      <label style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center', color: 'var(--muted)' }}>
+                        <input
+                          type="checkbox"
+                          checked={camposSenalados.has(c.key)}
+                          onChange={() => toggleCampo(c.key)}
+                        />
+                        señalar
+                      </label>
+                    )}
+                  </div>
+                  <p className={vacio ? 'valor-vacio' : undefined} style={{ margin: '4px 0' }}>
+                    {valorLegible(c.value)}
+                  </p>
+                  {c.evidencias.length > 0 && (
+                    <details style={{ fontSize: 13 }}>
+                      <summary style={{ cursor: 'pointer', color: 'var(--brand)' }}>
+                        ver evidencia ({c.evidencias.length})
+                      </summary>
+                      {c.evidencias.map((e, i) => (
+                        <blockquote
+                          key={i}
+                          style={{ margin: '6px 0 0', paddingLeft: 10, borderLeft: '3px solid var(--line)' }}
+                        >
+                          {e.quote}
+                          <br />
+                          <span style={{ color: 'var(--muted)' }}>
+                            — {e.filename}
+                            {e.slide !== null
+                              ? `, diapositiva ${e.slide}`
+                              : e.section !== null
+                                ? `, ${e.section}`
+                                : e.page !== null
+                                  ? `, página ${e.page}`
+                                  : ''}
+                          </span>
+                        </blockquote>
+                      ))}
+                    </details>
                   )}
                 </div>
-                <p style={{ margin: '4px 0' }}>{valorLegible(c.value)}</p>
-                {c.evidencias.length > 0 && (
-                  <details style={{ fontSize: 13 }}>
-                    <summary style={{ cursor: 'pointer', color: 'var(--brand)' }}>
-                      ver evidencia ({c.evidencias.length})
-                    </summary>
-                    {c.evidencias.map((e, i) => (
-                      <blockquote
-                        key={i}
-                        style={{ margin: '6px 0 0', paddingLeft: 10, borderLeft: '3px solid var(--line)' }}
-                      >
-                        {e.quote}
-                        <br />
-                        <span style={{ color: 'var(--muted)' }}>
-                          — {e.filename}
-                          {e.slide !== null
-                            ? `, diapositiva ${e.slide}`
-                            : e.section !== null
-                              ? `, ${e.section}`
-                              : e.page !== null
-                                ? `, página ${e.page}`
-                                : ''}
-                        </span>
-                      </blockquote>
-                    ))}
-                  </details>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         );
       })}
