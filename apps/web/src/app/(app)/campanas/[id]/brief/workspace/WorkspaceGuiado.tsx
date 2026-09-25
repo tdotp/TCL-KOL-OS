@@ -227,9 +227,8 @@ export function WorkspaceGuiado({
       )}
 
       <p className="sub" style={{ marginTop: 16, fontSize: 12 }}>
-        Versión {version.number} · estado <span className="mono">{version.status}</span>
-        {workspace.nextResponsibleRole !== undefined &&
-          ` · siguiente responsable: ${workspace.nextResponsibleRole}`}
+        Versión {version.number} · estado <span className="mono">{version.status}</span> ·{' '}
+        {workspace.responsibility.message}
       </p>
     </div>
   );
