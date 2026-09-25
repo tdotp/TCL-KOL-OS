@@ -27,6 +27,18 @@ import { recordAudit } from './audit.ts';
 import { getPool, transaction } from './client.ts';
 import { cargarVersion } from './brief-version.ts';
 
+export interface BriefFieldRevisionRow {
+  readonly id: string;
+  readonly fieldKey: string;
+  readonly campaignProductId: string | null;
+  readonly accion: string;
+  readonly valorAnterior: unknown;
+  readonly valorNuevo: unknown;
+  readonly motivo: string | null;
+  readonly actorName: string | null;
+  readonly createdAt: Date;
+}
+
 /**
  * Solo exige el objeto `PrecisedDate` (DEC-026) para campos `valueType:
  * 'fecha'` — el editor manual (`CampoEditable.tsx`) solo tiene un control
@@ -426,4 +438,60 @@ export async function resolverConflicto(
 
     return ok({ revision: actualizado.rows[0]!.revision });
   });
+}
+
+/**
+ * Historial completo de cambios de campo de una versión (Sprint 6,
+ * Checkpoint 2 — modo "Actividad"). `brief_field_revisions` ya registra las
+ * seis acciones posibles (`confirm`, `correct`, `resolve_conflict`,
+ * `apply_answer`, `declare_exception`, `revert_exception`) con valor
+ * anterior y nuevo desde Sprint 4/5 — esta consulta solo las lee, nunca
+ * crea una tabla de actividad paralela.
+ */
+export async function listBriefFieldRevisions(
+  actor: User,
+  versionId: string,
+): Promise<Result<readonly BriefFieldRevisionRow[]>> {
+  const permitido = assertCapability(actor, 'brief:read');
+  if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
+
+  const version = await cargarVersion(getPool(), versionId);
+  if (!version || version.organizationId !== actor.organizationId) {
+    return err({ code: 'RESOURCE_NOT_FOUND', message: 'El recurso no existe o no está disponible.' });
+  }
+
+  const { rows } = await getPool().query<{
+    id: string;
+    field_key: string;
+    campaign_product_id: string | null;
+    accion: string;
+    valor_anterior: unknown;
+    valor_nuevo: unknown;
+    motivo: string | null;
+    actor_name: string | null;
+    created_at: Date;
+  }>(
+    `SELECT r.id, bf.key AS field_key, bf.campaign_product_id, r.accion,
+            r.valor_anterior, r.valor_nuevo, r.motivo, u.name AS actor_name, r.created_at
+       FROM brief_field_revisions r
+       JOIN brief_fields bf ON bf.id = r.brief_field_id
+       LEFT JOIN users u ON u.id = r.actor_id
+      WHERE r.brief_version_id = $1
+      ORDER BY r.created_at DESC`,
+    [versionId],
+  );
+
+  return ok(
+    rows.map((r) => ({
+      id: r.id,
+      fieldKey: r.field_key,
+      campaignProductId: r.campaign_product_id,
+      accion: r.accion,
+      valorAnterior: r.valor_anterior,
+      valorNuevo: r.valor_nuevo,
+      motivo: r.motivo,
+      actorName: r.actor_name,
+      createdAt: r.created_at,
+    })),
+  );
 }

@@ -105,6 +105,36 @@ export async function listarComentarios(
   return ok(rows.map(aDominio));
 }
 
+/**
+ * Todos los comentarios de una versión, de cualquier campo — Sprint 6,
+ * Checkpoint 2 (modo "Actividad"). Misma guarda que `listarComentarios`
+ * (`comment:internal`, nunca el rol `cliente`); solo cambia el filtro de
+ * `field_key` a la versión completa.
+ */
+export async function listarComentariosDeVersion(
+  actor: User,
+  versionId: string,
+): Promise<Result<readonly ComentarioDeCampo[]>> {
+  const permitido = assertCapability(actor, 'comment:internal');
+  if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
+
+  const version = await cargarVersionAutorizada(actor, versionId);
+  if (!version.ok) return version;
+
+  const { rows } = await getPool().query<FilaComentario>(
+    `SELECT c.id, c.brief_version_id, c.field_key, c.campaign_product_id, c.parent_comment_id,
+            c.author_id, u.name AS author_name, c.content, c.status,
+            c.resolved_by, ru.name AS resolved_by_name, c.resolved_at, c.created_at
+       FROM field_comments c
+       JOIN users u ON u.id = c.author_id
+       LEFT JOIN users ru ON ru.id = c.resolved_by
+      WHERE c.brief_version_id = $1
+      ORDER BY c.created_at DESC`,
+    [versionId],
+  );
+  return ok(rows.map(aDominio));
+}
+
 /** Cuántas conversaciones (hilos raíz) siguen abiertas en toda la versión — para el contador del editor. */
 export async function contarConversacionesAbiertas(
   actor: User,

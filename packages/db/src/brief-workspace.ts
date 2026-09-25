@@ -1,14 +1,17 @@
 /**
- * Contrato de lectura consolidado del Brief Workspace (Sprint 6, Fase B).
+ * Contrato de lectura consolidado del Brief Workspace (Sprint 6).
  *
- * `obtenerBriefWorkspace` no ejecuta ni una sola consulta SQL propia contra
- * campos, preguntas o comentarios — compone funciones de repositorio que ya
- * existen (`getCampaign`, `versionesDelBrief`, `verCamposDeVersion`,
- * `listarPreguntas`, `contarConversacionesAbiertas`, `listBriefActivity`) y
- * las reduce a la forma que `BriefWorkspace` promete. Ninguna regla de
- * negocio se reimplementa aquí: `allowedTransitions` y `requiresEvidence`
- * son las mismas funciones de `packages/domain` que ya deciden si una
- * transición real se acepta o se rechaza.
+ * `obtenerBriefWorkspace` no ejecuta SQL propio contra campos, preguntas o
+ * comentarios — compone funciones de repositorio que ya existen
+ * (`getCampaign`, `versionesDelBrief`, `verCamposDeVersion`,
+ * `listarPreguntas`, `contarConversacionesAbiertas`,
+ * `listarComentariosDeVersion`, `listBriefFieldRevisions`,
+ * `listBriefActivity`) y las reduce a la forma que `BriefWorkspace`
+ * promete. Ninguna regla de negocio se reimplementa aquí:
+ * `allowedTransitions` y `requiresEvidence` son las mismas funciones de
+ * `packages/domain` que ya deciden si una transición real se acepta o se
+ * rechaza; `mensajeResponsabilidad` arma la frase de "quién debe actuar"
+ * sin inventar una segunda matriz de transiciones.
  *
  * Dos proyecciones separadas a propósito (Fase B, regla explícita): esta
  * función es la interna. Nunca se le pasa un actor `cliente` esperando que
@@ -17,6 +20,9 @@
  * propiedad que filtrar por accidente. Si el cliente necesita su propia
  * proyección de este mismo dato, debe ser un tipo explícito nuevo, no este
  * con menos campos poblados.
+ *
+ * Checkpoint 2 (Revisar brief + Actividad) extiende esta misma función —
+ * nunca crea una que compita con ella (§4 del pedido).
  */
 
 import {
@@ -34,25 +40,48 @@ import {
   type WorkspaceSection,
   type WorkspaceSectionField,
   type WorkspaceTask,
+  type WorkspaceVersionSummary,
   ORDEN_DE_SECCIONES,
   TEXTO_DEL_BOTON,
   TITULO_SECCION,
   allowedTransitions,
   campoDelCatalogo,
   err,
+  humanoDeEvento,
+  humanoDeRevisionCampo,
+  mensajeResponsabilidad,
   ok,
   requiresEvidence,
 } from '@tcl-kol-os/domain';
 import { getCampaign } from './campaigns.ts';
 import { listBriefActivity } from './audit.ts';
-import { contarConversacionesAbiertas } from './comments.ts';
+import { contarConversacionesAbiertas, listarComentariosDeVersion } from './comments.ts';
+import { listBriefFieldRevisions } from './brief-fields.ts';
 import { listarPreguntas } from './local-questions.ts';
 import { verCamposDeVersion, versionesDelBrief } from './extraction.ts';
 import { getPool } from './client.ts';
 
 const ESTADOS_INMUTABLES = new Set<BriefStatus>(['approved', 'superseded', 'cancelled']);
 
-/** A quién le toca mover la versión — puramente presentacional (Fase C.4), nunca una regla de permisos. */
+/**
+ * Acciones de `audit_events` que ya se cuentan con más detalle desde otra
+ * fuente (`brief_field_revisions` para los campos, `field_comments` para
+ * los comentarios) — se excluyen de la línea de auditoría genérica para no
+ * mostrar el mismo hecho dos veces con menos contexto la segunda vez.
+ */
+const ACCIONES_CON_FUENTE_MAS_RICA = new Set([
+  'field.confirm',
+  'field.correct',
+  'field.resolve_conflict',
+  'field.declare_exception',
+  'field.revert_exception',
+  'comment.create',
+  'comment.reply',
+  'comment.resolve',
+  'comment.reopen',
+]);
+
+/** A quién le toca mover la versión — puramente presentacional, nunca una regla de permisos. */
 function siguienteResponsable(status: BriefStatus): Role | undefined {
   switch (status) {
     case 'internal_review':
@@ -95,27 +124,35 @@ export async function obtenerBriefWorkspace(
     products,
   };
 
-  // Actividad de la campaña: existe con o sin brief (crear/archivar campaña
-  // ya genera eventos). Los eventos de comentarios internos se excluyen para
-  // el rol `cliente` en el propio mapeo — nunca dejados para que la UI decida.
+  // Eventos genéricos de auditoría: existen con o sin brief (crear/archivar
+  // campaña ya genera eventos). Se excluyen los tipos que tienen una fuente
+  // más rica más abajo (campos, comentarios) — nunca se filtran por
+  // organización aparte: `listBriefActivity` ya solo trae lo de esta
+  // campaña.
   const eventosCrudos = await listBriefActivity(
     getPool(),
     campania.value.campaign.organization_id,
     campaignId,
-    30,
+    40,
   );
-  const activity: readonly WorkspaceActivityItem[] = eventosCrudos
+  const eventosGenericos: WorkspaceActivityItem[] = eventosCrudos
+    .filter((e) => !ACCIONES_CON_FUENTE_MAS_RICA.has(e.action))
     .filter((e) => actor.role !== 'cliente' || e.entity_type !== 'field_comment')
-    .map((e) => ({
-      id: e.id,
-      actorName: e.actor_name ?? undefined,
-      action: e.action,
-      entityType: e.entity_type,
-      createdAt: e.created_at.toISOString(),
-    }));
+    .map((e) => {
+      const humano = humanoDeEvento(e.action, e.metadata);
+      return {
+        id: e.id,
+        kind: 'evento',
+        tipo: humano.tipo,
+        detalle: humano.detalle,
+        actorName: e.actor_name ?? undefined,
+        createdAt: e.created_at.toISOString(),
+      };
+    });
 
   const versionesResultado = await versionesDelBrief(actor, campaignId);
-  const ultima = versionesResultado.ok ? versionesResultado.value[0] : undefined;
+  const versiones = versionesResultado.ok ? versionesResultado.value : [];
+  const ultima = versiones[0];
 
   if (ultima === undefined) {
     return ok({
@@ -132,9 +169,10 @@ export async function obtenerBriefWorkspace(
       },
       sections: [],
       tasks: [],
-      activity,
+      activity: eventosGenericos,
       allowedActions: [],
-      nextResponsibleRole: undefined,
+      history: [],
+      responsibility: { nextRole: undefined, message: 'Todavía no hay ninguna versión del brief.' },
     });
   }
 
@@ -149,15 +187,64 @@ export async function obtenerBriefWorkspace(
   const preguntasResultado = await listarPreguntas(actor, campaignId, { status: 'pendiente' });
   const preguntas = preguntasResultado.ok ? preguntasResultado.value : [];
 
-  // Los comentarios internos nunca llegan a un actor `cliente` — no tiene
-  // `comment:internal` en `packages/domain/src/permissions.ts`, así que ni
-  // se consultan (regla explícita de Fase B, no un filtro cosmético).
+  // Los comentarios internos y el historial de campo nunca llegan a un
+  // actor `cliente` — el primero porque no tiene `comment:internal`
+  // (regla explícita de Fase B); el segundo porque expone procedencia y
+  // quién corrigió qué, información interna que `VistaCliente` tampoco
+  // muestra (Fase D de Sprint 5). Ninguno de los dos se consulta siquiera.
   let conteosComentarios: Record<string, number> = {};
+  let comentariosActividad: WorkspaceActivityItem[] = [];
+  let revisionesActividad: WorkspaceActivityItem[] = [];
   if (actor.role !== 'cliente') {
-    const conteosResultado = await contarConversacionesAbiertas(actor, ultima.id);
+    const [conteosResultado, comentariosResultado, revisionesResultado] = await Promise.all([
+      contarConversacionesAbiertas(actor, ultima.id),
+      listarComentariosDeVersion(actor, ultima.id),
+      listBriefFieldRevisions(actor, ultima.id),
+    ]);
     if (conteosResultado.ok) conteosComentarios = conteosResultado.value;
+
+    if (comentariosResultado.ok) {
+      comentariosActividad = comentariosResultado.value.map((c) => {
+        const catalogo = campoDelCatalogo(c.fieldKey);
+        return {
+          id: c.id,
+          kind: 'comentario',
+          tipo: c.parentCommentId === undefined ? 'Comentario' : 'Respuesta a un comentario',
+          detalle: c.content,
+          actorName: c.authorName,
+          fieldKey: c.fieldKey,
+          fieldLabel: catalogo?.label ?? c.fieldKey,
+          status: c.status,
+          createdAt: c.createdAt,
+        };
+      });
+    }
+
+    if (revisionesResultado.ok) {
+      revisionesActividad = revisionesResultado.value.map((r) => {
+        const catalogo = campoDelCatalogo(r.fieldKey);
+        return {
+          id: r.id,
+          kind: 'revision_campo',
+          tipo: humanoDeRevisionCampo(r.accion),
+          detalle: r.motivo ?? undefined,
+          actorName: r.actorName ?? undefined,
+          fieldKey: r.fieldKey,
+          fieldLabel: catalogo?.label ?? r.fieldKey,
+          valorAnterior: r.valorAnterior,
+          valorNuevo: r.valorNuevo,
+          createdAt: r.createdAt.toISOString(),
+        };
+      });
+    }
   }
   const commentsOpen = Object.values(conteosComentarios).reduce((acc, n) => acc + n, 0);
+
+  const activity: readonly WorkspaceActivityItem[] = [
+    ...eventosGenericos,
+    ...comentariosActividad,
+    ...revisionesActividad,
+  ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
 
   const total = campos.length;
   const ready = campos.filter((c) => c.status === 'found').length;
@@ -192,7 +279,17 @@ export async function obtenerBriefWorkspace(
       provenanceType: c.provenanceType as ProvenanceType,
       criticidad: c.criticidad as Criticality,
       campaignProductId: c.campaignProductId ?? undefined,
+      nivel: catalogo?.nivel ?? 'campana',
       hasEvidence: c.evidencias.length > 0,
+      evidence: c.evidencias.map((e) => ({
+        quote: e.quote,
+        filename: e.filename,
+        sourceId: e.sourceId,
+        page: e.page ?? undefined,
+        slide: e.slide ?? undefined,
+        section: e.section ?? undefined,
+        linea: e.linea ?? undefined,
+      })),
     });
     seccionesMap.set(seccionId, entrada);
   }
@@ -236,6 +333,15 @@ export async function obtenerBriefWorkspace(
     return acc;
   }, []);
 
+  const history: readonly WorkspaceVersionSummary[] = versiones.map((v) => ({
+    id: v.id,
+    number: v.version,
+    status: v.status as BriefStatus,
+    createdAt: v.createdAt.toISOString(),
+    isCurrent: v.id === ultima.id,
+  }));
+  const siguienteVersion = versiones.find((v) => v.version === ultima.version + 1);
+
   return ok({
     ...base,
     version: {
@@ -258,6 +364,15 @@ export async function obtenerBriefWorkspace(
     tasks,
     activity,
     allowedActions,
-    nextResponsibleRole: siguienteResponsable(status),
+    history,
+    responsibility: {
+      nextRole: siguienteResponsable(status),
+      message: mensajeResponsabilidad({
+        status,
+        criticalPending,
+        decisionsPending,
+        siguienteVersionNumero: siguienteVersion?.version,
+      }),
+    },
   });
 }

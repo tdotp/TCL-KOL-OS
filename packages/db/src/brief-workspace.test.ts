@@ -16,7 +16,7 @@ import { closePool, query } from './client.ts';
 import { findUserByEmail } from './users.ts';
 import { eliminarCampanaDePrueba } from './test-utils.ts';
 import { crearBriefManual } from './manual.ts';
-import { corregirCampo } from './brief-fields.ts';
+import { corregirCampo, declararExcepcionProducto } from './brief-fields.ts';
 import {
   descartarPregunta,
   generarPreguntas,
@@ -26,6 +26,7 @@ import {
 import { crearComentario, resolverComentario } from './comments.ts';
 import { transicionarBrief } from './transitions.ts';
 import { aprobarComoCliente, aprobarInternamente } from './client-review.ts';
+import { crearVersionHija } from './versioning.ts';
 import { obtenerBriefWorkspace } from './brief-workspace.ts';
 
 let admin: User;
@@ -54,6 +55,24 @@ async function agregarProductos(campaignId: string, cantidad: number): Promise<v
       [campaignId, p.id, i === 0 ? 'flagship' : 'secundario', i + 1],
     );
   }
+}
+
+/** Fuente sintética + una cita de evidencia sobre un campo ya existente — mismo patrón que `immutability.test.ts`. */
+async function adjuntarEvidenciaSintetica(campaignId: string, fieldId: string): Promise<void> {
+  const [fuente] = await query<{ id: string }>(
+    `INSERT INTO source_documents
+       (campaign_id, organization_id, type, filename, file_id, mime_type, size_bytes, hash, status, created_by)
+     VALUES ($1, $2, 'ficha_tecnica', 'fuente-workspace.md', 'prueba/fuente-workspace.md',
+             'text/markdown', 100, $3, 'procesado', $4)
+     RETURNING id`,
+    [campaignId, admin.organizationId, `hash-workspace-${fieldId}`, admin.id],
+  );
+  await query(`INSERT INTO evidence (brief_field_id, source_id, quote, section) VALUES ($1, $2, $3, $4)`, [
+    fieldId,
+    fuente!.id,
+    'Cita literal de prueba, verificable contra el fragmento.',
+    'Sección de prueba',
+  ]);
 }
 
 /** Mismo patrón que `client-review.test.ts`: responde lo crítico, descarta el resto, llega a `internal_review`. */
@@ -301,7 +320,8 @@ describe('obtenerBriefWorkspace', () => {
     if (!comoConsultor.ok) return;
     expect(comoConsultor.value.version?.status).toBe('internal_review');
     expect(comoConsultor.value.allowedActions.some((a) => a.to === 'client_review')).toBe(false);
-    expect(comoConsultor.value.nextResponsibleRole).toBe('director');
+    expect(comoConsultor.value.responsibility.nextRole).toBe('director');
+    expect(comoConsultor.value.responsibility.message).toBe('Pendiente de aprobación por Dirección.');
 
     const comoDirector = await obtenerBriefWorkspace(director, campaignId);
     expect(comoDirector.ok).toBe(true);
@@ -331,8 +351,8 @@ describe('obtenerBriefWorkspace', () => {
     expect(resultado.ok).toBe(true);
     if (!resultado.ok) return;
     expect(resultado.value.version?.status).toBe('client_review');
-    expect(resultado.value.activity.some((a) => a.entityType === 'field_comment')).toBe(false);
-    expect(resultado.value.nextResponsibleRole).toBe('cliente');
+    expect(resultado.value.activity.some((a) => a.kind === 'comentario')).toBe(false);
+    expect(resultado.value.responsibility.nextRole).toBe('cliente');
   });
 
   it('aislamiento: un actor de otra organización recibe RESOURCE_NOT_FOUND (caso 13)', async () => {
@@ -359,5 +379,213 @@ describe('obtenerBriefWorkspace', () => {
     expect(resultado.value.version?.status).toBe('approved');
     expect(resultado.value.version?.editable).toBe(false);
     expect(resultado.value.allowedActions.some((a) => a.to === 'internal_review')).toBe(false);
+  });
+
+  // ─────────────────────── Checkpoint 2 (Revisar brief + Actividad) ───────────────────────
+
+  it('las secciones respetan el orden canónico de D0-05, nunca el orden de inserción (caso 1)', async () => {
+    const campaignId = await nuevaCampanaPropia('secciones-ordenadas');
+    const creado = await crearBriefManual(admin, campaignId);
+    if (!creado.ok) throw new Error(creado.error.message);
+
+    const resultado = await obtenerBriefWorkspace(admin, campaignId);
+    if (!resultado.ok) throw new Error('lectura falló');
+
+    const ordenReal = resultado.value.sections.map((s) => s.id);
+    const ordenCanonico = [
+      'contexto',
+      'objetivo',
+      'target_audiencia',
+      'problema_insight',
+      'marca_producto',
+      'mandatorios',
+      'mensaje_principal',
+      'accion_kpis',
+      'entregable_creativo',
+      'practico',
+    ];
+    // Subsecuencia: todas las secciones presentes deben aparecer en este
+    // orden relativo, aunque no todas existan siempre.
+    const posiciones = ordenReal.map((id) => ordenCanonico.indexOf(id));
+    expect(posiciones).toEqual([...posiciones].sort((a, b) => a - b));
+    expect(posiciones.every((p) => p >= 0)).toBe(true);
+  });
+
+  it('un campo de campaña tiene nivel "campana"; uno por producto, nivel "producto" (caso 2, 3)', async () => {
+    const campaignId = await nuevaCampanaPropia('niveles-de-campo');
+    await agregarProductos(campaignId, 1);
+    const creado = await crearBriefManual(admin, campaignId);
+    if (!creado.ok) throw new Error(creado.error.message);
+
+    const resultado = await obtenerBriefWorkspace(admin, campaignId);
+    if (!resultado.ok) throw new Error('lectura falló');
+
+    const todosLosCampos = resultado.value.sections.flatMap((s) => s.fields);
+    const deCampana = todosLosCampos.find((f) => f.key === 'contexto.situacion');
+    expect(deCampana?.nivel).toBe('campana');
+    expect(deCampana?.campaignProductId).toBeUndefined();
+
+    const deProducto = todosLosCampos.find((f) => f.key === 'marca_producto[].nombre_producto');
+    expect(deProducto?.nivel).toBe('producto');
+    expect(deProducto?.campaignProductId).toBeDefined();
+  });
+
+  it('declarar una excepción por producto deja visibles la fila compartida y la de excepción (caso 4)', async () => {
+    const campaignId = await nuevaCampanaPropia('excepcion-por-producto');
+    await agregarProductos(campaignId, 2);
+    const creado = await crearBriefManual(admin, campaignId);
+    if (!creado.ok) throw new Error(creado.error.message);
+
+    const productos = await query<{ id: string }>(
+      `SELECT id FROM campaign_products WHERE campaign_id = $1 ORDER BY prioridad`,
+      [campaignId],
+    );
+    const clave = 'target_audiencia.descripcion'; // compartido_con_excepcion, ver catálogo
+    const catalogo = catalogoDelBrief().find((c) => c.key === clave)!;
+    expect(catalogo.nivel).toBe('compartido_con_excepcion');
+
+    const declarada = await declararExcepcionProducto(admin, creado.value.versionId, {
+      key: clave,
+      campaignProductId: productos[0]!.id,
+      value: 'Excepción exclusiva de este producto',
+      motivo: 'Este producto tiene una audiencia distinta al resto de la campaña.',
+    });
+    expect(declarada.ok).toBe(true);
+
+    const resultado = await obtenerBriefWorkspace(admin, campaignId);
+    if (!resultado.ok) throw new Error('lectura falló');
+
+    const filas = resultado.value.sections.flatMap((s) => s.fields).filter((f) => f.key === clave);
+    // La fila compartida (sin producto) sigue existiendo, más la nueva excepción anclada.
+    expect(filas.some((f) => f.campaignProductId === undefined)).toBe(true);
+    expect(filas.some((f) => f.campaignProductId === productos[0]!.id)).toBe(true);
+  });
+
+  it('la evidencia de un campo trae cita, archivo y ubicación — consultable, nunca precargada como texto (caso 5)', async () => {
+    const campaignId = await nuevaCampanaPropia('evidencia-visible');
+    const creado = await crearBriefManual(admin, campaignId);
+    if (!creado.ok) throw new Error(creado.error.message);
+
+    const [campo] = await query<{ id: string; key: string }>(
+      `SELECT id, key FROM brief_fields WHERE brief_version_id = $1 AND campaign_product_id IS NULL LIMIT 1`,
+      [creado.value.versionId],
+    );
+    await adjuntarEvidenciaSintetica(campaignId, campo!.id);
+
+    const resultado = await obtenerBriefWorkspace(admin, campaignId);
+    if (!resultado.ok) throw new Error('lectura falló');
+
+    const fila = resultado.value.sections.flatMap((s) => s.fields).find((f) => f.key === campo!.key)!;
+    expect(fila.hasEvidence).toBe(true);
+    expect(fila.evidence).toHaveLength(1);
+    expect(fila.evidence[0]!.quote).toContain('Cita literal de prueba');
+    expect(fila.evidence[0]!.filename).toBe('fuente-workspace.md');
+    expect(fila.evidence[0]!.section).toBe('Sección de prueba');
+  });
+
+  it('corregir un campo aparece en actividad como revisión, con valor anterior y nuevo (caso 8)', async () => {
+    const campaignId = await nuevaCampanaPropia('revision-de-campo');
+    const creado = await crearBriefManual(admin, campaignId);
+    if (!creado.ok) throw new Error(creado.error.message);
+
+    const [campo] = await query<{ id: string; key: string; revision: number }>(
+      `SELECT id, key, revision FROM brief_fields WHERE brief_version_id = $1 AND campaign_product_id IS NULL LIMIT 1`,
+      [creado.value.versionId],
+    );
+    const corregido = await corregirCampo(admin, creado.value.versionId, campo!.id, {
+      value: 'Valor corregido de prueba',
+      motivo: 'Ajuste manual de verificación.',
+      revisionEsperada: campo!.revision,
+    });
+    expect(corregido.ok).toBe(true);
+
+    const resultado = await obtenerBriefWorkspace(admin, campaignId);
+    if (!resultado.ok) throw new Error('lectura falló');
+
+    const revision = resultado.value.activity.find(
+      (a) => a.kind === 'revision_campo' && a.fieldKey === campo!.key,
+    );
+    expect(revision).toBeDefined();
+    expect(revision!.tipo).toBe('Corrigió el valor del campo');
+    expect(revision!.valorNuevo).toBe('Valor corregido de prueba');
+    expect(revision!.detalle).toBe('Ajuste manual de verificación.');
+    // El evento genérico de auditoría para la misma acción no se duplica.
+    expect(resultado.value.activity.some((a) => a.kind === 'evento' && a.tipo.includes('campo'))).toBe(false);
+  });
+
+  it('un comentario aparece en actividad con su contenido y cambia de abierto a resuelto (caso 9, extendido)', async () => {
+    const campaignId = await nuevaCampanaPropia('comentario-en-actividad');
+    const creado = await crearBriefManual(admin, campaignId);
+    if (!creado.ok) throw new Error(creado.error.message);
+    const [campo] = await query<{ key: string }>(
+      `SELECT key FROM brief_fields WHERE brief_version_id = $1 AND campaign_product_id IS NULL LIMIT 1`,
+      [creado.value.versionId],
+    );
+
+    const comentario = await crearComentario(admin, creado.value.versionId, {
+      fieldKey: campo!.key,
+      content: 'Contenido real del comentario, verificable en Actividad.',
+    });
+    if (!comentario.ok) throw new Error('no se pudo comentar');
+
+    const antes = await obtenerBriefWorkspace(admin, campaignId);
+    if (!antes.ok) throw new Error('lectura falló');
+    const itemAntes = antes.value.activity.find((a) => a.id === comentario.value.id);
+    expect(itemAntes?.kind).toBe('comentario');
+    expect(itemAntes?.detalle).toBe('Contenido real del comentario, verificable en Actividad.');
+    expect(itemAntes?.status).toBe('abierto');
+
+    const resuelto = await resolverComentario(admin, creado.value.versionId, comentario.value.id);
+    expect(resuelto.ok).toBe(true);
+
+    const despues = await obtenerBriefWorkspace(admin, campaignId);
+    if (!despues.ok) throw new Error('lectura falló');
+    const itemDespues = despues.value.activity.find((a) => a.id === comentario.value.id);
+    expect(itemDespues?.status).toBe('resuelto');
+  });
+
+  it('la actividad queda ordenada de la más reciente a la más antigua (caso 6)', async () => {
+    const campaignId = await nuevaCampanaPropia('actividad-ordenada');
+    const creado = await crearBriefManual(admin, campaignId);
+    if (!creado.ok) throw new Error(creado.error.message);
+    await generarPreguntas(admin, creado.value.versionId);
+    const preguntas = await listarPreguntas(admin, campaignId, { status: 'pendiente' });
+    if (preguntas.ok && preguntas.value.length > 0) {
+      await responderPregunta(admin, preguntas.value[0]!.id, { answerValue: 'awareness' });
+    }
+
+    const resultado = await obtenerBriefWorkspace(admin, campaignId);
+    if (!resultado.ok) throw new Error('lectura falló');
+
+    expect(resultado.value.activity.length).toBeGreaterThan(1);
+    const fechas = resultado.value.activity.map((a) => a.createdAt);
+    const ordenadas = [...fechas].sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
+    expect(fechas).toEqual(ordenadas);
+  });
+
+  it('el historial de versiones marca cuál es la vigente tras crear una versión hija (caso 12)', async () => {
+    const campaignId = await nuevaCampanaPropia('historial-de-versiones');
+    const creado = await crearBriefManual(admin, campaignId);
+    if (!creado.ok) throw new Error(creado.error.message);
+    await completarHastaInternalReview(creado.value.versionId, campaignId);
+    await aprobarInternamente(director, creado.value.versionId);
+    const aprobada = await aprobarComoCliente(cliente, creado.value.versionId);
+    expect(aprobada.ok).toBe(true);
+
+    const hija = await crearVersionHija(admin, creado.value.versionId);
+    expect(hija.ok).toBe(true);
+    if (!hija.ok) return;
+
+    const resultado = await obtenerBriefWorkspace(admin, campaignId);
+    if (!resultado.ok) throw new Error('lectura falló');
+
+    expect(resultado.value.version?.id).toBe(hija.value.versionId);
+    expect(resultado.value.version?.status).toBe('draft');
+    expect(resultado.value.history).toHaveLength(2);
+    const padre = resultado.value.history.find((v) => v.id === creado.value.versionId);
+    const actual = resultado.value.history.find((v) => v.id === hija.value.versionId);
+    expect(padre?.status).toBe('superseded');
+    expect(padre?.isCurrent).toBe(false);
+    expect(actual?.isCurrent).toBe(true);
   });
 });
