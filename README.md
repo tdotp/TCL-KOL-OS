@@ -201,7 +201,8 @@ con esa variable, y se omite en silencio si no lo hay.
 | `MAX_UPLOAD_MB` | Tamaño máximo de fuente. 50 MB por defecto |
 | `AI_PROVIDER` | Obligatorio solo si `AI_ENABLED=true`. El adaptador aísla la elección. `fake` es un valor especial, determinístico y sin red — exclusivo de pruebas automatizadas, nunca de demos ni producción |
 | `TEST_DATABASE_URL` | Base separada para `packages/db`'s pruebas de integración. Nombre debe terminar en `_test`; sin fallback hacia `DATABASE_URL` |
-| `BRIEF_WORKSPACE_V2` | `false`/ausente por defecto. En `true`, activa `/campanas/[id]/brief/workspace` (Sprint 6) — completado guiado del brief sobre el mismo dominio. Apagada, esa ruta reenvía a `/brief/editar` sin cambiar nada del flujo anterior |
+| `BRIEF_WORKSPACE_V2` | `false`/ausente por defecto. En `true`, activa `/campanas/[id]/brief/workspace` (Sprint 6) — tres modos (Completar/Revisar brief/Actividad) sobre el mismo dominio. Apagada, esa ruta reenvía a `/brief/editar` sin cambiar nada del flujo anterior |
+| `E2E_DATABASE_URL` | Base `_test` aislada para `apps/e2e` (Playwright, Sprint 6 Checkpoint 2). Mismo candado que `TEST_DATABASE_URL`: el nombre debe terminar en `_test` |
 
 Todas las variables están documentadas en [`.env.example`](.env.example).
 
@@ -221,7 +222,7 @@ Todas las variables están documentadas en [`.env.example`](.env.example).
 | Roles y permisos | [`docs/product/D0-07-matriz-roles-permisos.md`](docs/product/D0-07-matriz-roles-permisos.md) |
 | Prototipo navegable | [`docs/product/D0-10-prototipo/index.html`](docs/product/D0-10-prototipo/index.html) |
 | Estado del proyecto para retomar sesión | [`HANDOFF.md`](HANDOFF.md) |
-| Cierre de Sprint 6 — Fase B+C (Brief Workspace, contrato + completado guiado) | [`docs/product/D0-19-cierre-sprint6.md`](docs/product/D0-19-cierre-sprint6.md) |
+| Cierre de Sprint 6 — Fase B+C + Checkpoint 2 (Brief Workspace: contrato, tres modos, Playwright) | [`docs/product/D0-19-cierre-sprint6.md`](docs/product/D0-19-cierre-sprint6.md) |
 | Cierre de Sprint 5 (matriz de requisitos, ciclo de aprobación) | [`docs/product/D0-18-cierre-sprint5.md`](docs/product/D0-18-cierre-sprint5.md) |
 | Cierre de Sprint 4 (brief hasta `internal_review`) | [`docs/product/D0-17-cierre-sprint4.md`](docs/product/D0-17-cierre-sprint4.md) |
 | Incidente de datos de prueba (INC-001) | [`docs/incidents/INC-001-test-data-collision.md`](docs/incidents/INC-001-test-data-collision.md) |

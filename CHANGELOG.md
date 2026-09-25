@@ -4,6 +4,22 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [No publicado]
 
+### Sprint 6, Checkpoint 2 — Revisar brief, Actividad y Playwright · 24 de septiembre de 2026
+
+Los otros dos modos del workspace (documento de solo lectura y línea de actividad real), a quién le toca actuar explicado en vez de solo esconder un botón, y el primer harness de pruebas de navegador del repositorio (9 casos obligatorios). Exportación PDF/DOCX sigue sin empezar — Sprint 6 sigue `PARTIAL`. Detalle completo en [D0-19 §12](docs/product/D0-19-cierre-sprint6.md#12-checkpoint-2--revisar-brief-actividad-y-playwright).
+
+#### Añadido
+
+- **Modo "Revisar brief"** (`RevisarBrief.tsx`): el brief como documento de solo lectura por los diez bloques canónicos, selector de producto por URL (`?producto=`), estado discreto por campo (confirmado/pendiente/manual/extraído/con evidencia/necesita evidencia/conflicto), evidencia bajo demanda (`<details>` nativo, sin JavaScript), versión no editable marcada explícitamente.
+- **Modo "Actividad"** (`Actividad.tsx`): línea de tiempo legible fusionando `audit_events`, `brief_field_revisions` y `field_comments` — nunca una tabla de actividad nueva, nunca JSON crudo como experiencia principal. Filtros locales Todo/Comentarios/Cambios/Aprobaciones.
+- **Tres modos navegables por URL** (`?modo=completar|revisar|actividad`, `page.tsx`): estado preservado al recargar, `modo` inválido cae a `completar`.
+- **"No limitarse a esconder el botón"**: `BannerResponsabilidad` muestra siempre la frase de responsabilidad (`mensajeResponsabilidad`, dominio) y, solo cuando el actor mismo puede ejecutar la transición (mismo `allowedActions` que ya existía desde Checkpoint 1), un enlace real hacia el formulario de transición existente en `/brief` — nunca una segunda regla de permisos ni una mutación nueva en el workspace.
+- **`BriefWorkspace` extendido, misma función única**: `activity` (fusionada), `history` (versiones, marca la vigente), `responsibility` (reemplaza a `nextResponsibleRole`); `WorkspaceSectionField` gana `nivel` y `evidence`.
+- `mensajeResponsabilidad`, `humanoDeEvento`, `humanoDeRevisionCampo` (`packages/domain/src/brief-presentation.ts`, nuevas) — 17 pruebas de dominio nuevas.
+- `listBriefFieldRevisions` (`packages/db/src/brief-fields.ts`) y `listarComentariosDeVersion` (`packages/db/src/comments.ts`) — fuentes de `activity` más ricas que la auditoría genérica.
+- **`apps/e2e`** (`@tcl-kol-os/e2e`): primer harness de Playwright del repositorio, base de datos `_test` aislada (INC-001A), 9 casos obligatorios (flag apagada, tres modos, responder/saltar una tarea, navegar Revisar brief, filtrar Actividad, permisos por rol consultor/director, bloqueo de cliente, aislamiento multi-tenant) — ver §12.7 de D0-19.
+- 8 pruebas de integración nuevas en `brief-workspace.test.ts` (20 en total) y `.gitignore` para las salidas de Playwright (`apps/e2e/test-results/`, etc.).
+
 ### Sprint 6 (Fase B + C) — Brief Workspace: contrato consolidado y completado guiado · 24 de septiembre de 2026
 
 `obtenerBriefWorkspace` como único modelo de lectura del brief, y una primera experiencia de completado guiada detrás de `BRIEF_WORKSPACE_V2`. Exportación PDF/DOCX, revisión/actividad como pantallas propias y pruebas de navegador quedan para el siguiente incremento. Detalle completo en [D0-19](docs/product/D0-19-cierre-sprint6.md).

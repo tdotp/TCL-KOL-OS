@@ -465,24 +465,37 @@ docs/product/brief-schema/brief-catalog.json   Fuente única de los 41 campos
 [INC-001](docs/incidents/INC-001-test-data-collision.md) ·
 [D0-17 — cierre de Sprint 4](docs/product/D0-17-cierre-sprint4.md) ·
 [D0-18 — cierre de Sprint 5](docs/product/D0-18-cierre-sprint5.md) ·
-[D0-19 — cierre de Sprint 6 (Fase B+C)](docs/product/D0-19-cierre-sprint6.md)
+[D0-19 — cierre de Sprint 6 (Fase B+C, Checkpoint 2)](docs/product/D0-19-cierre-sprint6.md)
 
-## Sprint 6 (Fase B + C) — Brief Workspace
+## Sprint 6 — Brief Workspace (`PARTIAL`: falta exportación)
 
 Encima del rediseño de UI que ya estaba en el repo (`AppShell`, workspace de
 3 columnas del editor, etc.), Sprint 6 añade un **contrato de lectura único**
-del brief y una **experiencia de completado guiada**, sin tocar dominio,
-migraciones ni el flujo anterior. Detalle completo en
-[D0-19](docs/product/D0-19-cierre-sprint6.md); resumen rápido:
+del brief, tres modos de workspace (Completar/Revisar brief/Actividad) y el
+primer harness de Playwright del repositorio, sin tocar dominio, migraciones
+ni el flujo anterior. Detalle completo en
+[D0-19](docs/product/D0-19-cierre-sprint6.md) — Fase B+C en §1-11, Checkpoint 2
+en §12; resumen rápido:
 
 - `obtenerBriefWorkspace(actor, campaignId)` (`packages/db/src/brief-workspace.ts`)
   — un único modelo (`BriefWorkspace`, `packages/domain/src/workspace.ts`) que
   compone `getCampaign`/`verCamposDeVersion`/`listarPreguntas`/
-  `contarConversacionesAbiertas`/`allowedTransitions`, nunca SQL propio.
-- `/campanas/[id]/brief/workspace` — una tarea a la vez, detrás de la
-  variable de entorno `BRIEF_WORKSPACE_V2` (`true` la activa; apagada o
-  ausente, reenvía a `/brief/editar` de siempre). Responde/descarta con las
-  mismas server actions de `TablaPreguntas.tsx` — ninguna mutación nueva.
-- Pendiente para el siguiente incremento: exportación PDF/DOCX, y "Revisar
-  brief"/"Actividad" como pantallas propias del workspace (el dato ya está
-  en el contrato, falta la UI).
+  `contarConversacionesAbiertas`/`allowedTransitions`, nunca SQL propio. Nunca
+  una segunda función que compita con esta — Checkpoint 2 la extendió, no la
+  duplicó.
+- `/campanas/[id]/brief/workspace?modo=completar|revisar|actividad` — tres
+  modos navegables por URL, detrás de la variable de entorno
+  `BRIEF_WORKSPACE_V2` (`true` la activa; apagada o ausente, reenvía a
+  `/brief/editar` de siempre). **Completar**: una tarea a la vez, con las
+  mismas server actions de `TablaPreguntas.tsx`. **Revisar brief**: el brief
+  como documento de solo lectura por los diez bloques canónicos, con
+  evidencia bajo demanda. **Actividad**: línea de tiempo real (comentarios,
+  cambios de campo, aprobaciones) fusionada de registros existentes, nunca
+  una tabla nueva. Un banner explica siempre quién debe actuar y por qué, con
+  un enlace real a la acción cuando el actor mismo puede ejecutarla —
+  "no limitarse a esconder el botón".
+- `apps/e2e` (`@tcl-kol-os/e2e`) — Playwright, base `_test` aislada, 9 casos
+  obligatorios (flag, tres modos, responder/saltar, roles, cliente,
+  aislamiento multi-tenant), todos en verde.
+- **Pendiente para el siguiente incremento:** exportación PDF/DOCX (Fase E) —
+  única razón por la que Sprint 6 sigue `PARTIAL`.
