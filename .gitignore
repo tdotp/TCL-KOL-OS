@@ -25,6 +25,12 @@ coverage/
 .ruff_cache/
 .eslintcache
 
+# Salidas de Playwright (Sprint 6, Checkpoint 2) — capturas, trazas y el
+# reporte HTML de cada corrida, nunca código versionado.
+apps/e2e/test-results/
+apps/e2e/playwright-report/
+apps/e2e/blob-report/
+
 # Sistema operativo
 .DS_Store
 Thumbs.db

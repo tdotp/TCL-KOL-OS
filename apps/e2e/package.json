@@ -1,0 +1,20 @@
+{
+  "name": "@tcl-kol-os/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sprint 6, Checkpoint 2 — pruebas de navegador del Brief Workspace (Playwright). No forma parte de `npm run test` raíz a propósito: necesita un servidor y una base de datos propios, levantados aparte (ver README.md de esta carpeta).",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tcl-kol-os/db": "*",
+    "@tcl-kol-os/domain": "*"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  }
+}
