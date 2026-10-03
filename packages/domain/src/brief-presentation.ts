@@ -50,8 +50,8 @@ export const ESTADO_EN_ESPANOL: Record<BriefStatus, string> = {
   local_questions: 'preguntas locales',
   internal_review: 'revisión interna',
   internal_changes_requested: 'cambios internos solicitados',
-  client_review: 'revisión del cliente',
-  client_changes_requested: 'cambios del cliente solicitados',
+  client_review: 'revisión del cliente (heredado)',
+  client_changes_requested: 'cambios del cliente solicitados (heredado)',
   approved: 'aprobado',
   superseded: 'reemplazado',
   cancelled: 'cancelado',
@@ -63,7 +63,6 @@ export const TEXTO_DEL_BOTON: Partial<Record<BriefStatus, string>> = {
   local_questions: 'Ir a las preguntas',
   extraction_review: 'Volver al brief',
   internal_review: 'Enviar a revisión interna',
-  client_review: 'Aprobar internamente',
   approved: 'Aprobar',
 };
 
@@ -152,8 +151,12 @@ export function mensajeResponsabilidad(params: {
       ? `Esta versión fue reemplazada por la versión ${siguienteVersionNumero}.`
       : 'Esta versión fue reemplazada por una versión más reciente.';
   }
-  if (status === 'client_review') return 'El cliente está revisando esta versión.';
-  if (status === 'client_changes_requested') return 'El cliente solicitó cambios.';
+  if (status === 'client_review') {
+    return 'Versión heredada de la revisión del cliente: Dirección de SmartPR debe cerrarla o devolverla a revisión interna.';
+  }
+  if (status === 'client_changes_requested') {
+    return 'Versión heredada con cambios del cliente: SmartPR debe aplicarlos y volver a revisión interna.';
+  }
   if (status === 'internal_review') return 'Pendiente de aprobación por Dirección.';
   if (status === 'internal_changes_requested') {
     return 'Se solicitaron cambios internos — quedan por resolver antes de reenviar.';

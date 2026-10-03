@@ -8,6 +8,8 @@
  *  1. `approved` es inmutable (ADR-003). Un cambio crea una versión nueva.
  *  2. Existe siempre un camino sin IA: desde `draft` se llega a `approved`
  *     sin pasar nunca por `processing` (§5, principio 9).
+ *  3. Solo roles internos de SmartPR mueven el workflow. El cliente es de solo
+ *     lectura y la IA propone, nunca aprueba.
  *
  * Toda transición valida rol, estado actual y datos mínimos requeridos (§7.3).
  */
@@ -196,6 +198,17 @@ const guardNoPendingQuestions: Guard = ({ pendingQuestionsTotal }) => {
 const EDITORIAL_ROLES: readonly Role[] = ['admin', 'director', 'consultor'];
 const APPROVER_ROLES: readonly Role[] = ['admin', 'director'];
 
+/**
+ * Estados heredados del modelo anterior, en el que el cliente aprobaba o
+ * pedía cambios dentro del sistema. Nada entra a ellos; solo se leen y se
+ * salen de ellos. Ver `docs/product/CLIENT_WORKFLOW_CORRECTION.md`.
+ */
+export const LEGACY_CLIENT_STATES: readonly BriefStatus[] = ['client_review', 'client_changes_requested'];
+
+export function isLegacyClientState(status: BriefStatus): boolean {
+  return LEGACY_CLIENT_STATES.includes(status);
+}
+
 /** Estados desde los que se puede cancelar una campaña. */
 const CANCELLABLE: readonly BriefStatus[] = [
   'draft',
@@ -313,45 +326,53 @@ export const TRANSITIONS: readonly TransitionRule[] = [
     description: 'Los cambios solicitados fueron aplicados.',
   },
   {
+    // Workflow vigente (corrección cliente read-only): SmartPR cierra el brief.
+    // Revisar y aprobar son decisiones internas y humanas — ni el cliente ni la
+    // IA aprueban. Reúne las guardas que antes se repartían entre
+    // `internal_review → client_review` y `client_review → approved`.
     from: 'internal_review',
-    to: 'client_review',
-    roles: APPROVER_ROLES,
-    guards: [guardNoUnresolvedConflicts, guardClaimsHaveEvidence],
-    description: 'Aprobado internamente y enviado al cliente.',
-  },
-
-  // ── Revisión del cliente ──
-  // Hasta el cierre de Sprint 4 esto ocurría fuera del sistema (DEC-012): el
-  // cliente decidía por fuera y un consultor lo registraba. Sprint 5 (Fase D)
-  // añade una vista real para el rol `cliente`, así que estas dos reglas
-  // ahora también lo autorizan directamente — nunca a ningún otro estado
-  // (`cliente` no aparece en ninguna otra regla de este archivo), y solo
-  // sobre la versión que ya está en `client_review`.
-  {
-    from: 'client_review',
-    to: 'client_changes_requested',
-    roles: [...EDITORIAL_ROLES, 'cliente'],
-    guards: [],
-    description: 'El cliente (o quien registra en su nombre) devuelve el brief con cambios.',
-  },
-  {
-    from: 'client_changes_requested',
-    to: 'internal_review',
-    roles: EDITORIAL_ROLES,
-    guards: [guardNoUnresolvedConflicts],
-    description: 'Nueva versión lista tras los cambios del cliente.',
-  },
-  {
-    from: 'client_review',
     to: 'approved',
-    roles: [...EDITORIAL_ROLES, 'cliente'],
+    roles: APPROVER_ROLES,
     guards: [
       guardNoUnresolvedConflicts,
       guardClaimsHaveEvidence,
       guardNoPendingCriticalQuestions,
       guardTranslationHasOrigin,
     ],
-    description: 'El cliente (o quien registra en su nombre) aprueba el brief.',
+    description: 'Dirección de SmartPR aprueba el brief. Congela la versión (ADR-003).',
+  },
+
+  // ── Estados heredados (legacy) ──
+  // `client_review` y `client_changes_requested` ya no reciben ninguna
+  // transición de entrada: ninguna versión nueva entra a ellos. Existen solo
+  // para que una versión persistida antes de esta corrección siga leyéndose y
+  // pueda salir. Ninguna salida está abierta al rol `cliente`, que es
+  // estrictamente de solo lectura sobre el brief y su workflow.
+  {
+    from: 'client_review',
+    to: 'approved',
+    roles: APPROVER_ROLES,
+    guards: [
+      guardNoUnresolvedConflicts,
+      guardClaimsHaveEvidence,
+      guardNoPendingCriticalQuestions,
+      guardTranslationHasOrigin,
+    ],
+    description: 'Estado heredado: Dirección de SmartPR cierra el brief que quedó en revisión del cliente.',
+  },
+  {
+    from: 'client_review',
+    to: 'internal_review',
+    roles: APPROVER_ROLES,
+    guards: [guardNoUnresolvedConflicts],
+    description: 'Estado heredado: la versión vuelve a revisión interna para que SmartPR decida.',
+  },
+  {
+    from: 'client_changes_requested',
+    to: 'internal_review',
+    roles: EDITORIAL_ROLES,
+    guards: [guardNoUnresolvedConflicts],
+    description: 'Estado heredado: SmartPR retoma la versión y la devuelve a revisión interna.',
   },
 
   // ── Fin de vida ──

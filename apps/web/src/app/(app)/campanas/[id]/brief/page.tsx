@@ -25,7 +25,6 @@ import { VistaCliente, type CampoParaCliente } from './VistaCliente';
 
 export const dynamic = 'force-dynamic';
 
-
 function CabeceraBrief({
   id,
   name,
@@ -45,28 +44,40 @@ function CabeceraBrief({
   const indice = ETAPAS.findIndex((e) => e.id === etapa);
   return (
     <>
-      <a className="back-link" href={`/campanas/${id}`}>← {name}</a>
+      <a className="back-link" href={`/campanas/${id}`}>
+        ← {name}
+      </a>
       <header className="campaign-header compact-campaign-header review-campaign-header">
         <span className={`monogram lg ${monogramaColor(id)}`}>{monogramaIniciales(name)}</span>
         <div className="campaign-heading-copy">
           <div className="campaign-kickers">
             <span className="pill neutro">{cliente ? 'Vista cliente' : 'Review workspace'}</span>
-            {status !== undefined && <span className="status-dot">{ESTADO_EN_ESPANOL[status] ?? status}</span>}
+            {status !== undefined && (
+              <span className="status-dot">{ESTADO_EN_ESPANOL[status] ?? status}</span>
+            )}
           </div>
           <h1>{name}</h1>
-          <p>{market} · {category ?? 'Sin categoría'}</p>
+          <p>
+            {market} · {category ?? 'Sin categoría'}
+          </p>
         </div>
         {!cliente && (
           <div className="campaign-header-actions">
-            <a className="btn" href={`/campanas/${id}/fuentes`}>Fuentes</a>
-            <a className="btn" href={`/campanas/${id}/brief/editar`}>Editar brief</a>
+            <a className="btn" href={`/campanas/${id}/fuentes`}>
+              Fuentes
+            </a>
+            <a className="btn" href={`/campanas/${id}/brief/editar`}>
+              Editar brief
+            </a>
           </div>
         )}
       </header>
       <nav className="campaign-context-nav" aria-label="Secciones de campaña">
         <a href={`/campanas/${id}`}>Resumen</a>
         <a href={`/campanas/${id}/fuentes`}>Fuentes</a>
-        <a className="active" href={`/campanas/${id}/brief`}>Brief</a>
+        <a className="active" href={`/campanas/${id}/brief`}>
+          Brief
+        </a>
         {!cliente && <a href={`/campanas/${id}/brief/editar`}>Editar</a>}
       </nav>
       <div className="stepper campaign-stepper">
@@ -180,8 +191,6 @@ export default async function BriefPage({
           </div>
         ) : (
           <VistaCliente
-            campaignId={id}
-            versionId={ultima.id}
             version={ultima.version}
             estadoVersion={ultima.status}
             secciones={seccionesParaCliente}
@@ -227,7 +236,10 @@ export default async function BriefPage({
       <div className="review-intro">
         <div className="eyebrow">Revisión estructurada</div>
         <h2>Contenido y decisión</h2>
-        <p>Verifica cada afirmación con su evidencia y avanza únicamente con las transiciones reales del workflow.</p>
+        <p>
+          Verifica cada afirmación con su evidencia y avanza únicamente con las transiciones reales del
+          workflow.
+        </p>
       </div>
 
       {error !== undefined && (
@@ -391,7 +403,11 @@ export default async function BriefPage({
                   Abrir el editor
                 </a>
                 {(preguntasPendientes > 0 || ultima.status === 'local_questions') && (
-                  <a className="btn" href={`/campanas/${id}/brief/editar?panel=preguntas`} style={{ width: '100%' }}>
+                  <a
+                    className="btn"
+                    href={`/campanas/${id}/brief/editar?panel=preguntas`}
+                    style={{ width: '100%' }}
+                  >
                     Preguntas locales{preguntasPendientes > 0 ? ` (${preguntasPendientes})` : ''}
                   </a>
                 )}
@@ -411,28 +427,16 @@ export default async function BriefPage({
                       <input type="hidden" name="campaignId" value={id} />
                       <input type="hidden" name="versionId" value={ultima.id} />
                       <input type="hidden" name="to" value={to} />
-                      {to === 'client_review' || to === 'approved' ? (
+                      {to === 'approved' ? (
                         <ConfirmarAccion
                           etiqueta={TEXTO_DEL_BOTON[to] ?? ''}
-                          titulo={
-                            to === 'client_review'
-                              ? `¿Aprobar internamente el brief v${ultima.version}?`
-                              : `¿Aprobar el brief v${ultima.version} sin pasar por revisión del cliente?`
-                          }
-                          consecuencias={
-                            to === 'client_review'
-                              ? [
-                                  `${encontrados.length} campo(s) quedan tal como están ahora mismo.`,
-                                  'El brief pasa a revisión del cliente — usted ya no puede editarlo.',
-                                  'Para cambiar algo habrá que devolverlo o crear una versión nueva.',
-                                ]
-                              : [
-                                  `${encontrados.length} campo(s) quedan congelados de inmediato.`,
-                                  'El brief queda aprobado e inmutable — nadie podrá editarlo.',
-                                  'Para cambiar algo habrá que crear una versión nueva.',
-                                ]
-                          }
-                          textoConfirmar={to === 'client_review' ? 'Sí, aprobar internamente' : 'Sí, aprobar'}
+                          titulo={`¿Aprobar el brief v${ultima.version}?`}
+                          consecuencias={[
+                            `${encontrados.length} campo(s) quedan congelados de inmediato.`,
+                            'El brief queda aprobado e inmutable — nadie podrá editarlo.',
+                            'Para cambiar algo habrá que crear una versión nueva.',
+                          ]}
+                          textoConfirmar="Sí, aprobar"
                           className="btn pri"
                           style={{ width: '100%' }}
                         />

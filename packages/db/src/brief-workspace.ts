@@ -85,15 +85,14 @@ const ACCIONES_CON_FUENTE_MAS_RICA = new Set([
 function siguienteResponsable(status: BriefStatus): Role | undefined {
   switch (status) {
     case 'internal_review':
+    case 'client_review': // heredado: Dirección la cierra o la devuelve; el cliente nunca es responsable
       return 'director';
-    case 'client_review':
-    case 'client_changes_requested':
-      return 'cliente';
     case 'draft':
     case 'processing':
     case 'extraction_review':
     case 'local_questions':
     case 'internal_changes_requested':
+    case 'client_changes_requested': // heredado: SmartPR aplica los cambios
     case 'processing_failed':
       return 'consultor';
     default:

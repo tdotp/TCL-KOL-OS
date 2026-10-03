@@ -79,15 +79,14 @@ describe('vista del cliente TCL (DEC-012 / ADR-004)', () => {
     expect(roleCan('cliente', 'brief:approve_internal')).toBe(false);
   });
 
-  it('desde Sprint 5 (Fase D) sí decide sobre su propia revisión, pero nada más', () => {
-    // `brief:register_client_decision` ya existía, reservada para que el
-    // personal registrara la decisión del cliente en su nombre (DEC-012) —
-    // ahora el propio cliente también la ejerce (DEC-030).
-    expect(roleCan('cliente', 'brief:register_client_decision')).toBe(true);
-    expect(roleCan('cliente', 'brief:request_client_changes')).toBe(true);
-    // Nunca la transición genérica: solo esas dos, mapeadas explícitamente en
-    // `packages/db/src/transitions.ts` (`accionParaDestino`).
+  it('es de solo lectura sobre el workflow: ni aprueba, ni pide cambios, ni transiciona', () => {
+    // Corrección del workflow cliente: SmartPR opera y decide; el cliente solo
+    // consulta. Las acciones `brief:register_client_decision` y
+    // `brief:request_client_changes` dejaron de existir.
+    expect(roleCan('cliente', 'brief:approve_internal')).toBe(false);
     expect(roleCan('cliente', 'brief:transition')).toBe(false);
+    expect(roleCan('cliente', 'brief:request_review')).toBe(false);
+    expect(actionsFor('cliente').filter((a) => a.includes('client'))).toEqual([]);
   });
 
   it('no puede editar, cargar fuentes ni ver auditoría', () => {
@@ -101,14 +100,8 @@ describe('vista del cliente TCL (DEC-012 / ADR-004)', () => {
     expect(roleCan('cliente', 'comment:client_visible')).toBe(false);
   });
 
-  it('solo lee campaña y brief, exporta, y decide sobre su propia revisión — nada más', () => {
-    expect([...actionsFor('cliente')].sort()).toEqual([
-      'brief:export',
-      'brief:read',
-      'brief:register_client_decision',
-      'brief:request_client_changes',
-      'campaign:read',
-    ]);
+  it('solo lee campaña y brief y exporta — nada más', () => {
+    expect([...actionsFor('cliente')].sort()).toEqual(['brief:export', 'brief:read', 'campaign:read']);
   });
 });
 

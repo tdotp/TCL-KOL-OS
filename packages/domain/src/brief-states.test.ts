@@ -7,11 +7,13 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  LEGACY_CLIENT_STATES,
   TERMINAL_STATES,
   TRANSITIONS,
   allowedTransitions,
   assertEditable,
   isImmutable,
+  isLegacyClientState,
   transition,
   transitionsFrom,
 } from './brief-states';
@@ -145,37 +147,16 @@ describe('transiciones inválidas', () => {
 // ─────────────────────────── Autorización por rol ──────────────────────────────
 
 describe('autorización de transiciones (caso F-27)', () => {
-  it('el consultor NO puede aprobar internamente', () => {
-    const result = transition(
-      { version: version('internal_review'), actor: user('consultor') },
-      'client_review',
-    );
+  it('el consultor NO puede aprobar el brief', () => {
+    const result = transition({ version: version('internal_review'), actor: user('consultor') }, 'approved');
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe('FORBIDDEN_ROLE');
   });
 
-  it('el director sí puede aprobar internamente', () => {
-    const result = transition(
-      { version: version('internal_review'), actor: user('director') },
-      'client_review',
-    );
-    expect(result.ok).toBe(true);
-  });
-
-  it('el cliente no puede ejecutar ninguna transición, salvo decidir sobre su propia revisión (Sprint 5, Fase D)', () => {
-    // Desde el cierre de Sprint 4, `client_review → client_changes_requested`
-    // y `client_review → approved` también autorizan al rol `cliente`
-    // directamente (antes solo ocurría "fuera del sistema", DEC-012). Sigue
-    // bloqueado en cualquier otra transición — el cliente nunca mueve el
-    // brief a un estado que no sea consecuencia de su propia decisión.
-    const PERMITIDAS_PARA_CLIENTE = new Set(['client_changes_requested', 'approved']);
-    for (const rule of TRANSITIONS) {
-      const result = transition({ version: version(rule.from), actor: user('cliente') }, rule.to);
-      if (rule.from === 'client_review' && PERMITIDAS_PARA_CLIENTE.has(rule.to)) {
-        expect(result.ok, `el cliente debería poder ${rule.from} → ${rule.to}`).toBe(true);
-      } else {
-        expect(result.ok, `el cliente logró ${rule.from} → ${rule.to}`).toBe(false);
-      }
+  it('el director y el admin sí pueden aprobar el brief', () => {
+    for (const rol of ['director', 'admin'] as const) {
+      const result = transition({ version: version('internal_review'), actor: user(rol) }, 'approved');
+      expect(result.ok, rol).toBe(true);
     }
   });
 
@@ -185,15 +166,88 @@ describe('autorización de transiciones (caso F-27)', () => {
     if (!result.ok) expect(result.error.code).toBe('FORBIDDEN_ROLE');
   });
 
-  it('el sistema no puede ejecutar transiciones humanas', () => {
-    const result = transition({ version: version('internal_review'), actor: 'system' }, 'client_review');
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe('FORBIDDEN_ROLE');
+  it('el sistema (worker / IA) no puede aprobar: la IA nunca decide', () => {
+    for (const rule of TRANSITIONS.filter((t) => t.to === 'approved')) {
+      const result = transition({ version: version(rule.from), actor: 'system' }, 'approved');
+      expect(result.ok, `el sistema logró ${rule.from} → approved`).toBe(false);
+    }
   });
 
   it('allowedTransitions refleja el rol del actor', () => {
-    expect(allowedTransitions('internal_review', user('consultor'))).not.toContain('client_review');
-    expect(allowedTransitions('internal_review', user('director'))).toContain('client_review');
+    expect(allowedTransitions('internal_review', user('consultor'))).not.toContain('approved');
+    expect(allowedTransitions('internal_review', user('director'))).toContain('approved');
+  });
+});
+
+// ─────────────────────── Cliente de solo lectura + estados legacy ──────────────
+
+describe('cliente read-only: ninguna transición de estado (corrección del workflow cliente)', () => {
+  it('el rol cliente no puede ejecutar NINGUNA transición declarada', () => {
+    for (const rule of TRANSITIONS) {
+      const result = transition({ version: version(rule.from), actor: user('cliente') }, rule.to);
+      expect(result.ok, `el cliente logró ${rule.from} → ${rule.to}`).toBe(false);
+    }
+  });
+
+  it('allowedTransitions es vacío para el cliente en todos los estados', () => {
+    for (const rule of TRANSITIONS) {
+      expect(allowedTransitions(rule.from, user('cliente')), rule.from).toHaveLength(0);
+    }
+  });
+
+  it('el rol cliente no aparece en ninguna regla', () => {
+    for (const rule of TRANSITIONS) {
+      if (rule.roles !== 'system') expect(rule.roles, `${rule.from} → ${rule.to}`).not.toContain('cliente');
+    }
+  });
+});
+
+describe('estados legacy client_review / client_changes_requested', () => {
+  it('ninguna transición entra a los estados legacy: ninguna versión nueva los alcanza', () => {
+    for (const rule of TRANSITIONS) {
+      expect(isLegacyClientState(rule.to), `${rule.from} → ${rule.to} entra a un estado legacy`).toBe(false);
+    }
+  });
+
+  it('el flujo vigente no puede pasar de internal_review a client_review', () => {
+    const result = transition({ version: version('internal_review'), actor: user('admin') }, 'client_review');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('BRIEF_INVALID_TRANSITION');
+  });
+
+  it('los estados legacy se siguen leyendo y siguen siendo editables según su definición previa', () => {
+    expect(isLegacyClientState('client_review')).toBe(true);
+    expect(isLegacyClientState('client_changes_requested')).toBe(true);
+    expect(isLegacyClientState('internal_review')).toBe(false);
+    expect(isImmutable('client_review')).toBe(false);
+  });
+
+  it('client_review legacy: Dirección puede cerrarla o devolverla a revisión interna', () => {
+    expect([...allowedTransitions('client_review', user('director'))].sort()).toEqual(
+      ['approved', 'cancelled', 'internal_review'].sort(),
+    );
+    expect(allowedTransitions('client_review', user('consultor'))).toHaveLength(0);
+  });
+
+  it('client_changes_requested legacy: SmartPR la retoma hacia internal_review, sin camino al cliente', () => {
+    expect(allowedTransitions('client_changes_requested', user('consultor'))).toEqual(['internal_review']);
+  });
+
+  it('ninguna campaña queda bloqueada en un estado legacy', () => {
+    for (const legacy of LEGACY_CLIENT_STATES) {
+      const salidas = allowedTransitions(legacy, user('admin'));
+      expect(salidas.length, `${legacy} sin salida`).toBeGreaterThan(0);
+    }
+  });
+
+  it('un brief legacy en client_review se aprueba con las mismas guardas que internal_review → approved', () => {
+    const sinEvidencia = version('client_review', { fields: [field({ evidence: [] })] });
+    const bloqueada = transition({ version: sinEvidencia, actor: user('director') }, 'approved');
+    expect(bloqueada.ok).toBe(false);
+    if (!bloqueada.ok) expect(bloqueada.error.code).toBe('BRIEF_MISSING_EVIDENCE');
+    expect(transition({ version: version('client_review'), actor: user('director') }, 'approved').ok).toBe(
+      true,
+    );
   });
 });
 
@@ -201,7 +255,7 @@ describe('autorización de transiciones (caso F-27)', () => {
 
 describe('guarda: claims sin evidencia (caso F-16, GS-006)', () => {
   it('bloquea la aprobación de un claim sin evidencia', () => {
-    const v = version('client_review', { fields: [field({ evidence: [] })] });
+    const v = version('internal_review', { fields: [field({ evidence: [] })] });
     const result = transition({ version: v, actor: user('admin') }, 'approved');
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -211,14 +265,14 @@ describe('guarda: claims sin evidencia (caso F-16, GS-006)', () => {
   });
 
   it('un campo informativo sin evidencia no bloquea', () => {
-    const v = version('client_review', {
+    const v = version('internal_review', {
       fields: [field({ criticidad: 'informativo', evidence: [] })],
     });
     expect(transition({ version: v, actor: user('admin') }, 'approved').ok).toBe(true);
   });
 
   it('un campo not_found sin evidencia no bloquea: la ausencia es un resultado válido', () => {
-    const v = version('client_review', {
+    const v = version('internal_review', {
       fields: [field({ status: 'not_found', value: null, evidence: [] })],
     });
     expect(transition({ version: v, actor: user('admin') }, 'approved').ok).toBe(true);
@@ -246,7 +300,7 @@ describe('guarda: conflicto sin resolver (caso F-17, GS-005)', () => {
 describe('guarda: preguntas críticas pendientes', () => {
   it('bloquea la aprobación', () => {
     const result = transition(
-      { version: version('client_review'), actor: user('admin'), pendingCriticalQuestions: 2 },
+      { version: version('internal_review'), actor: user('admin'), pendingCriticalQuestions: 2 },
       'approved',
     );
     expect(result.ok).toBe(false);
@@ -468,11 +522,11 @@ describe('camino sin IA (casos R-09, R-10)', () => {
   });
 
   it('existe un camino completo de draft a approved sin tocar processing', () => {
-    const path: BriefStatus[] = ['draft', 'internal_review', 'client_review', 'approved'];
+    const path: BriefStatus[] = ['draft', 'internal_review', 'approved'];
     let current = path[0] as BriefStatus;
 
     for (const next of path.slice(1)) {
-      const actor = next === 'client_review' ? user('director') : user('admin');
+      const actor = user('director');
       const result = transition({ version: version(current), actor }, next);
       expect(result.ok, `falló ${current} → ${next}`).toBe(true);
       current = next;

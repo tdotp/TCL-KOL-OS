@@ -21,7 +21,7 @@ import {
   responderPregunta,
 } from './local-questions.ts';
 import { transicionarBrief } from './transitions.ts';
-import { aprobarComoCliente, aprobarInternamente } from './client-review.ts';
+import { aprobarBrief } from './client-review.ts';
 import { crearComentario } from './comments.ts';
 import { crearVersionHija } from './versioning.ts';
 
@@ -29,7 +29,6 @@ let orgId: string;
 let userId: string;
 let admin: User;
 let director: User;
-let cliente: User;
 const campanasCreadas: string[] = [];
 
 async function nuevaCampanaPropia(etiqueta: string): Promise<string> {
@@ -75,10 +74,8 @@ async function nuevoBriefAprobado(etiqueta: string): Promise<{ campaignId: strin
   const versionId = creado.value.versionId;
 
   await llegarAInternalReview(versionId, campaignId);
-  const interna = await aprobarInternamente(director, versionId);
-  if (!interna.ok) throw new Error(`No se pudo aprobar internamente: ${interna.error.message}`);
-  const final = await aprobarComoCliente(cliente, versionId);
-  if (!final.ok) throw new Error(`No se pudo aprobar como cliente: ${final.error.message}`);
+  const final = await aprobarBrief(director, versionId);
+  if (!final.ok) throw new Error(`No se pudo aprobar: ${final.error.message}`);
 
   return { campaignId, versionId };
 }
@@ -107,18 +104,6 @@ beforeAll(async () => {
     name: 'Director',
     organizationId: filaDirector!.organization_id,
     role: 'director',
-    status: 'activo',
-  };
-
-  const [filaCliente] = await query<{ id: string; organization_id: string }>(
-    `SELECT id, organization_id FROM users WHERE email = 'marena@tcl.com'`,
-  );
-  cliente = {
-    id: filaCliente!.id,
-    email: 'marena@tcl.com',
-    name: 'Marena',
-    organizationId: filaCliente!.organization_id,
-    role: 'cliente',
     status: 'activo',
   };
 });
@@ -251,8 +236,7 @@ describe('crear una versión hija', () => {
     expect(comentado.ok).toBe(true);
 
     await llegarAInternalReview(versionId, campaignId);
-    await aprobarInternamente(director, versionId);
-    await aprobarComoCliente(cliente, versionId);
+    await aprobarBrief(director, versionId);
 
     const resultado = await crearVersionHija(admin, versionId);
     if (!resultado.ok) throw new Error('setup');

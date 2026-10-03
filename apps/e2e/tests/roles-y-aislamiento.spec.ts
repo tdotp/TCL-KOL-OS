@@ -37,7 +37,9 @@ test('E2E-07 — consultor ve a quién le toca aprobar y no puede; director ve l
   );
   const accion = page.locator('.workspace-responsibility a.btn');
   await expect(accion).toHaveCount(1);
-  await expect(accion).toContainText('Aprobar internamente');
+  // Aprobar cierra el brief (solo SmartPR); ya no existe el paso intermedio de cliente.
+  await expect(accion).toContainText('Aprobar');
+  await expect(accion).not.toContainText('internamente');
   // La acción real vive en `/brief` (el formulario de transición existente)
   // — este workspace nunca reimplementa esa lógica, solo enlaza a ella.
   await expect(accion).toHaveAttribute('href', `/campanas/${campaignId}/brief`);

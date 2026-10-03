@@ -42,20 +42,20 @@ describe('mensajeResponsabilidad', () => {
     );
   });
 
-  it('revisión del cliente', () => {
-    expect(mensajeResponsabilidad({ status: 'client_review', criticalPending: 0, decisionsPending: 0 })).toBe(
-      'El cliente está revisando esta versión.',
-    );
+  it('client_review es un estado heredado: lo cierra Dirección de SmartPR', () => {
+    const msg = mensajeResponsabilidad({ status: 'client_review', criticalPending: 0, decisionsPending: 0 });
+    expect(msg).toContain('heredada');
+    expect(msg).toContain('Dirección de SmartPR');
   });
 
-  it('el cliente solicitó cambios', () => {
-    expect(
-      mensajeResponsabilidad({
-        status: 'client_changes_requested',
-        criticalPending: 0,
-        decisionsPending: 0,
-      }),
-    ).toBe('El cliente solicitó cambios.');
+  it('client_changes_requested es un estado heredado: lo retoma SmartPR', () => {
+    const msg = mensajeResponsabilidad({
+      status: 'client_changes_requested',
+      criticalPending: 0,
+      decisionsPending: 0,
+    });
+    expect(msg).toContain('heredada');
+    expect(msg).toContain('SmartPR');
   });
 
   it('pendiente de Dirección en revisión interna', () => {

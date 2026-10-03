@@ -13,8 +13,7 @@ import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import {
   archiveCampaign,
-  aprobarComoCliente,
-  aprobarInternamente,
+  aprobarBrief,
   confirmarCampo,
   corregirCampo,
   crearComentario,
@@ -34,7 +33,6 @@ import {
   responderPregunta,
   retrySource,
   revertirExcepcionProducto,
-  solicitarCambiosCliente,
   solicitarCambiosInternos,
   transicionarBrief,
   uploadSource,
@@ -543,59 +541,15 @@ export async function solicitarCambiosInternosDeCampana(
   return { ok: true };
 }
 
-/** Fase C · aprobación interna: envía el brief a revisión del cliente. */
-export async function aprobarInternamenteDeCampana(formData: FormData): Promise<void> {
+/** Aprobación del brief por Dirección de SmartPR (admin/director). */
+export async function aprobarBriefDeCampana(formData: FormData): Promise<void> {
   const user = await currentUser();
   if (user === undefined) redirect('/login');
 
   const versionId = String(formData.get('versionId') ?? '');
   const campaignId = String(formData.get('campaignId') ?? '');
 
-  const resultado = await aprobarInternamente(user, versionId);
-  if (!resultado.ok) {
-    redirect(`/campanas/${campaignId}/brief?error=${encodeURIComponent(resultado.error.message)}`);
-  }
-
-  revalidatePath(`/campanas/${campaignId}/brief`);
-  redirect(`/campanas/${campaignId}/brief`);
-}
-
-// ─────────────────────────── Fase D · Revisión del cliente ────────────────────
-
-/** El cliente solicita cambios. Motivo general obligatorio; campos señalados opcionales. */
-export async function solicitarCambiosClienteDeCampana(
-  _previo: unknown,
-  formData: FormData,
-): Promise<{ error?: string; ok?: boolean }> {
-  const user = await currentUser();
-  if (user === undefined) return { error: 'Sesión no válida.' };
-
-  const versionId = String(formData.get('versionId') ?? '');
-  const campaignId = String(formData.get('campaignId') ?? '');
-  const motivo = String(formData.get('motivo') ?? '').trim();
-  const camposSenalados = formData
-    .getAll('campo')
-    .map(String)
-    .filter((c) => c !== '');
-  if (versionId === '') return { error: 'Falta la versión.' };
-  if (motivo === '') return { error: 'Solicitar cambios exige un motivo.' };
-
-  const resultado = await solicitarCambiosCliente(user, versionId, { motivo, camposSenalados });
-  if (!resultado.ok) return { error: resultado.error.message };
-
-  if (campaignId !== '') revalidatePath(`/campanas/${campaignId}/brief`);
-  return { ok: true };
-}
-
-/** El cliente aprueba el brief. */
-export async function aprobarComoClienteDeCampana(formData: FormData): Promise<void> {
-  const user = await currentUser();
-  if (user === undefined) redirect('/login');
-
-  const versionId = String(formData.get('versionId') ?? '');
-  const campaignId = String(formData.get('campaignId') ?? '');
-
-  const resultado = await aprobarComoCliente(user, versionId);
+  const resultado = await aprobarBrief(user, versionId);
   if (!resultado.ok) {
     redirect(`/campanas/${campaignId}/brief?error=${encodeURIComponent(resultado.error.message)}`);
   }

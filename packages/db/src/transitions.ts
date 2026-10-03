@@ -68,23 +68,20 @@ async function contextoDeGuardas(
 }
 
 /**
- * Qué `Action` exige cada destino, en vez del genérico `brief:transition`
- * (Sprint 5, Fase C/D). El rol `cliente` nunca tiene `brief:transition` —
- * solo `brief:request_client_changes`/`brief:register_client_decision` — así
- * que sin este mapa no podría ejecutar ninguna transición, y con un único
- * `brief:transition` para todos, alcanzaría cualquier destino que el dominio
- * (`ruleAllowsActor`) no bloqueara. Un destino que no aparece aquí sigue
- * exigiendo `brief:transition`, sin cambio de comportamiento.
+ * Qué `Action` exige cada destino, en vez del genérico `brief:transition`.
+ *
+ * Devolver el brief y aprobarlo son decisiones de Dirección de SmartPR
+ * (`brief:approve_internal`, solo admin/director); el resto de destinos exige
+ * `brief:transition` (consultor en adelante). El rol `cliente` no tiene
+ * ninguna de las dos: es de solo lectura sobre el workflow. Los estados
+ * heredados `client_review` / `client_changes_requested` ya no son destino de
+ * nada, así que no necesitan acción propia.
  */
 function accionParaDestino(to: BriefStatus): Action {
   switch (to) {
     case 'internal_changes_requested':
-    case 'client_review':
-      return 'brief:approve_internal';
-    case 'client_changes_requested':
-      return 'brief:request_client_changes';
     case 'approved':
-      return 'brief:register_client_decision';
+      return 'brief:approve_internal';
     default:
       return 'brief:transition';
   }
@@ -100,8 +97,8 @@ function accionParaDestino(to: BriefStatus): Action {
  * pedido, nunca un "brief inválido" genérico (ADR-008: esta capa no
  * reinterpreta la razón, solo la transporta).
  *
- * `motivo` es obligatorio para `internal_changes_requested` y
- * `client_changes_requested` (Fase C/D del pedido: "motivo obligatorio") —
+ * `motivo` es obligatorio para `internal_changes_requested` ("motivo
+ * obligatorio") —
  * se valida aquí, antes de tocar el dominio, y queda en
  * `audit_events.metadata`, nunca en el contenido del brief (DEC-024).
  */
@@ -111,7 +108,7 @@ export async function transicionarBrief(
   to: BriefStatus,
   opciones?: { motivo?: string | undefined; camposSenalados?: readonly string[] | undefined },
 ): Promise<Result<{ status: BriefStatus }>> {
-  const motivoObligatorio = to === 'internal_changes_requested' || to === 'client_changes_requested';
+  const motivoObligatorio = to === 'internal_changes_requested';
   const motivo = opciones?.motivo?.trim();
   if (motivoObligatorio && (motivo === undefined || motivo === '')) {
     return err({
@@ -181,19 +178,14 @@ export async function transicionarBrief(
   }
 
   await transaction(async (client) => {
-    if (to === 'client_review') {
-      // ADR-004: la vista de TCL es "visible únicamente a partir del envío".
-      // Sin esto, `visibility` se queda en su default `interna` para
-      // siempre — ninguna campaña llegaría nunca a ser visible para el rol
-      // `cliente`, aunque el brief ya esté en revisión del cliente. Solo
-      // sube el nivel (interna → tcl); nunca lo baja ni toca una campaña ya
-      // `compartida`.
+    if (to === 'approved') {
+      // ADR-004: la vista de TCL es visible a partir de la aprobación de
+      // SmartPR (antes, del envío a revisión del cliente). Solo sube el
+      // nivel (interna → tcl); nunca lo baja ni toca una campaña ya
+      // `compartida`. Sin esto una campaña nunca sería visible para `cliente`.
       await client.query(`UPDATE campaigns SET visibility = 'tcl' WHERE id = $1 AND visibility = 'interna'`, [
         datos.campaignId,
       ]);
-    }
-
-    if (to === 'approved') {
       await client.query(
         `UPDATE brief_versions SET status = $1::brief_status, approved_at = now() WHERE id = $2`,
         [to, versionId],

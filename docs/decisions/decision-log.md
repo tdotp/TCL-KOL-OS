@@ -641,6 +641,17 @@ posterior a aprobación». 15 de septiembre de 2026.
 - **Dónde vive:** `apps/e2e/` completo (`playwright.config.ts`, `src/fixtures.ts`, `src/login.ts`, `src/nav.ts`, `tests/*.spec.ts`); `packages/db/package.json` (subpath export `./test-utils` añadido, sin ampliar el barrel principal con una función de borrado que solo debe llegar a pruebas).
 - **Responsable de aprobación:** Gerardo Calambás.
 
+### DEC-042 — El cliente es de solo lectura: SmartPR revisa y cierra el brief; `client_review` y `client_changes_requested` pasan a legacy
+
+- **Fecha:** 3 de octubre de 2026
+- **Estado:** **aprobada** — corrección del workflow cliente
+- **Origen:** el modelo de Sprint 5 (Fase D) permitía que el cliente aprobara o pidiera cambios dentro del sistema. Contradice el workflow real: SmartPR opera y decide; el cliente solo consulta (tendrá más adelante un dashboard de solo lectura); la IA analiza y propone, nunca aprueba.
+- **Decisión:** (1) `internal_review → approved` (solo admin/director) reemplaza a `internal_review → client_review → approved`. (2) Ninguna transición entra a `client_review` ni a `client_changes_requested`; siguen en el enum y en `BriefStatus` como estados legacy para leer datos persistidos, con salida siempre abierta a roles internos (`client_review → approved | internal_review`, `client_changes_requested → internal_review`, cancelación). (3) El rol `cliente` queda con `campaign:read`, `brief:read` y `brief:export`; se eliminan `brief:request_client_changes` y `brief:register_client_decision`. (4) El consultor ya no cierra briefs. (5) `campaigns.visibility` sube a `tcl` al aprobar, no al enviar a revisión del cliente. Supersede lo decidido en Sprint 5 Fase D sobre la decisión del cliente (DEC-030) y el momento de la subida de visibilidad (DEC-032).
+- **Sin migración:** el enum de Postgres no cambia; no se reescribe historial (`audit_events` conserva los motivos de devoluciones previas del cliente).
+- **Fuera de alcance:** dashboard de cliente, influencers, guiones, entregables; stepper de UI («Revisión cliente»), que se corrige en el rediseño frontend; actualización de documentos históricos (D0-03, D0-07, D0-12, D0-18, HANDOFF), que describen el modelo anterior y quedan superados por esta decisión.
+- **Dónde vive:** `packages/domain/src/brief-states.ts`, `permissions.ts`, `brief-presentation.ts`; `packages/db/src/transitions.ts`, `client-review.ts`, `brief-workspace.ts`; `apps/web/.../brief/VistaCliente.tsx`, `page.tsx`, `apps/web/src/lib/actions.ts`; detalle en `docs/product/CLIENT_WORKFLOW_CORRECTION.md`.
+- **Responsable de aprobación:** Gerardo Calambás.
+
 ---
 
 ## Decisiones pendientes que no bloquean MVP 0

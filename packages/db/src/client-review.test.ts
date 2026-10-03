@@ -1,11 +1,13 @@
 /**
- * Sprint 5, Fases C y D — ciclo de aprobación interna y del cliente.
+ * Ciclo de revisión y cierre del brief — decisiones exclusivas de SmartPR.
  *
- * `solicitarCambiosInternos` / `aprobarInternamente` / `solicitarCambiosCliente`
- * / `aprobarComoCliente`, todos envoltorios de `transicionarBrief`
- * (`packages/db/src/transitions.ts`). Cubre también el hallazgo real de
- * auditoría (Sprint 5): `campaigns.visibility` sube sola a `tcl` al entrar en
- * `client_review` — sin eso el cliente nunca podría ver la campaña.
+ * `solicitarCambiosInternos` / `aprobarBrief`, envoltorios de
+ * `transicionarBrief` (`packages/db/src/transitions.ts`). Corrección del
+ * workflow cliente: el cliente es de solo lectura (no aprueba, no pide
+ * cambios) y `client_review` / `client_changes_requested` son estados
+ * heredados — nada nuevo entra a ellos, pero una versión persistida allí
+ * puede cerrarse o retomarse. `campaigns.visibility` sube a `tcl` al
+ * aprobar, para que el cliente pueda leer la campaña.
  *
  * Campaña propia y desechable (INC-001A) — nunca P80 ni el seed compartido.
  */
@@ -22,12 +24,7 @@ import {
   responderPregunta,
 } from './local-questions.ts';
 import { transicionarBrief } from './transitions.ts';
-import {
-  aprobarComoCliente,
-  aprobarInternamente,
-  solicitarCambiosCliente,
-  solicitarCambiosInternos,
-} from './client-review.ts';
+import { aprobarBrief, solicitarCambiosInternos } from './client-review.ts';
 import { motivoDeUltimaDevolucion } from './transitions.ts';
 import { listCampaigns } from './campaigns.ts';
 
@@ -186,95 +183,10 @@ describe('Fase C · solicitar cambios internos', () => {
   });
 });
 
-describe('Fase C · aprobación interna', () => {
-  it('el cliente no puede aprobar antes de la aprobación interna', async () => {
-    const { versionId } = await nuevoBriefEnInternalReview('cliente-antes-de-tiempo');
-    // La campaña sigue "interna" (DEC-032 solo la sube al aprobar internamente)
-    // — el cliente ni siquiera puede ver que la versión existe todavía.
-    const resultado = await aprobarComoCliente(cliente, versionId);
-    expect(resultado.ok).toBe(false);
-    if (resultado.ok) return;
-    expect(resultado.error.code).toBe('RESOURCE_NOT_FOUND');
-  });
-
-  it('admin/director aprueban internamente y el brief pasa a client_review', async () => {
-    const { versionId } = await nuevoBriefEnInternalReview('aprobacion-interna');
-    const resultado = await aprobarInternamente(director, versionId);
-    expect(resultado.ok, !resultado.ok ? resultado.error.message : '').toBe(true);
-
-    const [fila] = await query<{ status: string }>(`SELECT status::text FROM brief_versions WHERE id = $1`, [
-      versionId,
-    ]);
-    expect(fila!.status).toBe('client_review');
-  });
-
-  it('sube la visibilidad de la campaña a "tcl" al aprobar internamente (DEC-032)', async () => {
-    const { campaignId, versionId } = await nuevoBriefEnInternalReview('visibilidad');
-    const [antes] = await query<{ visibility: string }>(
-      `SELECT visibility::text FROM campaigns WHERE id = $1`,
-      [campaignId],
-    );
-    expect(antes!.visibility).toBe('interna');
-
-    await aprobarInternamente(director, versionId);
-
-    const [despues] = await query<{ visibility: string }>(
-      `SELECT visibility::text FROM campaigns WHERE id = $1`,
-      [campaignId],
-    );
-    expect(despues!.visibility).toBe('tcl');
-  });
-});
-
-describe('Fase D · revisión del cliente', () => {
-  async function nuevoBriefEnClientReview(etiqueta: string) {
-    const datos = await nuevoBriefEnInternalReview(etiqueta);
-    const aprobado = await aprobarInternamente(director, datos.versionId);
-    if (!aprobado.ok) throw new Error(`No se pudo llegar a client_review: ${aprobado.error.message}`);
-    return datos;
-  }
-
-  it('el cliente puede solicitar cambios, con motivo obligatorio', async () => {
-    const { versionId } = await nuevoBriefEnClientReview('cliente-solicita');
-
-    const sinMotivo = await solicitarCambiosCliente(cliente, versionId, { motivo: '' });
-    expect(sinMotivo.ok).toBe(false);
-
-    const conMotivo = await solicitarCambiosCliente(cliente, versionId, {
-      motivo: 'El presupuesto declarado no coincide con lo acordado.',
-      camposSenalados: ['practico.presupuesto'],
-    });
-    expect(conMotivo.ok, !conMotivo.ok ? conMotivo.error.message : '').toBe(true);
-
-    const [fila] = await query<{ status: string }>(`SELECT status::text FROM brief_versions WHERE id = $1`, [
-      versionId,
-    ]);
-    expect(fila!.status).toBe('client_changes_requested');
-
-    const devolucion = await motivoDeUltimaDevolucion(versionId);
-    expect(devolucion?.camposSenalados).toEqual(['practico.presupuesto']);
-  });
-
-  it('el cliente ve la campaña en su listado tras la aprobación interna (regresión: listCampaigns filtraba por organización del actor)', async () => {
-    const { campaignId } = await nuevoBriefEnClientReview('listado-cliente');
-    const resultado = await listCampaigns(cliente);
-    expect(resultado.ok).toBe(true);
-    if (!resultado.ok) return;
-    expect(resultado.value.some((c) => c.id === campaignId)).toBe(true);
-  });
-
-  it('reingresa correctamente al ciclo interno tras la solicitud del cliente', async () => {
-    const { versionId } = await nuevoBriefEnClientReview('reingreso');
-    await solicitarCambiosCliente(cliente, versionId, { motivo: 'Ajustar fechas.' });
-
-    const resultado = await transicionarBrief(admin, versionId, 'internal_review');
-    expect(resultado.ok, !resultado.ok ? resultado.error.message : '').toBe(true);
-  });
-
-  it('el cliente puede aprobar, y approved_at queda persistido', async () => {
-    const { versionId } = await nuevoBriefEnClientReview('cliente-aprueba');
-
-    const resultado = await aprobarComoCliente(cliente, versionId);
+describe('aprobación del brief por SmartPR', () => {
+  it('admin y director aprueban; el brief queda approved con approved_at', async () => {
+    const { versionId } = await nuevoBriefEnInternalReview('aprobacion-director');
+    const resultado = await aprobarBrief(director, versionId);
     expect(resultado.ok, !resultado.ok ? resultado.error.message : '').toBe(true);
 
     const [fila] = await query<{ status: string; approved_at: Date | null }>(
@@ -283,12 +195,62 @@ describe('Fase D · revisión del cliente', () => {
     );
     expect(fila!.status).toBe('approved');
     expect(fila!.approved_at).not.toBeNull();
+
+    const { versionId: otra } = await nuevoBriefEnInternalReview('aprobacion-admin');
+    expect((await aprobarBrief(admin, otra)).ok).toBe(true);
   });
 
-  it('una versión aprobada por el cliente es inmutable', async () => {
-    const { versionId } = await nuevoBriefEnClientReview('inmutable');
-    await aprobarComoCliente(cliente, versionId);
+  it('el consultor no puede aprobar', async () => {
+    const { versionId } = await nuevoBriefEnInternalReview('consultor-no-aprueba-brief');
+    const resultado = await aprobarBrief(consultor, versionId);
+    expect(resultado.ok).toBe(false);
+    if (resultado.ok) return;
+    expect(resultado.error.code).toBe('FORBIDDEN_ROLE');
+  });
 
+  it('no se puede aprobar desde draft: hace falta pasar por revisión interna', async () => {
+    const campaignId = await nuevaCampanaPropia('aprobar-desde-draft');
+    const creado = await crearBriefManual(admin, campaignId);
+    if (!creado.ok) throw new Error(creado.error.message);
+    const resultado = await aprobarBrief(admin, creado.value.versionId);
+    expect(resultado.ok).toBe(false);
+    if (resultado.ok) return;
+    expect(resultado.error.code).toBe('BRIEF_INVALID_TRANSITION');
+  });
+
+  it('sube la visibilidad de la campaña a "tcl" al aprobar (el cliente puede leerla)', async () => {
+    const { campaignId, versionId } = await nuevoBriefEnInternalReview('visibilidad');
+    const [antes] = await query<{ visibility: string }>(
+      `SELECT visibility::text FROM campaigns WHERE id = $1`,
+      [campaignId],
+    );
+    expect(antes!.visibility).toBe('interna');
+
+    await aprobarBrief(director, versionId);
+
+    const [despues] = await query<{ visibility: string }>(
+      `SELECT visibility::text FROM campaigns WHERE id = $1`,
+      [campaignId],
+    );
+    expect(despues!.visibility).toBe('tcl');
+
+    const listado = await listCampaigns(cliente);
+    expect(listado.ok).toBe(true);
+    if (!listado.ok) return;
+    expect(listado.value.some((c) => c.id === campaignId)).toBe(true);
+  });
+
+  it('antes de la aprobación el cliente no ve la campaña', async () => {
+    const { campaignId } = await nuevoBriefEnInternalReview('cliente-no-ve-antes');
+    const listado = await listCampaigns(cliente);
+    expect(listado.ok).toBe(true);
+    if (!listado.ok) return;
+    expect(listado.value.some((c) => c.id === campaignId)).toBe(false);
+  });
+
+  it('una versión aprobada es inmutable', async () => {
+    const { versionId } = await nuevoBriefEnInternalReview('inmutable');
+    await aprobarBrief(director, versionId);
     const [campo] = await query<{ id: string }>(
       `SELECT id FROM brief_fields WHERE brief_version_id = $1 LIMIT 1`,
       [versionId],
@@ -297,25 +259,104 @@ describe('Fase D · revisión del cliente', () => {
       query(`UPDATE brief_fields SET value = '"hackeado"'::jsonb WHERE id = $1`, [campo!.id]),
     ).rejects.toThrow();
   });
+});
 
-  it('el cliente no puede ejecutar una transición distinta a las suyas (defensa en profundidad)', async () => {
-    const { versionId } = await nuevoBriefEnClientReview('transicion-ajena');
-    const resultado = await transicionarBrief(cliente, versionId, 'internal_review');
-    expect(resultado.ok).toBe(false);
+describe('cliente read-only: ninguna mutación de brief ni workflow', () => {
+  it('el cliente no puede ejecutar ninguna transición, aunque la campaña ya sea visible para él', async () => {
+    const { versionId } = await nuevoBriefEnInternalReview('cliente-sin-transiciones');
+    // Estado heredado con la campaña ya visible para el cliente (peor caso).
+    await query(`UPDATE brief_versions SET status = 'client_review' WHERE id = $1`, [versionId]);
+    await query(
+      `UPDATE campaigns SET visibility = 'tcl' WHERE id = (SELECT campaign_id FROM briefs WHERE id = (SELECT brief_id FROM brief_versions WHERE id = $1))`,
+      [versionId],
+    );
+
+    const destinos = [
+      'internal_review',
+      'internal_changes_requested',
+      'client_changes_requested',
+      'approved',
+      'cancelled',
+    ] as const;
+    for (const to of destinos) {
+      const resultado = await transicionarBrief(cliente, versionId, to, { motivo: 'intento del cliente' });
+      expect(resultado.ok, `el cliente logró → ${to}`).toBe(false);
+    }
+    const [fila] = await query<{ status: string }>(`SELECT status::text FROM brief_versions WHERE id = $1`, [
+      versionId,
+    ]);
+    expect(fila!.status).toBe('client_review');
   });
 
-  it('el cliente no accede a una versión cuya campaña sigue "interna" (antes de la aprobación interna)', async () => {
-    // La visibilidad de la campaña (DEC-032) es el límite real de acceso del
-    // cliente — `canAccessResource` para `cliente` mira `visibility`, no
-    // `organizationId` (el cliente es, por definición, de otra organización,
-    // DEC-012). Antes de `aprobarInternamente`, la campaña sigue `interna`.
-    const { versionId } = await nuevoBriefEnInternalReview('sin-aprobar-aun');
-    const resultado = await aprobarComoCliente(cliente, versionId);
-    expect(resultado.ok).toBe(false);
-    if (resultado.ok) return;
-    // El estado tampoco lo permite (BRIEF_INVALID_TRANSITION) — pero antes
-    // de eso, la visibilidad ya lo bloquearía por sí sola si el estado sí
-    // fuera client_review; ambas capas actúan, ninguna reemplaza a la otra.
-    expect(['RESOURCE_NOT_FOUND', 'BRIEF_INVALID_TRANSITION']).toContain(resultado.error.code);
+  it('aprobarBrief y solicitarCambiosInternos fallan con FORBIDDEN_ROLE para el cliente', async () => {
+    const { versionId } = await nuevoBriefEnInternalReview('cliente-forbidden');
+    for (const r of [
+      await aprobarBrief(cliente, versionId),
+      await solicitarCambiosInternos(cliente, versionId, 'intento'),
+    ]) {
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error.code).toBe('FORBIDDEN_ROLE');
+    }
+  });
+
+  it('nada nuevo entra a client_review ni a client_changes_requested', async () => {
+    const { versionId } = await nuevoBriefEnInternalReview('sin-nuevos-legacy');
+    for (const to of ['client_review', 'client_changes_requested'] as const) {
+      const resultado = await transicionarBrief(admin, versionId, to, { motivo: 'intento' });
+      expect(resultado.ok, `entró a ${to}`).toBe(false);
+      if (!resultado.ok) expect(resultado.error.code).toBe('BRIEF_INVALID_TRANSITION');
+    }
+  });
+});
+
+describe('estados legacy persistidos antes de la corrección', () => {
+  async function versionLegacy(etiqueta: string, estado: 'client_review' | 'client_changes_requested') {
+    const datos = await nuevoBriefEnInternalReview(etiqueta);
+    await query(`UPDATE brief_versions SET status = $1::brief_status WHERE id = $2`, [
+      estado,
+      datos.versionId,
+    ]);
+    await query(`UPDATE campaigns SET visibility = 'tcl' WHERE id = $1`, [datos.campaignId]);
+    return datos;
+  }
+
+  it('client_review legacy: Dirección la aprueba y queda congelada', async () => {
+    const { versionId } = await versionLegacy('legacy-review-aprueba', 'client_review');
+    const resultado = await aprobarBrief(director, versionId);
+    expect(resultado.ok, !resultado.ok ? resultado.error.message : '').toBe(true);
+    const [fila] = await query<{ status: string; approved_at: Date | null }>(
+      `SELECT status::text, approved_at FROM brief_versions WHERE id = $1`,
+      [versionId],
+    );
+    expect(fila!.status).toBe('approved');
+    expect(fila!.approved_at).not.toBeNull();
+  });
+
+  it('client_review legacy: el consultor no la cierra, pero Dirección puede devolverla a internal_review', async () => {
+    const { versionId } = await versionLegacy('legacy-review-devuelve', 'client_review');
+    expect((await aprobarBrief(consultor, versionId)).ok).toBe(false);
+    expect((await transicionarBrief(consultor, versionId, 'internal_review')).ok).toBe(false);
+    const resultado = await transicionarBrief(director, versionId, 'internal_review');
+    expect(resultado.ok, !resultado.ok ? resultado.error.message : '').toBe(true);
+  });
+
+  it('client_changes_requested legacy: SmartPR la retoma hacia internal_review', async () => {
+    const { versionId } = await versionLegacy('legacy-cambios-retoma', 'client_changes_requested');
+    const resultado = await transicionarBrief(consultor, versionId, 'internal_review');
+    expect(resultado.ok, !resultado.ok ? resultado.error.message : '').toBe(true);
+  });
+
+  it('el motivo histórico de una devolución del cliente sigue siendo legible', async () => {
+    const { versionId } = await versionLegacy('legacy-motivo-historico', 'client_changes_requested');
+    await query(
+      `INSERT INTO audit_events (actor_id, organization_id, action, entity_type, entity_id, metadata)
+       SELECT $1, organization_id, 'brief.transition', 'brief_version', id,
+              '{"from":"client_review","to":"client_changes_requested","motivo":"Ajustar fechas.","camposSenalados":["practico.presupuesto"]}'::jsonb
+         FROM brief_versions WHERE id = $2`,
+      [userId, versionId],
+    );
+    const devolucion = await motivoDeUltimaDevolucion(versionId);
+    expect(devolucion?.motivo).toBe('Ajustar fechas.');
+    expect(devolucion?.to).toBe('client_changes_requested');
   });
 });

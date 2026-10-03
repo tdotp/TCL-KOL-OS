@@ -25,7 +25,7 @@ import {
 } from './local-questions.ts';
 import { crearComentario, resolverComentario } from './comments.ts';
 import { transicionarBrief } from './transitions.ts';
-import { aprobarComoCliente, aprobarInternamente } from './client-review.ts';
+import { aprobarBrief } from './client-review.ts';
 import { crearVersionHija } from './versioning.ts';
 import { obtenerBriefWorkspace } from './brief-workspace.ts';
 
@@ -319,14 +319,14 @@ describe('obtenerBriefWorkspace', () => {
     expect(comoConsultor.ok).toBe(true);
     if (!comoConsultor.ok) return;
     expect(comoConsultor.value.version?.status).toBe('internal_review');
-    expect(comoConsultor.value.allowedActions.some((a) => a.to === 'client_review')).toBe(false);
+    expect(comoConsultor.value.allowedActions.some((a) => a.to === 'approved')).toBe(false);
     expect(comoConsultor.value.responsibility.nextRole).toBe('director');
     expect(comoConsultor.value.responsibility.message).toBe('Pendiente de aprobación por Dirección.');
 
     const comoDirector = await obtenerBriefWorkspace(director, campaignId);
     expect(comoDirector.ok).toBe(true);
     if (!comoDirector.ok) return;
-    expect(comoDirector.value.allowedActions.some((a) => a.to === 'client_review')).toBe(true);
+    expect(comoDirector.value.allowedActions.some((a) => a.to === 'approved')).toBe(true);
   });
 
   it('el cliente nunca recibe eventos de comentarios internos en activity (caso 12)', async () => {
@@ -344,15 +344,17 @@ describe('obtenerBriefWorkspace', () => {
     expect(comentario.ok).toBe(true);
 
     await completarHastaInternalReview(creado.value.versionId, campaignId);
-    const aprobado = await aprobarInternamente(director, creado.value.versionId);
+    const aprobado = await aprobarBrief(director, creado.value.versionId);
     expect(aprobado.ok).toBe(true);
 
     const resultado = await obtenerBriefWorkspace(cliente, campaignId);
     expect(resultado.ok).toBe(true);
     if (!resultado.ok) return;
-    expect(resultado.value.version?.status).toBe('client_review');
+    expect(resultado.value.version?.status).toBe('approved');
     expect(resultado.value.activity.some((a) => a.kind === 'comentario')).toBe(false);
-    expect(resultado.value.responsibility.nextRole).toBe('cliente');
+    // El cliente solo lee: nunca es "a quien le toca actuar".
+    expect(resultado.value.responsibility.nextRole).not.toBe('cliente');
+    expect(resultado.value.allowedActions).toEqual([]);
   });
 
   it('aislamiento: un actor de otra organización recibe RESOURCE_NOT_FOUND (caso 13)', async () => {
@@ -368,10 +370,8 @@ describe('obtenerBriefWorkspace', () => {
     const creado = await crearBriefManual(admin, campaignId);
     if (!creado.ok) throw new Error(creado.error.message);
     await completarHastaInternalReview(creado.value.versionId, campaignId);
-    const internamente = await aprobarInternamente(director, creado.value.versionId);
-    expect(internamente.ok).toBe(true);
-    const clienteAprueba = await aprobarComoCliente(cliente, creado.value.versionId);
-    expect(clienteAprueba.ok).toBe(true);
+    const aprobado = await aprobarBrief(director, creado.value.versionId);
+    expect(aprobado.ok).toBe(true);
 
     const resultado = await obtenerBriefWorkspace(admin, campaignId);
     expect(resultado.ok).toBe(true);
@@ -568,8 +568,7 @@ describe('obtenerBriefWorkspace', () => {
     const creado = await crearBriefManual(admin, campaignId);
     if (!creado.ok) throw new Error(creado.error.message);
     await completarHastaInternalReview(creado.value.versionId, campaignId);
-    await aprobarInternamente(director, creado.value.versionId);
-    const aprobada = await aprobarComoCliente(cliente, creado.value.versionId);
+    const aprobada = await aprobarBrief(director, creado.value.versionId);
     expect(aprobada.ok).toBe(true);
 
     const hija = await crearVersionHija(admin, creado.value.versionId);
