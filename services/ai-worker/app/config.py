@@ -17,6 +17,8 @@ SUPPORTED_MIME_TYPES: Final[frozenset[str]] = frozenset(
         "application/pdf",
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",  # PPTX
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # DOCX
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",  # XLSX (V2 · Fase 4)
+        "text/csv",  # CSV (V2 · Fase 4)
         "image/png",
         "image/jpeg",
     }

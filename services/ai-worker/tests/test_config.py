@@ -60,11 +60,13 @@ def test_los_logs_no_contienen_credenciales(monkeypatch: pytest.MonkeyPatch) -> 
     assert "db:5432" in redacted  # el host sí, para poder diagnosticar
 
 
-def test_formatos_soportados_son_los_de_dec_010(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_formatos_soportados_son_los_de_dec_010_mas_hojas_de_calculo(monkeypatch: pytest.MonkeyPatch) -> None:
     _set_env(monkeypatch)
     settings = load_settings()
     assert "application/pdf" in settings.supported_mime_types
     assert "image/png" in settings.supported_mime_types
-    # XLSX no está soportado: entra como excepción manual, no automática.
+    # V2 · Fase 4: las hojas de cálculo (.xlsx y .csv) ya tienen procesamiento
+    # automático; antes entraban solo como excepción manual (regla reemplazada).
     xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    assert xlsx not in settings.supported_mime_types
+    assert xlsx in settings.supported_mime_types
+    assert "text/csv" in settings.supported_mime_types

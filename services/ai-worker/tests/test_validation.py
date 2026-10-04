@@ -105,8 +105,10 @@ def test_rechaza_archivo_vacio(tmp_path: Path) -> None:
     assert resultado.valido is False
 
 
-def test_xlsx_se_rechaza_con_mensaje_util(tmp_path: Path) -> None:
-    """DEC-010 no incluye Excel; el mensaje debe decir qué hacer."""
+def test_un_zip_con_solo_xl_workbook_no_es_un_libro_valido(tmp_path: Path) -> None:
+    """Regla reemplazada en la Fase 4 de V2: antes TODO `.xlsx` se rechazaba («excepción
+    manual», DEC-010); ahora el Excel es un formato soportado, pero un ZIP que solo
+    imita la estructura mínima sigue sin ser un libro válido."""
     ruta = tmp_path / "listado.xlsx"
     with zipfile.ZipFile(ruta, "w") as z:
         z.writestr("xl/workbook.xml", "<workbook/>")
@@ -114,7 +116,44 @@ def test_xlsx_se_rechaza_con_mensaje_util(tmp_path: Path) -> None:
 
     assert resultado.valido is False
     assert resultado.motivo is not None
-    assert "excepción manual" in resultado.motivo
+    assert "libro de Excel" in resultado.motivo
+
+
+def test_un_xlsx_valido_se_acepta(tmp_path: Path) -> None:
+    xlsxwriter = pytest.importorskip("xlsxwriter")
+    ruta = tmp_path / "libro.xlsx"
+    libro = xlsxwriter.Workbook(str(ruta))
+    libro.add_worksheet().write("A1", "hola")
+    libro.close()
+    resultado = validar(str(ruta), ruta.stat().st_size, MAX)
+    assert resultado.valido is True
+    assert resultado.mime_type == XLSX
+
+
+def test_un_libro_con_macros_se_rechaza(tmp_path: Path) -> None:
+    ruta = tmp_path / "macros.xlsx"
+    with zipfile.ZipFile(ruta, "w") as z:
+        z.writestr("[Content_Types].xml", "<Types/>")
+        z.writestr("xl/workbook.xml", "<workbook/>")
+        z.writestr("xl/vbaProject.bin", b"\x00" * 20)
+    resultado = validar(str(ruta), ruta.stat().st_size, MAX)
+    assert resultado.valido is False
+    assert "macros" in (resultado.motivo or "")
+
+
+def test_un_xls_binario_antiguo_se_rechaza_con_un_mensaje_claro(tmp_path: Path) -> None:
+    ruta = escribir(tmp_path, "viejo.xls", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 200)
+    resultado = validar(str(ruta), ruta.stat().st_size, MAX)
+    assert resultado.valido is False
+    assert ".xlsx" in (resultado.motivo or "")
+
+
+def test_un_csv_se_reconoce_por_contenido_y_extension(tmp_path: Path) -> None:
+    ruta = escribir(tmp_path, "datos.csv", b"nombre,producto\nValentina,C7K\n")
+    assert validar(str(ruta), ruta.stat().st_size, MAX).mime_type == "text/csv"
+    # Sin la extensión, un texto plano no se acepta (el contenido solo restringe).
+    sin_extension = escribir(tmp_path, "datos", b"nombre,producto\nValentina,C7K\n")
+    assert validar(str(sin_extension), sin_extension.stat().st_size, MAX).valido is False
 
 
 @pytest.mark.parametrize("tipo_esperado", [PDF, PNG])

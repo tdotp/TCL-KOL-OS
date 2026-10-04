@@ -19,9 +19,11 @@ PDF = "application/pdf"
 PNG = "image/png"
 JPEG = "image/jpeg"
 MARKDOWN = "text/markdown"
+CSV = "text/csv"
 
-#: Formatos aceptados en MVP 1 (DEC-010).
-PERMITIDOS = frozenset({PPTX, DOCX, PDF, PNG, JPEG, MARKDOWN})
+#: Formatos aceptados: los de MVP 1 (DEC-010) más las hojas de cálculo `.xlsx`
+#: y `.csv` (V2 · Fase 4). El `.xls` binario y los libros con macros NO.
+PERMITIDOS = frozenset({PPTX, DOCX, XLSX, CSV, PDF, PNG, JPEG, MARKDOWN})
 
 
 @dataclass(frozen=True)
@@ -69,6 +71,9 @@ def _es_texto_utf8(muestra: bytes) -> bool:
 
 #: Extensiones que declaran texto. Ver `detectar_tipo` para por qué importan.
 _EXTENSIONES_TEXTO = (".md", ".markdown", ".txt")
+_EXTENSIONES_CSV = (".csv",)
+#: Firma de los contenedores OLE antiguos (`.xls`, `.doc`, `.ppt`) y de los OOXML cifrados.
+_FIRMA_OLE = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 
 
 def detectar_tipo(path: str, nombre: str | None = None) -> str | None:
@@ -99,6 +104,8 @@ def detectar_tipo(path: str, nombre: str | None = None) -> str | None:
         return _tipo_ooxml(path)
 
     referencia = (nombre or path).lower()
+    if referencia.endswith(_EXTENSIONES_CSV) and muestra and _es_texto_utf8(muestra):
+        return CSV
     if referencia.endswith(_EXTENSIONES_TEXTO) and muestra and _es_texto_utf8(muestra):
         return MARKDOWN
 
@@ -126,23 +133,37 @@ def validar(
     real = detectar_tipo(path, nombre)
 
     if real is None:
+        with open(path, "rb") as f:
+            if f.read(8) == _FIRMA_OLE:
+                return ResultadoValidacion(
+                    False,
+                    motivo=(
+                        "Los archivos de Office antiguos (.xls, .doc, .ppt) y los protegidos con "
+                        "contraseña no son compatibles. Guárdelo como .xlsx, .docx o .pptx sin contraseña."
+                    ),
+                )
         return ResultadoValidacion(
             False,
             motivo=(
                 "No se reconoce el tipo de archivo. "
-                "Formatos aceptados: Markdown, PDF, PPTX, DOCX, PNG y JPG."
+                "Formatos aceptados: Markdown, PDF, PPTX, DOCX, XLSX, CSV, PNG y JPG."
             ),
         )
 
     if real not in PERMITIDOS:
-        if real == XLSX:
-            return ResultadoValidacion(
-                False,
-                real,
-                "Los archivos de Excel no tienen procesamiento automático en esta fase. "
-                "Cárguelo como excepción manual si es necesario.",
-            )
         return ResultadoValidacion(False, real, f"El tipo {real} no está permitido.")
+
+    if real == XLSX:
+        # Mismas comprobaciones que al subir (TypeScript): estructura, macros y
+        # señales de ZIP bomb. Segunda línea de defensa en otro runtime.
+        from .parsers.base import ParseError
+        from .parsers.xlsx_parser import validar_libro
+
+        try:
+            with zipfile.ZipFile(path) as zf:
+                validar_libro(zf)
+        except (ParseError, zipfile.BadZipFile) as exc:
+            return ResultadoValidacion(False, real, str(exc))
 
     # La discrepancia entre lo declarado y lo real no bloquea —los navegadores
     # se equivocan a menudo— pero se registra: un ejecutable disfrazado de PDF
