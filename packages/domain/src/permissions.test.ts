@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { ROLES } from './types';
 import type { ResourceScope, Role, User } from './types';
-import { actionsFor, authorize, canAccessResource, roleCan } from './permissions';
+import { actionsFor, authorize, canAccessResource, isTclVisible, roleCan } from './permissions';
 
 function user(role: Role, organizationId = 'org-smartpr'): User {
   return {
@@ -100,8 +100,36 @@ describe('vista del cliente TCL (DEC-012 / ADR-004)', () => {
     expect(roleCan('cliente', 'comment:client_visible')).toBe(false);
   });
 
-  it('solo lee campaña y brief y exporta — nada más', () => {
-    expect([...actionsFor('cliente')].sort()).toEqual(['brief:export', 'brief:read', 'campaign:read']);
+  it('solo lee campaña, brief y las fuentes que SmartPR le expone, y exporta — nada más', () => {
+    // V2 · Fase 1A añadió `source:read_shared`: lectura de fuentes marcadas
+    // visibles para TCL. NO es `source:read` (todas las de la organización).
+    expect([...actionsFor('cliente')].sort()).toEqual([
+      'brief:export',
+      'brief:read',
+      'campaign:read',
+      'source:read_shared',
+    ]);
+    expect(roleCan('cliente', 'source:read')).toBe(false);
+    expect(roleCan('cliente', 'source:set_visibility')).toBe(false);
+  });
+});
+
+// ─────────────────────────── Visibilidad (V2 · Fase 1A) ────────────────────────
+
+describe('contrato de visibilidad documental', () => {
+  it('interna es solo de SmartPR; tcl y compartida son visibles para TCL', () => {
+    expect(isTclVisible('interna')).toBe(false);
+    expect(isTclVisible('tcl')).toBe(true);
+    expect(isTclVisible('compartida')).toBe(true);
+  });
+
+  it('decidir qué ve TCL es de SmartPR (admin, director, consultor), nunca de TCL ni de Operativo', () => {
+    for (const rol of ['admin', 'director', 'consultor'] as const) {
+      expect(roleCan(rol, 'source:set_visibility'), rol).toBe(true);
+    }
+    for (const rol of ['cliente', 'analista', 'legal'] as const) {
+      expect(roleCan(rol, 'source:set_visibility'), rol).toBe(false);
+    }
   });
 });
 

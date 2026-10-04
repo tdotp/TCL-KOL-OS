@@ -16,7 +16,10 @@
  * pone la autorización, que es lo que el worker no puede saber.
  */
 
+import type { Result, User } from '@tcl-kol-os/domain';
+import { err, ok } from '@tcl-kol-os/domain';
 import { query } from './client.ts';
+import { resolverAlcanceDeFuentes } from './sources.ts';
 
 /** Un fragmento recuperado, con lo necesario para abrirlo en su fuente. */
 export interface EvidenceHit {
@@ -46,6 +49,12 @@ export interface BusquedaOpciones {
    * viene al caso — §9.4 prefiere `not_found` sobre un respaldo inventado.
    */
   readonly distanciaMaxima?: number;
+  /**
+   * Solo fuentes visibles para TCL (V2 · Fase 1A). Lo fija
+   * `buscarEvidenciaComoActor` según el rol; llamar a `buscarEvidencia`
+   * directamente es para procesos internos de SmartPR, nunca para un cliente.
+   */
+  readonly soloVisibleParaTcl?: boolean;
 }
 
 /** Tope duro: ninguna búsqueda devuelve más que esto, pida lo que pida. */
@@ -101,11 +110,12 @@ export async function buscarEvidencia(opciones: BusquedaOpciones): Promise<Evide
         AND s.campaign_id     = $2
         AND s.status          = 'procesado'
         AND s.confidentiality_level <> 'sensible'
+        AND ($6::boolean = false OR s.visibility IN ('tcl', 'compartida'))
         AND f.embedding IS NOT NULL
         AND (f.embedding <=> $3::vector) <= $4
       ORDER BY f.embedding <=> $3::vector
       LIMIT $5`,
-    [organizationId, campaignId, literal, distanciaMaxima, limite],
+    [organizationId, campaignId, literal, distanciaMaxima, limite, opciones.soloVisibleParaTcl ?? false],
   );
 
   return filas.map((f) => ({
@@ -120,6 +130,26 @@ export async function buscarEvidencia(opciones: BusquedaOpciones): Promise<Evide
     linea: f.linea,
     distancia: Number(f.distancia),
   }));
+}
+
+/**
+ * Búsqueda de evidencia en nombre de una persona: aplica el alcance de lectura
+ * de fuentes de su rol (`resolverAlcanceDeFuentes`). Un cliente solo recupera
+ * fragmentos de fuentes marcadas como visibles para TCL.
+ */
+export async function buscarEvidenciaComoActor(
+  actor: User,
+  opciones: Omit<BusquedaOpciones, 'organizationId' | 'soloVisibleParaTcl'>,
+): Promise<Result<EvidenceHit[]>> {
+  const alcance = await resolverAlcanceDeFuentes(actor, opciones.campaignId);
+  if (!alcance.ok) return err({ code: alcance.error.code, message: alcance.error.message });
+  return ok(
+    await buscarEvidencia({
+      ...opciones,
+      organizationId: alcance.value.organizationId,
+      soloVisibleParaTcl: alcance.value.soloVisibleParaTcl,
+    }),
+  );
 }
 
 /**

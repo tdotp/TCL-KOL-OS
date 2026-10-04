@@ -5,7 +5,18 @@
  * aplica, y toda consulta filtra además por organización en el propio SQL.
  */
 
-import { FORMATOS_CON_EXTRACCION, validarArchivo, type Result, type User, err, ok } from '@tcl-kol-os/domain';
+import {
+  FORMATOS_CON_EXTRACCION,
+  canAccessResource,
+  isTclVisible,
+  roleCan,
+  validarArchivo,
+  type Result,
+  type User,
+  type Visibility,
+  err,
+  ok,
+} from '@tcl-kol-os/domain';
 import { assertCapability } from './authz.ts';
 import { getPool, transaction } from './client.ts';
 import { recordAudit } from './audit.ts';
@@ -51,6 +62,72 @@ async function campanaPropia(actor: User, campaignId: string): Promise<boolean> 
   return rows.length > 0;
 }
 
+const NO_ENCONTRADO = {
+  code: 'RESOURCE_NOT_FOUND',
+  message: 'El recurso no existe o no está disponible.',
+} as const;
+
+/**
+ * Alcance con el que un actor puede leer las fuentes de una campaña
+ * (V2 · Fase 1A). Es el ÚNICO sitio donde se decide, y lo reutilizan los
+ * listados, la lectura por id, la búsqueda y la evidencia.
+ *
+ *  · Personal de SmartPR con `source:read`: todas las fuentes de su
+ *    organización.
+ *  · Cliente con `source:read_shared`: solo si la campaña ya es visible para
+ *    TCL **y**, además, únicamente las fuentes marcadas como visibles para TCL.
+ *    Que la campaña sea visible NO expone sus fuentes.
+ */
+export interface AlcanceDeFuentes {
+  /** Organización dueña de las fuentes (la de la campaña, no la del actor). */
+  readonly organizationId: string;
+  readonly soloVisibleParaTcl: boolean;
+}
+
+export async function resolverAlcanceDeFuentes(
+  actor: User,
+  campaignId: string,
+): Promise<Result<AlcanceDeFuentes>> {
+  if (actor.status !== 'activo') {
+    return err({ code: 'FORBIDDEN_ROLE', message: 'El usuario no está activo.' });
+  }
+
+  if (roleCan(actor.role, 'source:read')) {
+    if (!(await campanaPropia(actor, campaignId))) return err(NO_ENCONTRADO);
+    return ok({ organizationId: actor.organizationId, soloVisibleParaTcl: false });
+  }
+
+  if (roleCan(actor.role, 'source:read_shared')) {
+    const { rows } = await getPool().query<{
+      organization_id: string;
+      confidentiality_level: string;
+      visibility: Visibility;
+    }>(`SELECT organization_id, confidentiality_level, visibility FROM campaigns WHERE id = $1`, [
+      campaignId,
+    ]);
+    const campana = rows[0];
+    if (
+      !campana ||
+      !canAccessResource(actor, {
+        organizationId: campana.organization_id,
+        confidentialityLevel: campana.confidentiality_level as
+          'publica' | 'interna' | 'confidencial' | 'sensible',
+        visibility: campana.visibility,
+        createdBy: '',
+      })
+    ) {
+      return err(NO_ENCONTRADO);
+    }
+    return ok({ organizationId: campana.organization_id, soloVisibleParaTcl: true });
+  }
+
+  return err({
+    code: 'FORBIDDEN_ROLE',
+    message: `El rol ${actor.role} no puede ejecutar la acción source:read.`,
+    details: { action: 'source:read', role: actor.role },
+  });
+}
+
 // ─────────────────────────── Consultas ────────────────────────────────────────
 
 const SELECT_SOURCES = `
@@ -70,18 +147,29 @@ const SELECT_SOURCES = `
 `;
 
 export async function listSources(actor: User, campaignId: string): Promise<Result<SourceRow[]>> {
-  const permitido = assertCapability(actor, 'source:read');
-  if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
-
-  if (!(await campanaPropia(actor, campaignId))) {
-    return err({ code: 'RESOURCE_NOT_FOUND', message: 'El recurso no existe o no está disponible.' });
-  }
+  const alcance = await resolverAlcanceDeFuentes(actor, campaignId);
+  if (!alcance.ok) return err({ code: alcance.error.code, message: alcance.error.message });
 
   const { rows } = await getPool().query<SourceRow>(
-    `${SELECT_SOURCES} WHERE s.campaign_id = $1 AND s.organization_id = $2 ORDER BY s.created_at DESC`,
-    [campaignId, actor.organizationId],
+    `${SELECT_SOURCES}
+      WHERE s.campaign_id = $1 AND s.organization_id = $2
+        AND ($3::boolean = false OR s.visibility IN ('tcl', 'compartida'))
+      ORDER BY s.created_at DESC`,
+    [campaignId, alcance.value.organizationId, alcance.value.soloVisibleParaTcl],
   );
-  return ok(rows);
+
+  // El estado técnico del procesamiento (errores, reintentos) es interno.
+  return ok(
+    alcance.value.soloVisibleParaTcl
+      ? rows.map((r) => ({
+          ...r,
+          job_status: null,
+          job_intentos: null,
+          job_error: null,
+          job_disponible_en: null,
+        }))
+      : rows,
+  );
 }
 
 export async function getFragments(
@@ -89,16 +177,28 @@ export async function getFragments(
   sourceId: string,
   limite = 200,
 ): Promise<Result<FragmentRow[]>> {
-  const permitido = assertCapability(actor, 'source:read');
-  if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
+  const { rows: fuentes } = await getPool().query<{
+    campaign_id: string;
+    organization_id: string;
+    visibility: Visibility;
+  }>(`SELECT campaign_id, organization_id, visibility FROM source_documents WHERE id = $1`, [sourceId]);
+  const fuente = fuentes[0];
 
-  const { rows: propias } = await getPool().query<{ id: string }>(
-    `SELECT id FROM source_documents WHERE id = $1 AND organization_id = $2`,
-    [sourceId, actor.organizationId],
-  );
-  if (propias.length === 0) {
-    return err({ code: 'RESOURCE_NOT_FOUND', message: 'El recurso no existe o no está disponible.' });
+  // Sin la capacidad, el error es de rol aunque la fuente no exista (no hay
+  // nada que proteger todavía); con la capacidad, todo lo demás es «no existe».
+  if (!roleCan(actor.role, 'source:read') && !roleCan(actor.role, 'source:read_shared')) {
+    return err({
+      code: 'FORBIDDEN_ROLE',
+      message: `El rol ${actor.role} no puede ejecutar la acción source:read.`,
+      details: { action: 'source:read', role: actor.role },
+    });
   }
+  if (!fuente) return err(NO_ENCONTRADO);
+
+  const alcance = await resolverAlcanceDeFuentes(actor, fuente.campaign_id);
+  if (!alcance.ok) return err(NO_ENCONTRADO);
+  if (fuente.organization_id !== alcance.value.organizationId) return err(NO_ENCONTRADO);
+  if (alcance.value.soloVisibleParaTcl && !isTclVisible(fuente.visibility)) return err(NO_ENCONTRADO);
 
   const { rows } = await getPool().query<FragmentRow>(
     `SELECT id, ordinal, page, slide, section, linea, text, metadata
@@ -106,6 +206,55 @@ export async function getFragments(
     [sourceId, limite],
   );
   return ok(rows);
+}
+
+// ─────────────────────────── Visibilidad ──────────────────────────────────────
+
+const VISIBILIDADES: readonly Visibility[] = ['interna', 'tcl', 'compartida'];
+
+/**
+ * Decide si una fuente es visible para TCL (V2 · Fase 1A). Es una decisión
+ * explícita y auditada de SmartPR: ninguna fuente se expone por defecto
+ * (`visibility` nace `interna`) ni por pertenecer a una campaña visible.
+ */
+export async function setSourceVisibility(
+  actor: User,
+  sourceId: string,
+  visibility: Visibility,
+): Promise<Result<{ visibility: Visibility }>> {
+  const permitido = assertCapability(actor, 'source:set_visibility');
+  if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
+
+  if (!VISIBILIDADES.includes(visibility)) {
+    return err({
+      code: 'BRIEF_FIELD_INVALID',
+      message: `«${String(visibility)}» no es una visibilidad válida.`,
+    });
+  }
+
+  const { rows } = await getPool().query<{ visibility: Visibility; filename: string }>(
+    `SELECT visibility, filename FROM source_documents WHERE id = $1 AND organization_id = $2`,
+    [sourceId, actor.organizationId],
+  );
+  const fuente = rows[0];
+  if (!fuente) return err(NO_ENCONTRADO);
+  if (fuente.visibility === visibility) return ok({ visibility });
+
+  await transaction(async (client) => {
+    await client.query(`UPDATE source_documents SET visibility = $1::visibility_level WHERE id = $2`, [
+      visibility,
+      sourceId,
+    ]);
+    await recordAudit(client, {
+      actor,
+      action: 'source.set_visibility',
+      entityType: 'source_document',
+      entityId: sourceId,
+      metadata: { from: fuente.visibility, to: visibility, filename: fuente.filename },
+    });
+  });
+
+  return ok({ visibility });
 }
 
 // ─────────────────────────── Carga ────────────────────────────────────────────

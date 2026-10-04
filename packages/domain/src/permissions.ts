@@ -9,7 +9,7 @@
  *    URL o API".
  */
 
-import type { ResourceScope, Role, User } from './types';
+import type { ResourceScope, Role, User, Visibility } from './types';
 import { type Result, err, ok } from './errors';
 
 /** Acciones sobre recursos del dominio. */
@@ -21,6 +21,12 @@ export type Action =
   | 'source:upload'
   | 'source:read'
   | 'source:process'
+  // V2 · Fase 1A: lectura de las fuentes que SmartPR marcó como visibles para
+  // TCL. Es distinta de `source:read` (todo lo de la organización): el cliente
+  // nunca recibe `source:read`.
+  | 'source:read_shared'
+  // Decidir qué fuentes ve TCL. Es una decisión de SmartPR, no del cliente.
+  | 'source:set_visibility'
   | 'brief:read'
   | 'brief:edit'
   | 'brief:request_review'
@@ -59,6 +65,7 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'source:upload',
     'source:read',
     'source:process',
+    'source:set_visibility',
     'brief:read',
     'brief:edit',
     'brief:request_review',
@@ -91,6 +98,7 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'source:upload',
     'source:read',
     'source:process',
+    'source:set_visibility',
     'brief:read',
     'brief:edit',
     'brief:request_review',
@@ -119,6 +127,7 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'source:upload',
     'source:read',
     'source:process',
+    'source:set_visibility',
     'brief:read',
     'brief:edit',
     'brief:request_review',
@@ -152,7 +161,7 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
   // descarga el entregable (DEC-012 / ADR-004). No aprueba, no pide cambios y
   // no mueve ningún estado — esas decisiones son de SmartPR (corrección del
   // workflow cliente, `docs/product/CLIENT_WORKFLOW_CORRECTION.md`).
-  cliente: ['campaign:read', 'brief:read', 'brief:export'],
+  cliente: ['campaign:read', 'source:read_shared', 'brief:read', 'brief:export'],
 };
 
 /** ¿El rol tiene la capacidad, con independencia del recurso concreto? */
@@ -172,6 +181,15 @@ export function actionsFor(role: Role): readonly Action[] {
  *  1. Misma organización que el recurso, salvo que sea visible para el cliente.
  *  2. El rol `cliente` nunca ve recursos con visibilidad `interna`.
  */
+/**
+ * ¿Esta visibilidad expone el recurso a TCL? Contrato único (V2 · Fase 1A):
+ * `interna` es solo de SmartPR; `tcl` y `compartida` son visibles para TCL.
+ * Todo lo que deba decidirse por visibilidad pasa por aquí.
+ */
+export function isTclVisible(visibility: Visibility): boolean {
+  return visibility === 'tcl' || visibility === 'compartida';
+}
+
 export function canAccessResource(user: User, scope: ResourceScope): boolean {
   if (user.status !== 'activo') return false;
 
@@ -180,7 +198,7 @@ export function canAccessResource(user: User, scope: ResourceScope): boolean {
   if (user.role === 'cliente') {
     // El cliente pertenece a otra organización por definición: accede solo a lo
     // que se le compartió explícitamente, y nunca a material interno.
-    return scope.visibility === 'tcl' || scope.visibility === 'compartida';
+    return isTclVisible(scope.visibility);
   }
 
   if (!sameOrg) return false;

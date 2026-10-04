@@ -24,7 +24,16 @@
  * intermedio.
  */
 
-import { type Result, type User, canAccessResource, err, ok } from '@tcl-kol-os/domain';
+import {
+  type Result,
+  type User,
+  type Visibility,
+  canAccessResource,
+  err,
+  isTclVisible,
+  ok,
+  roleCan,
+} from '@tcl-kol-os/domain';
 import { assertCapability } from './authz.ts';
 import { query, transaction } from './client.ts';
 import { obtenerOCrearVersionDeTrabajo } from './brief-version.ts';
@@ -340,6 +349,8 @@ export async function camposDeVersion(versionId: string): Promise<
       slide: number | null;
       section: string | null;
       linea: number | null;
+      /** Visibilidad de la fuente citada (V2 · Fase 1A). */
+      sourceVisibility: Visibility;
     }>;
   }>
 > {
@@ -362,7 +373,7 @@ export async function camposDeVersion(versionId: string): Promise<
               json_agg(
                 json_build_object(
                   'quote', e.quote, 'relation', e.relation::text,
-                  'filename', s.filename, 'sourceId', s.id,
+                  'filename', s.filename, 'sourceId', s.id, 'sourceVisibility', s.visibility::text,
                   'page', e.page, 'slide', e.slide, 'section', e.section, 'linea', e.linea
                 ) ORDER BY e.created_at
               ) FILTER (WHERE e.id IS NOT NULL),
@@ -397,6 +408,7 @@ export async function camposDeVersion(versionId: string): Promise<
       slide: number | null;
       section: string | null;
       linea: number | null;
+      sourceVisibility: Visibility;
     }>,
   }));
 }
@@ -608,5 +620,19 @@ export async function verCamposDeVersion(
     return err({ code: 'RESOURCE_NOT_FOUND', message: 'El recurso no existe o no está disponible.' });
   }
 
-  return ok(await camposDeVersion(versionId));
+  const campos = await camposDeVersion(versionId);
+
+  // V2 · Fase 1A: quien no puede leer las fuentes internas (el cliente) no
+  // recibe la evidencia que las cita — ni su cita textual ni el nombre del
+  // archivo — salvo que la fuente esté marcada como visible para TCL. La
+  // campaña visible no expone sus fuentes.
+  if (!roleCan(actor.role, 'source:read')) {
+    return ok(
+      campos.map((c) => ({
+        ...c,
+        evidencias: c.evidencias.filter((e) => isTclVisible(e.sourceVisibility)),
+      })),
+    );
+  }
+  return ok(campos);
 }
