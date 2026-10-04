@@ -7,7 +7,7 @@
  */
 
 import type pg from 'pg';
-import type { User } from '@tcl-kol-os/domain';
+import { AUDIT_ORIGINS, type AuditCorrelation, type AuditOrigin, type User } from '@tcl-kol-os/domain';
 
 export interface AuditInput {
   /**
@@ -22,6 +22,44 @@ export interface AuditInput {
   readonly entityType: string;
   readonly entityId?: string | undefined;
   readonly metadata?: Readonly<Record<string, unknown>> | undefined;
+  /**
+   * Canal desde el que ocurrió la acción (V2 · Fase 1C). Por defecto: `system`
+   * si el actor es el sistema, `ui` si es una persona. Una persona nunca queda
+   * registrada como `system`, ni el sistema como `ui`.
+   */
+  readonly origin?: AuditOrigin | undefined;
+  /** Correlación opcional con conversación / mensaje / ejecución / acción propuesta. */
+  readonly correlation?: AuditCorrelation | undefined;
+}
+
+const CLAVES_DE_CORRELACION = ['conversationId', 'messageId', 'agentRunId', 'proposedActionId'] as const;
+
+/** Solo las claves conocidas y con valor de texto; nada más llega a la base. */
+export function sanitizeCorrelation(
+  correlation: AuditCorrelation | undefined,
+): Record<string, string> | null {
+  if (correlation === undefined) return null;
+  const limpio: Record<string, string> = {};
+  for (const clave of CLAVES_DE_CORRELACION) {
+    const valor = correlation[clave];
+    if (typeof valor === 'string' && valor !== '') limpio[clave] = valor;
+  }
+  return Object.keys(limpio).length === 0 ? null : limpio;
+}
+
+/** Origen efectivo de un evento, validando que sea coherente con el actor. */
+export function resolveOrigin(actor: User | 'system', origin: AuditOrigin | undefined): AuditOrigin {
+  const efectivo = origin ?? (actor === 'system' ? 'system' : 'ui');
+  if (!AUDIT_ORIGINS.includes(efectivo)) {
+    throw new Error(`recordAudit: origen «${String(efectivo)}» no válido.`);
+  }
+  if (actor === 'system' && efectivo !== 'system') {
+    throw new Error('recordAudit: una acción del sistema no puede registrarse con origen ui o chat.');
+  }
+  if (actor !== 'system' && efectivo === 'system') {
+    throw new Error('recordAudit: una acción de una persona no puede registrarse con origen system.');
+  }
+  return efectivo;
 }
 
 /**
@@ -65,10 +103,13 @@ export async function recordAudit(client: pg.PoolClient, input: AuditInput): Pro
     throw new Error('recordAudit: organizationId es obligatorio cuando el actor es "system".');
   }
   const actorId = input.actor === 'system' ? null : input.actor.id;
+  const origin = resolveOrigin(input.actor, input.origin);
+  const correlation = sanitizeCorrelation(input.correlation);
 
   await client.query(
-    `INSERT INTO audit_events (organization_id, actor_id, action, entity_type, entity_id, metadata)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
+    `INSERT INTO audit_events
+       (organization_id, actor_id, action, entity_type, entity_id, metadata, origin, correlation)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [
       organizationId,
       actorId,
@@ -76,6 +117,8 @@ export async function recordAudit(client: pg.PoolClient, input: AuditInput): Pro
       input.entityType,
       input.entityId ?? null,
       JSON.stringify(sanitizeMetadata(input.metadata)),
+      origin,
+      correlation === null ? null : JSON.stringify(correlation),
     ],
   );
 }
@@ -88,6 +131,9 @@ export interface AuditEventRow {
   readonly entity_id: string | null;
   readonly metadata: Record<string, unknown>;
   readonly created_at: Date;
+  /** `null` = evento anterior a V2 (origen no registrado). */
+  readonly origin: AuditOrigin | null;
+  readonly correlation: AuditCorrelation | null;
 }
 
 /** Auditoría de la organización del actor. Nunca de otra. */
@@ -97,7 +143,8 @@ export async function listAudit(
   limit = 50,
 ): Promise<AuditEventRow[]> {
   const { rows } = await client.query<AuditEventRow>(
-    `SELECT a.id, u.name AS actor_name, a.action, a.entity_type, a.entity_id, a.metadata, a.created_at
+    `SELECT a.id, u.name AS actor_name, a.action, a.entity_type, a.entity_id, a.metadata, a.created_at,
+            a.origin, a.correlation
        FROM audit_events a
        LEFT JOIN users u ON u.id = a.actor_id
       WHERE a.organization_id = $1
@@ -135,7 +182,8 @@ export async function listBriefActivity(
      ), comment_ids AS (
        SELECT id FROM field_comments WHERE brief_version_id IN (SELECT id FROM version_ids)
      )
-     SELECT a.id, u.name AS actor_name, a.action, a.entity_type, a.entity_id, a.metadata, a.created_at
+     SELECT a.id, u.name AS actor_name, a.action, a.entity_type, a.entity_id, a.metadata, a.created_at,
+            a.origin, a.correlation
        FROM audit_events a
        LEFT JOIN users u ON u.id = a.actor_id
       WHERE a.organization_id = $1

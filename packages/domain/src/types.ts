@@ -229,3 +229,27 @@ export interface CampaignProduct {
   readonly prioridad: number;
   readonly participacionPresupuesto?: number | undefined;
 }
+
+// ─────────────────────────── Origen de una acción (V2 · Fase 1C) ───────────────
+
+/**
+ * Canal desde el que ocurrió una acción registrada: `ui` (una persona en la
+ * interfaz), `chat` (el agente conversacional, cuando exista) o `system` (el
+ * worker u otro proceso automático). Es un dato de auditoría y también una
+ * frontera de autorización: las acciones críticas solo se ejecutan desde `ui`.
+ */
+export type AuditOrigin = 'ui' | 'chat' | 'system';
+
+export const AUDIT_ORIGINS: readonly AuditOrigin[] = ['ui', 'chat', 'system'] as const;
+
+/**
+ * Correlación opcional de un evento con el contexto que lo originó. Es
+ * deliberadamente genérica (sin FK): conversación, mensaje y ejecución del
+ * agente todavía no existen como entidades.
+ */
+export interface AuditCorrelation {
+  readonly conversationId?: string | undefined;
+  readonly messageId?: string | undefined;
+  readonly agentRunId?: string | undefined;
+  readonly proposedActionId?: string | undefined;
+}
