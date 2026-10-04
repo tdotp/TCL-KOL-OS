@@ -663,6 +663,17 @@ posterior a aprobación». 15 de septiembre de 2026.
 - **Dónde vive:** `infra/db/migrations/014_modelo_bilingue_v2.sql`; `packages/domain/src/representations.ts`, `brief-states.ts`; `packages/db/src/brief-representations.ts`, `versioning.ts`, `brief-version.ts`; detalle en `docs/product/BILINGUAL_MODEL_V2.md`.
 - **Responsable de aprobación:** Gerardo Calambás.
 
+### DEC-044 — Influencer (identidad) y CampaignInfluencer (participación): entidades separadas, aislamiento y producto impuestos en la base
+
+- **Fecha:** 4 de octubre de 2026
+- **Estado:** **aprobada** — V2 · Fase 3
+- **Origen:** el workflow V2 exige que «la relación del influencer con la campaña» sea el contexto central de contenido, operación y performance, y que una persona no se duplique por trabajar en varias plataformas o campañas. No existía ninguna entidad equivalente en el código (D0-08 §5 solo las reservaba: `Influencer`, `CampaignCreator`).
+- **Decisión:** (1) `Influencer` es la identidad estable, propiedad de una organización (agencia); no lleva nada de campaña. (2) Sus cuentas viven en `influencer_accounts` (plataforma + handle); la identidad fuerte es `UNIQUE (organización, plataforma, handle normalizado)` con una única regla de normalización determinística (`normalizeHandle`, sin fuzzy); el nombre nunca es clave. (3) `CampaignInfluencer` es la participación, con `UNIQUE (campaña, influencer)` y un estado mínimo `activo | retirado` (retirar conserva la fila; no hay borrado). (4) El producto asignado referencia `campaign_products` (no catálogo ni texto) mediante claves compuestas que hacen imposible asignar un producto de otra campaña. (5) El aislamiento por organización se impone con claves foráneas compuestas, no solo en la aplicación. (6) Permisos: `influencer:read|manage` y `campaign_influencer:read|manage` para admin/director/consultor; el Operativo solo lee; el cliente y el sistema no obtienen nada nuevo. (7) Sin campo de origen: `audit_events.origin` ya registra quién y por qué canal. (8) Sin HITL: no son decisiones críticas.
+- **Migraciones:** `015_influencers.sql` (identidad y cuentas) y `016_campaign_influencers.sql` (participación y producto asignado), forward-only y aditivas. Solo añaden dos `UNIQUE` (id + columna de aislamiento) a `campaigns` y `campaign_products` para poder referenciarlas con claves compuestas.
+- **Fuera de alcance:** Google Sheets, matching, Excel, chat, acuerdos/fee/canje, entregables, guiones, envíos, facturación, pagos, KPIs, dashboard TCL, UI.
+- **Dónde vive:** `infra/db/migrations/015_influencers.sql`, `016_campaign_influencers.sql`; `packages/domain/src/influencers.ts`, `permissions.ts`; `packages/db/src/influencers.ts`, `campaign-influencers.ts`, `tx-result.ts`; detalle en `docs/product/INFLUENCER_MODEL_V2.md`.
+- **Responsable de aprobación:** Gerardo Calambás.
+
 ---
 
 ## Decisiones pendientes que no bloquean MVP 0
