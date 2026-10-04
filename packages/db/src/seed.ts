@@ -40,6 +40,7 @@ export async function seed(): Promise<void> {
          ('gerardo@smartpr.co',  'Gerardo Calambás',  $1, 'admin'),
          ('director@smartpr.co', 'Director de cuenta', $1, 'director'),
          ('consultor@smartpr.co','Consultora PR',      $1, 'consultor'),
+         ('operativo@smartpr.co','Usuario Operativo',  $1, 'operativo'),
          ('marena@tcl.com',      'Marena Herreño',     $2, 'cliente'),
          ('ajeno@otraagencia.co','Usuario Ajeno',      $3, 'admin')
        RETURNING id, email`,
@@ -111,7 +112,7 @@ export async function seed(): Promise<void> {
     );
 
     console.log(`  organizaciones: 3 (SmartPR, TCL Colombia, Agencia Ajena)`);
-    console.log(`  usuarios: 5`);
+    console.log(`  usuarios: 6`);
     console.log(`  productos: 6`);
     console.log(`  campañas: 3 — dos de SmartPR, una de otra organización`);
     console.log(`    · Lanzamiento línea P80 → 3 productos, reparto 60/20/10`);

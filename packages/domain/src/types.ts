@@ -15,7 +15,20 @@ export type OrganizationType = 'agencia' | 'cliente';
  * En MVP 1 solo se construye `admin` (DEC-011), pero los seis se modelan desde
  * el inicio para no rehacer el control de acceso al incorporar consultores.
  */
-export type Role = 'admin' | 'director' | 'consultor' | 'analista' | 'legal' | 'cliente';
+export type Role =
+  | 'admin'
+  | 'director'
+  | 'consultor'
+  | 'analista'
+  | 'legal'
+  /**
+   * Usuario Operativo de SmartPR (V2 · Fase 1): gestionará acuerdos, envíos,
+   * facturación, pagos y KPIs cuando existan esas entidades. Hoy solo entra y
+   * consulta el contexto del proyecto. No es `cliente` (no es de TCL) ni
+   * `analista` (que es lectura de análisis, sin función operativa).
+   */
+  | 'operativo'
+  | 'cliente';
 
 export const ROLES: readonly Role[] = [
   'admin',
@@ -23,6 +36,7 @@ export const ROLES: readonly Role[] = [
   'consultor',
   'analista',
   'legal',
+  'operativo',
   'cliente',
 ] as const;
 

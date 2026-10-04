@@ -127,7 +127,7 @@ describe('contrato de visibilidad documental', () => {
     for (const rol of ['admin', 'director', 'consultor'] as const) {
       expect(roleCan(rol, 'source:set_visibility'), rol).toBe(true);
     }
-    for (const rol of ['cliente', 'analista', 'legal'] as const) {
+    for (const rol of ['cliente', 'operativo', 'analista', 'legal'] as const) {
       expect(roleCan(rol, 'source:set_visibility'), rol).toBe(false);
     }
   });
@@ -179,5 +179,59 @@ describe('accesos legítimos', () => {
 
   it('el consultor puede editar el brief de su organización', () => {
     expect(authorize(user('consultor'), 'brief:edit', scope()).ok).toBe(true);
+  });
+});
+
+// ─────────────────────────── Usuario Operativo (V2 · Fase 1B) ──────────────────
+
+describe('usuario operativo', () => {
+  it('existe como rol propio, distinto de cliente y de analista', () => {
+    expect(ROLES).toContain('operativo');
+    expect(actionsFor('operativo')).not.toEqual(actionsFor('cliente'));
+    expect(actionsFor('operativo')).not.toEqual(actionsFor('analista'));
+  });
+
+  it('solo entra y consulta: campaña, fuentes internas y brief', () => {
+    expect([...actionsFor('operativo')].sort()).toEqual(['brief:read', 'campaign:read', 'source:read']);
+  });
+
+  it('no aprueba, no transiciona, no edita, no administra', () => {
+    for (const action of [
+      'brief:approve_internal',
+      'brief:transition',
+      'brief:request_review',
+      'brief:edit',
+      'field:correct',
+      'field:confirm',
+      'question:answer',
+      'comment:internal',
+      'source:upload',
+      'source:set_visibility',
+      'admin:users',
+      'admin:integrations',
+      'admin:ai_flag',
+      'audit:read',
+      'airun:read',
+      'glossary:approve',
+    ] as const) {
+      expect(roleCan('operativo', action), `operativo podía ${action}`).toBe(false);
+    }
+  });
+
+  it('es de SmartPR, no de TCL: respeta el aislamiento por organización y la visibilidad no lo amplía', () => {
+    const operativo = user('operativo', 'org-smartpr');
+    expect(
+      canAccessResource(operativo, scope({ organizationId: 'org-smartpr', visibility: 'interna' })),
+    ).toBe(true);
+    expect(canAccessResource(operativo, scope({ organizationId: 'org-otra', visibility: 'tcl' }))).toBe(
+      false,
+    );
+  });
+
+  it('admin, director y cliente conservan su comportamiento', () => {
+    expect(roleCan('admin', 'brief:approve_internal')).toBe(true);
+    expect(roleCan('director', 'brief:approve_internal')).toBe(true);
+    expect(roleCan('consultor', 'brief:approve_internal')).toBe(false);
+    expect(roleCan('cliente', 'brief:transition')).toBe(false);
   });
 });

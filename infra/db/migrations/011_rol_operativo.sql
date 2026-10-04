@@ -1,0 +1,12 @@
+-- 011 · Rol «operativo» (V2 · Fase 1B).
+--
+-- El Usuario Operativo de SmartPR gestionará acuerdos, envíos, facturación,
+-- pagos y KPIs cuando existan esas entidades (fases posteriores). Hoy solo
+-- necesita existir como rol propio: no es `cliente` (no es de TCL) ni
+-- `analista` (lectura de análisis, sin función operativa).
+--
+-- Forward-only y aditiva: no toca los valores existentes del enum ni ninguna
+-- fila. Los permisos concretos viven en `packages/domain/src/permissions.ts`.
+-- (Un valor nuevo de enum no puede usarse dentro de la misma transacción que
+-- lo crea; esta migración solo lo crea.)
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'operativo';

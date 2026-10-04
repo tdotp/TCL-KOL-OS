@@ -157,6 +157,12 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'airun:read',
   ],
   legal: ['campaign:read', 'source:read', 'brief:read', 'question:answer', 'comment:internal', 'audit:read'],
+  // Usuario Operativo (V2 · Fase 1B). Solo entra y consulta el contexto del
+  // proyecto: campaña, fuentes internas y brief. NO aprueba, no transiciona ni
+  // edita el brief, no tiene permisos administrativos y no es cliente. Las
+  // capacidades operativas y financieras (acuerdos, envíos, pagos, KPIs) se
+  // añadirán —separadas de las creativas— cuando existan esas entidades.
+  operativo: ['campaign:read', 'source:read', 'brief:read'],
   // El cliente TCL es de solo lectura: consulta lo que ya tiene visible y
   // descarga el entregable (DEC-012 / ADR-004). No aprueba, no pide cambios y
   // no mueve ningún estado — esas decisiones son de SmartPR (corrección del

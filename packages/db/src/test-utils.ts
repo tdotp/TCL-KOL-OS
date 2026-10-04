@@ -20,7 +20,8 @@
  * la active quien la active.
  */
 
-import { transaction } from './client.ts';
+import type { Role, User } from '@tcl-kol-os/domain';
+import { query, transaction } from './client.ts';
 
 export async function eliminarCampanaDePrueba(idOids: string | readonly string[]): Promise<void> {
   const ids = Array.isArray(idOids) ? idOids : [idOids];
@@ -45,4 +46,34 @@ export async function eliminarCampanaDePrueba(idOids: string | readonly string[]
       await client.query(`DELETE FROM campaigns WHERE id = $1`, [id]);
     }
   });
+}
+
+/**
+ * Devuelve un usuario de pruebas con ese correo y rol, creándolo si la base
+ * (ya sembrada antes de que existiera el rol) no lo tiene. Solo para pruebas.
+ */
+export async function asegurarUsuarioDePrueba(
+  email: string,
+  nombre: string,
+  rol: Role,
+  organizationId: string,
+): Promise<User> {
+  await query(
+    `INSERT INTO users (email, name, organization_id, role)
+     SELECT $1, $2, $3, $4::user_role
+      WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = $1)`,
+    [email, nombre, organizationId, rol],
+  );
+  const [fila] = await query<{ id: string; organization_id: string; role: Role; name: string }>(
+    `SELECT id, organization_id, role, name FROM users WHERE email = $1`,
+    [email],
+  );
+  return {
+    id: fila!.id,
+    email,
+    name: fila!.name,
+    organizationId: fila!.organization_id,
+    role: fila!.role,
+    status: 'activo',
+  };
 }
