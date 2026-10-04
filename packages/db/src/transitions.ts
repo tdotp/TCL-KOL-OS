@@ -15,6 +15,8 @@ import {
   type Action,
   type Actor,
   type BriefStatus,
+  type AuditCorrelation,
+  type AuditOrigin,
   type Result,
   canAccessResource,
   err,
@@ -88,6 +90,27 @@ function accionParaDestino(to: BriefStatus): Action {
 }
 
 /**
+ * Destinos que son decisiones críticas (V2 · Fase 1D): solo una persona que
+ * actúa directamente desde la interfaz las ejecuta. Lo que proponga el chat o
+ * el sistema pasa por una acción propuesta que un humano confirma
+ * (`packages/db/src/proposed-actions.ts`); esa ejecución también llega aquí
+ * como acción humana desde la interfaz.
+ */
+const DESTINOS_CRITICOS: readonly BriefStatus[] = ['approved'];
+
+export interface OpcionesDeTransicion {
+  readonly motivo?: string | undefined;
+  readonly camposSenalados?: readonly string[] | undefined;
+  /**
+   * Canal desde el que se invoca. Por defecto `ui` (persona en la interfaz) —
+   * el comportamiento de siempre. Una herramienta del chat debe declararse
+   * `chat`; con ese canal, un destino crítico se rechaza.
+   */
+  readonly origen?: AuditOrigin | undefined;
+  readonly correlation?: AuditCorrelation | undefined;
+}
+
+/**
  * Ejecuta una transición de estado, con las mismas reglas para un humano o
  * para el sistema (`actor: 'system'`, usado por `extraerBrief` alrededor de
  * la llamada al worker).
@@ -106,8 +129,18 @@ export async function transicionarBrief(
   actor: Actor,
   versionId: string,
   to: BriefStatus,
-  opciones?: { motivo?: string | undefined; camposSenalados?: readonly string[] | undefined },
+  opciones?: OpcionesDeTransicion,
 ): Promise<Result<{ status: BriefStatus }>> {
+  const origen: AuditOrigin = opciones?.origen ?? (actor === 'system' ? 'system' : 'ui');
+  if (DESTINOS_CRITICOS.includes(to) && origen !== 'ui') {
+    return err({
+      code: 'HUMAN_CONFIRMATION_REQUIRED',
+      message:
+        'Aprobar es una decisión humana: debe proponerse como acción y confirmarla una persona desde la interfaz.',
+      details: { to, origen },
+    });
+  }
+
   const motivoObligatorio = to === 'internal_changes_requested';
   const motivo = opciones?.motivo?.trim();
   if (motivoObligatorio && (motivo === undefined || motivo === '')) {
@@ -200,6 +233,8 @@ export async function transicionarBrief(
     await recordAudit(client, {
       actor,
       organizationId: datos.organizationId,
+      origin: origen,
+      correlation: opciones?.correlation,
       action: 'brief.transition',
       entityType: 'brief_version',
       entityId: versionId,

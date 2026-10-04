@@ -34,7 +34,18 @@ export type DomainErrorCode =
    * alguien más modificó el campo primero. Nunca se aplica "el último que
    * escribe gana" en silencio.
    */
-  | 'FIELD_REVISION_CONFLICT';
+  | 'FIELD_REVISION_CONFLICT'
+  /**
+   * Una acción crítica (p. ej. aprobar) llegó por un canal que no es una
+   * persona actuando directamente, o sin confirmación humana válida (V2 ·
+   * Fase 1D). Debe pasar por una acción propuesta confirmada por un humano.
+   */
+  | 'HUMAN_CONFIRMATION_REQUIRED'
+  /** La acción propuesta no está en el estado que exige la operación. */
+  | 'PROPOSAL_INVALID_STATE'
+  | 'PROPOSAL_EXPIRED'
+  /** El contenido cambió entre la propuesta y la confirmación/ejecución. */
+  | 'PROPOSAL_STALE';
 
 export interface DomainErrorPayload {
   readonly code: DomainErrorCode;

@@ -12,7 +12,7 @@
  * por compatibilidad de imports.
  */
 
-import { type Result, type User, ok } from '@tcl-kol-os/domain';
+import { type AuditCorrelation, type AuditOrigin, type Result, type User, ok } from '@tcl-kol-os/domain';
 import { transicionarBrief } from './transitions.ts';
 
 // ─────────────────────────── Fase C · Revisión interna ─────────────────────────
@@ -34,8 +34,15 @@ export async function solicitarCambiosInternos(
  * cliente en modo lectura. También cierra una versión heredada en
  * `client_review`.
  */
-export async function aprobarBrief(actor: User, versionId: string): Promise<Result<{ status: 'approved' }>> {
-  const resultado = await transicionarBrief(actor, versionId, 'approved');
+export async function aprobarBrief(
+  actor: User,
+  versionId: string,
+  opciones?: { origen?: AuditOrigin | undefined; correlation?: AuditCorrelation | undefined },
+): Promise<Result<{ status: 'approved' }>> {
+  // Aprobación DIRECTA de una persona en la interfaz (origen `ui`, el valor por
+  // defecto). Un canal distinto —chat, sistema— es rechazado por
+  // `transicionarBrief`: debe usar una acción propuesta confirmada por un humano.
+  const resultado = await transicionarBrief(actor, versionId, 'approved', opciones);
   if (!resultado.ok) return resultado;
   return ok({ status: 'approved' as const });
 }

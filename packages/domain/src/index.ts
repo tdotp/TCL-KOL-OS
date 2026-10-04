@@ -18,3 +18,4 @@ export * from './ai-tasks';
 export * from './field-values';
 export * from './brief-presentation';
 export * from './workspace';
+export * from './proposed-actions';
