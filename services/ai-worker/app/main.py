@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Any, Dict, Optional  # noqa: UP035 — Pydantic evalúa las anotaciones en 3.9
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -51,6 +51,7 @@ class FragmentoEntrada(BaseModel):
     slide: Optional[int] = None  # noqa: UP007
     section: Optional[str] = None  # noqa: UP007
     linea: Optional[int] = None  # noqa: UP007
+    locator: Optional[Dict[str, Any]] = None  # noqa: UP006, UP007, UP035 — SourceLocator (V2 · Fase 4)
 
 
 class ProductoEntrada(BaseModel):
@@ -160,6 +161,7 @@ async def extraccion(peticion: ExtraccionEntrada) -> dict[str, object]:
             slide=f.slide,
             section=f.section,
             linea=f.linea,
+            locator=f.locator,
         )
         for f in peticion.fragmentos
     ]

@@ -85,6 +85,23 @@ class ExtraccionInvalidaError(RuntimeError):
     """El modelo devolvió algo que no cumple el contrato. No se persiste (E5-3)."""
 
 
+def describir_localizador_de_hoja(locator: dict[str, Any] | None) -> str | None:
+    """Texto legible para localizadores de hoja de cálculo; `None` para el resto."""
+    if not locator:
+        return None
+    tipo = locator.get("kind")
+    hoja = locator.get("sheet")
+    if tipo == "range":
+        return f"hoja «{hoja}», rango {locator.get('range')}"
+    if tipo == "cell":
+        return f"hoja «{hoja}», celda {locator.get('cell')}"
+    if tipo == "row":
+        return f"hoja «{hoja}», fila {locator.get('row')}"
+    if tipo == "sheet":
+        return f"hoja «{hoja}»"
+    return None
+
+
 @dataclass(frozen=True)
 class FragmentoDeEntrada:
     id: str
@@ -95,9 +112,14 @@ class FragmentoDeEntrada:
     slide: int | None = None
     section: str | None = None
     linea: int | None = None
+    #: Localizador con el contrato único `SourceLocator` (V2 · Fase 4).
+    locator: dict[str, Any] | None = None
 
     def localizador(self) -> str:
-        """El localizador que corresponda al formato (DEC-018)."""
+        """El localizador que corresponda al formato (DEC-018, Fase 4)."""
+        legible = describir_localizador_de_hoja(self.locator)
+        if legible is not None:
+            return legible
         if self.slide is not None:
             return f"diapositiva {self.slide}"
         if self.section:

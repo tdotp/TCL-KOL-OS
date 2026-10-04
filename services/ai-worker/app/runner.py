@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from . import embeddings, parsers
-from .parsers.base import Fragment, ParseError
+from .parsers.base import Fragment, ParseError, Resultado
 
 logger = logging.getLogger("ai-worker.runner")
 
@@ -70,6 +70,7 @@ class Job:
     file_path: str
     mime_type: str
     filename: str
+    organization_id: str = ""
 
 
 def _backoff(intentos: int) -> int:
@@ -99,7 +100,7 @@ def tomar_job(conn: Any) -> Job | None:
              WHERE j.id = tomado.id
                AND s.id = j.source_id
             RETURNING j.id, j.source_id, j.intentos, j.max_intentos,
-                      s.file_id, s.mime_type, s.filename
+                      s.file_id, s.mime_type, s.filename, s.organization_id
             """
         )
         fila = cur.fetchone()
@@ -122,6 +123,7 @@ def tomar_job(conn: Any) -> Job | None:
         file_path=str(fila[4]),
         mime_type=str(fila[5]),
         filename=str(fila[6]),
+        organization_id=str(fila[7]),
     )
 
 
@@ -134,8 +136,8 @@ def _guardar_fragmentos(conn: Any, source_id: str, fragmentos: list[Fragment]) -
             cur.execute(
                 """
                 INSERT INTO source_fragments
-                       (source_id, ordinal, page, slide, section, linea, text, metadata)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+                       (source_id, ordinal, page, slide, section, linea, locator, text, metadata)
+                VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s::jsonb)
                 """,
                 (
                     source_id,
@@ -144,6 +146,8 @@ def _guardar_fragmentos(conn: Any, source_id: str, fragmentos: list[Fragment]) -
                     f.slide,
                     f.section,
                     f.linea,
+                    # NULL = la base lo deriva de page/slide/section/linea (formatos legacy).
+                    _json(f.locator) if f.locator is not None else None,
                     f.text,
                     _json(f.metadata),
                 ),
@@ -156,20 +160,76 @@ def _json(valor: Any) -> str:
     return json.dumps(valor, ensure_ascii=False)
 
 
-def marcar_exito(conn: Any, job: Job, total: int) -> None:
+def _guardar_estructura(conn: Any, source_id: str, resultado: Resultado) -> None:
+    """Estructura normalizada del documento (p. ej. el manifiesto de un libro).
+
+    Reemplaza la anterior: reprocesar no acumula (idempotencia). Va en la misma
+    transacción que los fragmentos.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM source_representations WHERE source_id = %s AND kind = 'structure'",
+            (source_id,),
+        )
+        if resultado.estructura is not None:
+            cur.execute(
+                """
+                INSERT INTO source_representations (source_id, kind, format, content, generator)
+                VALUES (%s, 'structure', %s, %s::jsonb, %s)
+                """,
+                (
+                    source_id,
+                    resultado.formato or "desconocido",
+                    _json(resultado.estructura),
+                    resultado.generador or "ai-worker",
+                ),
+            )
+
+
+def _auditar(conn: Any, job: Job, accion: str, metadata: dict[str, Any]) -> None:
+    """Evento de auditoría de la ingestión (origen `system`, sin actor humano)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO audit_events
+                   (organization_id, actor_id, action, entity_type, entity_id, metadata, origin)
+            VALUES (%s, NULL, %s, 'source_document', %s, %s::jsonb, 'system')
+            """,
+            (job.organization_id, accion, job.source_id, _json(metadata)),
+        )
+
+
+def marcar_exito(conn: Any, job: Job, total: int, extra: dict[str, Any] | None = None) -> None:
     with conn.cursor() as cur:
         cur.execute(
             "UPDATE processing_jobs SET status='completado', finished_at=now(), error=NULL WHERE id=%s",
             (job.id,),
         )
         cur.execute("UPDATE source_documents SET status='procesado' WHERE id=%s", (job.source_id,))
+    _auditar(
+        conn,
+        job,
+        "source.ingest_completed",
+        {"mimeType": job.mime_type, "fragmentos": total, **(extra or {})},
+    )
     conn.commit()
     logger.info("Documento %s procesado: %d fragmentos", job.filename, total)
 
 
-def marcar_fallo(conn: Any, job: Job, mensaje: str) -> None:
-    """Reencola con backoff, o marca fallido definitivo al agotar los intentos."""
-    agotado = job.intentos >= job.max_intentos
+def marcar_fallo(
+    conn: Any,
+    job: Job,
+    mensaje: str,
+    *,
+    definitivo: bool = False,
+    codigo: str | None = None,
+) -> None:
+    """Reencola con backoff, o marca fallido definitivo al agotar los intentos.
+
+    `definitivo=True` (un fallo determinista, p. ej. un libro con macros o fuera
+    de límites) lo deja `fallido` de inmediato: reintentarlo daría lo mismo.
+    """
+    agotado = definitivo or job.intentos >= job.max_intentos
 
     with conn.cursor() as cur:
         if agotado:
@@ -178,6 +238,12 @@ def marcar_fallo(conn: Any, job: Job, mensaje: str) -> None:
                 (mensaje, job.id),
             )
             cur.execute("UPDATE source_documents SET status='fallido' WHERE id=%s", (job.source_id,))
+            _auditar(
+                conn,
+                job,
+                "source.ingest_failed",
+                {"mimeType": job.mime_type, "intentos": job.intentos, "codigo": codigo, "motivo": mensaje},
+            )
         else:
             espera = _backoff(job.intentos)
             cur.execute(
@@ -209,10 +275,11 @@ def procesar(conn: Any, job: Job) -> bool:
     ruta = ruta_de_almacenamiento() / job.file_path
 
     try:
-        fragmentos = parsers.parse(str(ruta), job.mime_type)
+        parseado = parsers.parse_completo(str(ruta), job.mime_type)
+        fragmentos = parseado.fragmentos
     except ParseError as exc:
         # Error esperado y legible: llega tal cual a la interfaz (E4-8).
-        marcar_fallo(conn, job, str(exc))
+        marcar_fallo(conn, job, str(exc), definitivo=not exc.reintentable, codigo=exc.codigo)
         return False
     except FileNotFoundError:
         marcar_fallo(conn, job, "El archivo original no está disponible en el almacenamiento.")
@@ -226,6 +293,7 @@ def procesar(conn: Any, job: Job) -> bool:
 
     try:
         _guardar_fragmentos(conn, job.source_id, fragmentos)
+        _guardar_estructura(conn, job.source_id, parseado)
         conn.commit()
     except Exception:  # noqa: BLE001 — se reencola abajo
         conn.rollback()
@@ -245,7 +313,15 @@ def procesar(conn: Any, job: Job) -> bool:
         conn.rollback()
         logger.exception("Falló la indexación vectorial de %s; el documento queda procesado", job.filename)
 
-    marcar_exito(conn, job, len(fragmentos))
+    extra: dict[str, Any] = {}
+    if parseado.estructura is not None:
+        totales = parseado.estructura.get("totals", {})
+        extra = {
+            "hojas": parseado.estructura.get("sheetCount"),
+            "filas": totales.get("rows"),
+            "celdas": totales.get("cells"),
+        }
+    marcar_exito(conn, job, len(fragmentos), extra)
     return True
 
 
