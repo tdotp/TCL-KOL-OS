@@ -11,6 +11,13 @@ python-docx==1.1.2
 pypdf==5.1.0
 Pillow==11.0.0
 
+# Integración con Google Sheets (V2 · Fase 5): cuenta de servicio de SOLO lectura.
+# `google-auth` (oficial) firma el JWT y renueva el token; `requests` es su
+# transporte HTTP. Sin esto habría que escribir criptografía a mano. Se usan
+# únicamente detrás de `app/google_sheets.py`.
+google-auth==2.50.0
+requests==2.32.5
+
 # Cola y base de datos
 redis==5.2.1
 psycopg[binary]==3.2.3

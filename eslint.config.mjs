@@ -14,6 +14,9 @@ export default tseslint.config(
       '.claude/**',
       // Generado por Next.js en cada build.
       '**/next-env.d.ts',
+      // Entorno virtual de Python del worker: dependencias de terceros, no código del
+      // proyecto (urllib3, instalada con `requests`, trae un archivo .js propio).
+      '**/.venv/**',
     ],
   },
 

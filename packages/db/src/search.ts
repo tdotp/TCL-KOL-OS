@@ -19,6 +19,7 @@
 import type { Result, SourceLocator, User } from '@tcl-kol-os/domain';
 import { err, ok } from '@tcl-kol-os/domain';
 import { query } from './client.ts';
+import { SQL_FRAGMENTO_VIGENTE } from './fragment-scope.ts';
 import { localizadorDeFila } from './locators.ts';
 import { resolverAlcanceDeFuentes } from './sources.ts';
 
@@ -115,6 +116,7 @@ export async function buscarEvidencia(opciones: BusquedaOpciones): Promise<Evide
         AND s.status          = 'procesado'
         AND s.confidentiality_level <> 'sensible'
         AND ($6::boolean = false OR s.visibility IN ('tcl', 'compartida'))
+        AND ${SQL_FRAGMENTO_VIGENTE}
         AND f.embedding IS NOT NULL
         AND (f.embedding <=> $3::vector) <= $4
       ORDER BY f.embedding <=> $3::vector
@@ -179,7 +181,7 @@ export async function estadoDelIndice(
             count(*) FILTER (WHERE s.confidentiality_level = 'sensible') AS excluidos
        FROM source_fragments f
        JOIN source_documents s ON s.id = f.source_id
-      WHERE s.organization_id = $1 AND s.campaign_id = $2`,
+      WHERE s.organization_id = $1 AND s.campaign_id = $2 AND ${SQL_FRAGMENTO_VIGENTE}`,
     [organizationId, campaignId],
   );
 
@@ -238,6 +240,7 @@ export async function buscarTextoEnFuentes(
         AND s.status          = 'procesado'
         AND s.confidentiality_level <> 'sensible'
         AND ($5::boolean = false OR s.visibility IN ('tcl', 'compartida'))
+        AND ${SQL_FRAGMENTO_VIGENTE}
         AND f.text ILIKE $3 ESCAPE '\\'
       ORDER BY s.created_at, s.id, f.ordinal
       LIMIT $4`,

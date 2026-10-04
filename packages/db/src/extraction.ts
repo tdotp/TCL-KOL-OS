@@ -38,6 +38,7 @@ import {
 import { assertCapability } from './authz.ts';
 import { query, transaction } from './client.ts';
 import { obtenerOCrearVersionDeTrabajo } from './brief-version.ts';
+import { SQL_FRAGMENTO_VIGENTE } from './fragment-scope.ts';
 import { SQL_LOCALIZADOR_DE_EVIDENCIA } from './locators.ts';
 import { transicionarBrief } from './transitions.ts';
 
@@ -135,6 +136,7 @@ export async function extraerCampos(
         AND s.campaign_id     = $2
         AND s.status          = 'procesado'
         AND s.confidentiality_level <> 'sensible'
+        AND ${SQL_FRAGMENTO_VIGENTE}
       ORDER BY s.filename, f.ordinal`,
     [organizationId, campaignId],
   );

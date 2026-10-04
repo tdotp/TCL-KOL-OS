@@ -23,4 +23,5 @@ export * from './representations';
 export * from './influencers';
 export * from './source-locator';
 export * from './linked-sources';
+export * from './source-snapshots';
 export { LOCATOR_CASOS_INVALIDOS, LOCATOR_CASOS_VALIDOS } from './source-locator.fixtures';

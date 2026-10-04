@@ -88,6 +88,14 @@ def embeber_consulta(texto: str) -> list[float]:
     return vectores[0]
 
 
+#: Solo cuentan los fragmentos vigentes: los de archivo (sin snapshot) y los del
+#: snapshot actual de un enlace. Los snapshots históricos se conservan como
+#: prueba, pero no entran al índice (la búsqueda usa por defecto el vigente).
+_SOLO_VIGENTES = """(snapshot_id IS NULL
+        OR snapshot_id = (SELECT d.current_snapshot_id FROM source_documents d
+                           WHERE d.id = source_fragments.source_id))"""
+
+
 def indexar_documento(conn: Any, source_id: str) -> Resultado:
     """Genera y guarda los embeddings de los fragmentos de un documento.
 
@@ -121,7 +129,8 @@ def indexar_documento(conn: Any, source_id: str) -> Resultado:
         # §12.3. No es un fallo: es la política.
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT count(*) FROM source_fragments WHERE source_id = %s", (source_id,)
+                f"SELECT count(*) FROM source_fragments WHERE source_id = %s AND {_SOLO_VIGENTES}",  # noqa: S608
+                (source_id,),
             )
             total = int(cur.fetchone()[0])
         logger.info(
@@ -134,7 +143,8 @@ def indexar_documento(conn: Any, source_id: str) -> Resultado:
     if not _ia_activa():
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT count(*) FROM source_fragments WHERE source_id = %s", (source_id,)
+                f"SELECT count(*) FROM source_fragments WHERE source_id = %s AND {_SOLO_VIGENTES}",  # noqa: S608
+                (source_id,),
             )
             total = int(cur.fetchone()[0])
         logger.info("AI_ENABLED está en falso: %s queda sin índice vectorial.", filename)
@@ -148,9 +158,9 @@ def indexar_documento(conn: Any, source_id: str) -> Resultado:
 
     with conn.cursor() as cur:
         cur.execute(
-            """SELECT id, text FROM source_fragments
-                WHERE source_id = %s AND embedding IS NULL
-                ORDER BY ordinal""",
+            f"""SELECT id, text FROM source_fragments
+                WHERE source_id = %s AND embedding IS NULL AND {_SOLO_VIGENTES}
+                ORDER BY ordinal""",  # noqa: S608
             (source_id,),
         )
         pendientes = [(str(r[0]), str(r[1])) for r in cur.fetchall()]

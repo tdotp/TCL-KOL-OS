@@ -16,6 +16,12 @@ strict = true
 warn_unreachable = true
 disallow_any_explicit = false
 
+# `requests` no trae tipos y `google-auth` está parcialmente tipado: solo se
+# usan detrás de `app/google_sheets.py`, que expone un Protocol propio.
+[[tool.mypy.overrides]]
+module = ["requests", "requests.*"]
+ignore_missing_imports = true
+
 [tool.ruff]
 line-length = 110
 target-version = "py311"

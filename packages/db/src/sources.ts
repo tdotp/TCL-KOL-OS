@@ -25,6 +25,7 @@ import { assertCapability } from './authz.ts';
 import { getPool, transaction } from './client.ts';
 import { recordAudit } from './audit.ts';
 import { type ContextoDeAuditoria, auditoriaDe, exigirPersona } from './influencers.ts';
+import { SQL_FRAGMENTO_VIGENTE_SIN_ALIAS } from './fragment-scope.ts';
 import { localizadorDeFila } from './locators.ts';
 import { guardarOriginal, rutaAbsoluta } from './storage.ts';
 import { Abortar, transaccionConResultado } from './tx-result.ts';
@@ -53,6 +54,8 @@ export interface SourceRow {
   readonly external_provider: string | null;
   readonly external_url: string | null;
   readonly canonical_url: string | null;
+  /** Solo enlaces sincronizados: el snapshot vigente (V2 · Fase 5). */
+  readonly current_snapshot_id: string | null;
   readonly status: SourceStatus;
   readonly created_at: Date;
   readonly fragmentos: number;
@@ -155,8 +158,10 @@ export async function resolverAlcanceDeFuentes(
 const SELECT_SOURCES = `
   SELECT s.id, s.campaign_id, s.type, s.filename, s.origin::text AS origin, s.mime_type,
          s.size_bytes::text AS size_bytes, s.hash,
-         s.external_provider, s.external_url, s.canonical_url, s.status, s.created_at,
-         (SELECT count(*)::int FROM source_fragments f WHERE f.source_id = s.id) AS fragmentos,
+         s.external_provider, s.external_url, s.canonical_url, s.current_snapshot_id, s.status, s.created_at,
+         (SELECT count(*)::int FROM source_fragments f
+           WHERE f.source_id = s.id
+             AND (f.snapshot_id IS NULL OR f.snapshot_id = s.current_snapshot_id)) AS fragmentos,
          j.status::text AS job_status, j.intentos AS job_intentos,
          j.error AS job_error, j.disponible_en AS job_disponible_en
     FROM source_documents s
@@ -267,7 +272,8 @@ export async function getFragments(
 
   const { rows } = await getPool().query<FilaDeFragmento>(
     `SELECT id, ordinal, page, slide, section, linea, locator, text, metadata
-       FROM source_fragments WHERE source_id = $1 ORDER BY ordinal LIMIT $2`,
+       FROM source_fragments WHERE source_id = $1 AND ${SQL_FRAGMENTO_VIGENTE_SIN_ALIAS}
+      ORDER BY ordinal LIMIT $2`,
     [sourceId, limite],
   );
   return ok(rows.map(comoFragmento));
@@ -307,6 +313,16 @@ export interface RepresentacionNormalizada {
     readonly generator: string;
     readonly content: Record<string, unknown>;
   } | null;
+  /**
+   * Solo enlaces sincronizados (V2 · Fase 5): de QUÉ lectura salen la estructura
+   * y los fragmentos devueltos — el snapshot vigente. `null` si aún no hay.
+   */
+  readonly snapshot: {
+    readonly id: string;
+    readonly sequence: number;
+    readonly fetchedAt: string;
+    readonly contentHash: string;
+  } | null;
   readonly fragmentos: {
     readonly total: number;
     readonly items: readonly FragmentRow[];
@@ -325,6 +341,23 @@ export async function obtenerRepresentacionNormalizada(
   const limite = Math.min(Math.max(Math.trunc(opciones.limite ?? 200), 1), 1000);
   const desde = Math.max(Math.trunc(opciones.desde ?? 0), 0);
 
+  // Un enlace sincronizado entrega la estructura de su snapshot VIGENTE; un
+  // archivo, la suya de siempre (`source_representations`).
+  const { rows: snapshots } = await getPool().query<{
+    id: string;
+    sequence: number;
+    fetched_at: Date;
+    content_hash: string;
+    generator: string;
+    structure: Record<string, unknown>;
+  }>(
+    `SELECT n.id, n.sequence, n.fetched_at, n.content_hash, n.generator, n.structure
+       FROM source_snapshots n
+       JOIN source_documents s ON s.current_snapshot_id = n.id
+      WHERE s.id = $1`,
+    [sourceId],
+  );
+  const vigente = snapshots[0];
   const { rows: estructuras } = await getPool().query<{
     format: string;
     generator: string;
@@ -335,11 +368,14 @@ export async function obtenerRepresentacionNormalizada(
   );
   const { rows: fragmentos } = await getPool().query<FilaDeFragmento>(
     `SELECT id, ordinal, page, slide, section, linea, locator, text, metadata
-       FROM source_fragments WHERE source_id = $1 AND ordinal >= $2 ORDER BY ordinal LIMIT $3`,
+       FROM source_fragments
+      WHERE source_id = $1 AND ordinal >= $2 AND ${SQL_FRAGMENTO_VIGENTE_SIN_ALIAS}
+      ORDER BY ordinal LIMIT $3`,
     [sourceId, desde, limite],
   );
   const { rows: total } = await getPool().query<{ n: number }>(
-    `SELECT count(*)::int AS n FROM source_fragments WHERE source_id = $1`,
+    `SELECT count(*)::int AS n FROM source_fragments
+      WHERE source_id = $1 AND ${SQL_FRAGMENTO_VIGENTE_SIN_ALIAS}`,
     [sourceId],
   );
 
@@ -359,7 +395,19 @@ export async function obtenerRepresentacionNormalizada(
             sizeBytes: source.size_bytes!,
             hash: source.hash!,
           },
-    estructura: estructuras[0] ?? null,
+    estructura:
+      vigente !== undefined
+        ? { format: 'google_sheets', generator: vigente.generator, content: vigente.structure }
+        : (estructuras[0] ?? null),
+    snapshot:
+      vigente === undefined
+        ? null
+        : {
+            id: vigente.id,
+            sequence: vigente.sequence,
+            fetchedAt: vigente.fetched_at.toISOString(),
+            contentHash: vigente.content_hash,
+          },
     fragmentos: { total: total[0]?.n ?? 0, items: fragmentos.map(comoFragmento) },
   });
 }

@@ -30,7 +30,9 @@ export interface SalidaDelWorker {
 }
 
 /** Procesa todo lo pendiente de la cola de la base de pruebas y termina. */
-export async function procesarColaConWorker(): Promise<SalidaDelWorker> {
+export async function procesarColaConWorker(
+  entorno: Readonly<Record<string, string>> = {},
+): Promise<SalidaDelWorker> {
   const url = process.env['DATABASE_URL'];
   if (!url || !/_test(?:\?.*)?$/.test(url)) {
     throw new Error('El worker de pruebas solo corre contra una base cuyo nombre termina en «_test».');
@@ -44,6 +46,10 @@ export async function procesarColaConWorker(): Promise<SalidaDelWorker> {
         REDIS_URL: 'redis://localhost:6379',
         AI_ENABLED: 'false',
         PYTHONPATH: '.',
+        // Sin credenciales de Google en el entorno de pruebas, salvo que el caso las pida.
+        GOOGLE_SERVICE_ACCOUNT_KEY_PATH: '',
+        GOOGLE_SHEETS_FIXTURE_DIR: '',
+        ...entorno,
       },
     });
     let salida = '';
