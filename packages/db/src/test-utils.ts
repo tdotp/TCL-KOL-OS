@@ -49,6 +49,22 @@ export async function eliminarCampanaDePrueba(idOids: string | readonly string[]
 }
 
 /**
+ * Limpieza de influencers de prueba (V2 · Fase 3): cuentas e identidades,
+ * con el mismo bypass acotado a bases `_test`.
+ */
+export async function eliminarInfluencersDePrueba(idOids: string | readonly string[]): Promise<void> {
+  const ids = Array.isArray(idOids) ? idOids : [idOids];
+  if (ids.length === 0) return;
+  await transaction(async (client) => {
+    await client.query(`SET LOCAL tclkolos.permitir_borrado_historico = 'on'`);
+    for (const id of ids) {
+      await client.query(`DELETE FROM influencer_accounts WHERE influencer_id = $1`, [id]);
+      await client.query(`DELETE FROM influencers WHERE id = $1`, [id]);
+    }
+  });
+}
+
+/**
  * Devuelve un usuario de pruebas con ese correo y rol, creándolo si la base
  * (ya sembrada antes de que existiera el rol) no lo tiene. Solo para pruebas.
  */

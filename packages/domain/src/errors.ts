@@ -49,7 +49,14 @@ export type DomainErrorCode =
   /** Una traducción ya no corresponde al valor original vigente (V2 · Fase 2). */
   | 'TRANSLATION_STALE'
   /** Falta una representación lingüística requerida de la versión (V2 · Fase 2). */
-  | 'REPRESENTATION_MISSING';
+  | 'REPRESENTATION_MISSING'
+  /** La entrada no cumple una regla de formato o integridad (V2 · Fase 3). */
+  | 'VALIDATION_FAILED'
+  /**
+   * La operación choca con el estado actual de un recurso: ya existe (duplicado),
+   * o su estado no la admite (V2 · Fase 3). `details` indica cuál es el recurso.
+   */
+  | 'RESOURCE_CONFLICT';
 
 export interface DomainErrorPayload {
   readonly code: DomainErrorCode;

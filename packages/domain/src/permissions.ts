@@ -46,6 +46,13 @@ export type Action =
   | 'field:declare_exception'
   | 'brief:manual_create'
   | 'brief:transition'
+  // V2 · Fase 3: identidad del influencer y su participación en una campaña.
+  // Son lecturas/gestión INTERNAS de SmartPR; el cliente no recibe ninguna (su
+  // dashboard tendrá una proyección propia, no estas lecturas).
+  | 'influencer:read'
+  | 'influencer:manage'
+  | 'campaign_influencer:read'
+  | 'campaign_influencer:manage'
   | 'glossary:propose'
   | 'glossary:approve'
   | 'comment:internal'
@@ -80,6 +87,10 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'field:declare_exception',
     'brief:manual_create',
     'brief:transition',
+    'influencer:read',
+    'influencer:manage',
+    'campaign_influencer:read',
+    'campaign_influencer:manage',
     'glossary:propose',
     'glossary:approve',
     'comment:internal',
@@ -113,6 +124,10 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'field:declare_exception',
     'brief:manual_create',
     'brief:transition',
+    'influencer:read',
+    'influencer:manage',
+    'campaign_influencer:read',
+    'campaign_influencer:manage',
     'glossary:propose',
     'glossary:approve',
     'comment:internal',
@@ -143,6 +158,10 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'field:declare_exception',
     'brief:manual_create',
     'brief:transition',
+    'influencer:read',
+    'influencer:manage',
+    'campaign_influencer:read',
+    'campaign_influencer:manage',
     'glossary:propose',
     'comment:internal',
     'comment:client_visible',
@@ -162,7 +181,9 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
   // edita el brief, no tiene permisos administrativos y no es cliente. Las
   // capacidades operativas y financieras (acuerdos, envíos, pagos, KPIs) se
   // añadirán —separadas de las creativas— cuando existan esas entidades.
-  operativo: ['campaign:read', 'source:read', 'brief:read'],
+  // Fase 3: además LEE los influencers y su participación en la campaña (con
+  // los productos asignados); no gestiona la identidad ni la participación.
+  operativo: ['campaign:read', 'source:read', 'brief:read', 'influencer:read', 'campaign_influencer:read'],
   // El cliente TCL es de solo lectura: consulta lo que ya tiene visible y
   // descarga el entregable (DEC-012 / ADR-004). No aprueba, no pide cambios y
   // no mueve ningún estado — esas decisiones son de SmartPR (corrección del
@@ -214,6 +235,35 @@ export function canAccessResource(user: User, scope: ResourceScope): boolean {
   if (user.role === 'legal' && scope.confidentialityLevel === 'confidencial') return false;
 
   return true;
+}
+
+/**
+ * Autoriza una acción sobre un recurso INTERNO de la organización que no tiene
+ * visibilidad hacia TCL (V2 · Fase 3: influencers y su participación).
+ *
+ * Distinto de `authorize`: aquí la visibilidad no existe, así que no puede
+ * ampliar el acceso. Solo el personal de la misma organización accede; el
+ * cliente (otra organización por definición) nunca, ni aunque la campaña a la
+ * que se asocia sea visible para TCL. Un recurso ajeno devuelve
+ * `RESOURCE_NOT_FOUND` (no revela su existencia); un rol sin la capacidad,
+ * `FORBIDDEN_ROLE`.
+ */
+export function authorizeInternalResource(user: User, action: Action, organizationId: string): Result<true> {
+  if (user.status !== 'activo' || user.role === 'cliente' || user.organizationId !== organizationId) {
+    return err({
+      code: 'RESOURCE_NOT_FOUND',
+      message: 'El recurso no existe o no está disponible.',
+      details: {},
+    });
+  }
+  if (!roleCan(user.role, action)) {
+    return err({
+      code: 'FORBIDDEN_ROLE',
+      message: `El rol ${user.role} no puede ejecutar la acción ${action}.`,
+      details: { action, role: user.role },
+    });
+  }
+  return ok(true);
 }
 
 /**

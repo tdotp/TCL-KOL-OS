@@ -8,7 +8,14 @@
 import { describe, expect, it } from 'vitest';
 import { ROLES } from './types';
 import type { ResourceScope, Role, User } from './types';
-import { actionsFor, authorize, canAccessResource, isTclVisible, roleCan } from './permissions';
+import {
+  actionsFor,
+  authorize,
+  authorizeInternalResource,
+  canAccessResource,
+  isTclVisible,
+  roleCan,
+} from './permissions';
 
 function user(role: Role, organizationId = 'org-smartpr'): User {
   return {
@@ -191,8 +198,17 @@ describe('usuario operativo', () => {
     expect(actionsFor('operativo')).not.toEqual(actionsFor('analista'));
   });
 
-  it('solo entra y consulta: campaña, fuentes internas y brief', () => {
-    expect([...actionsFor('operativo')].sort()).toEqual(['brief:read', 'campaign:read', 'source:read']);
+  it('solo entra y consulta: campaña, fuentes internas, brief y (Fase 3) influencers y su participación', () => {
+    // Fase 3 legitima ampliar esta lista exactamente con las dos LECTURAS de
+    // influencer: el Usuario Operativo trabaja sobre los influencers de la
+    // campaña. Sigue sin ninguna capacidad de escritura.
+    expect([...actionsFor('operativo')].sort()).toEqual([
+      'brief:read',
+      'campaign:read',
+      'campaign_influencer:read',
+      'influencer:read',
+      'source:read',
+    ]);
   });
 
   it('no aprueba, no transiciona, no edita, no administra', () => {
@@ -233,5 +249,77 @@ describe('usuario operativo', () => {
     expect(roleCan('director', 'brief:approve_internal')).toBe(true);
     expect(roleCan('consultor', 'brief:approve_internal')).toBe(false);
     expect(roleCan('cliente', 'brief:transition')).toBe(false);
+  });
+});
+
+// ─────────────────────────── Influencer (V2 · Fase 3) ──────────────────────────
+
+describe('influencer y participación en campaña', () => {
+  const ACCIONES = [
+    'influencer:read',
+    'influencer:manage',
+    'campaign_influencer:read',
+    'campaign_influencer:manage',
+  ] as const;
+
+  it('Cuenta (admin, director, consultor) lee y gestiona', () => {
+    for (const rol of ['admin', 'director', 'consultor'] as const) {
+      for (const accion of ACCIONES) expect(roleCan(rol, accion), `${rol} ${accion}`).toBe(true);
+    }
+  });
+
+  it('Operativo solo lee; no gestiona identidad ni participación', () => {
+    expect(roleCan('operativo', 'influencer:read')).toBe(true);
+    expect(roleCan('operativo', 'campaign_influencer:read')).toBe(true);
+    expect(roleCan('operativo', 'influencer:manage')).toBe(false);
+    expect(roleCan('operativo', 'campaign_influencer:manage')).toBe(false);
+  });
+
+  it('el cliente TCL no recibe ninguna capacidad nueva (su dashboard tendrá una proyección propia)', () => {
+    for (const accion of ACCIONES) expect(roleCan('cliente', accion), accion).toBe(false);
+  });
+
+  it('analista y legal tampoco: no se otorgan permisos por anticipación', () => {
+    for (const rol of ['analista', 'legal'] as const) {
+      for (const accion of ACCIONES) expect(roleCan(rol, accion), `${rol} ${accion}`).toBe(false);
+    }
+  });
+
+  it('no existen permisos financieros anticipados', () => {
+    const todas = ROLES.flatMap((rol) => [...actionsFor(rol)]) as string[];
+    expect(todas.filter((a) => /^(payment|invoice|agreement|kpi|shipping)/.test(a))).toEqual([]);
+  });
+});
+
+describe('authorizeInternalResource (recursos internos sin visibilidad hacia TCL)', () => {
+  it('mismo organización y rol con capacidad: permitido', () => {
+    expect(authorizeInternalResource(user('consultor'), 'influencer:manage', 'org-smartpr').ok).toBe(true);
+    expect(authorizeInternalResource(user('operativo'), 'influencer:read', 'org-smartpr').ok).toBe(true);
+  });
+
+  it('otra organización: RESOURCE_NOT_FOUND para cualquier rol (no revela que existe)', () => {
+    for (const rol of ROLES) {
+      const r = authorizeInternalResource(user(rol), 'influencer:read', 'org-otra');
+      expect(r.ok, rol).toBe(false);
+      if (!r.ok) expect(r.error.code, rol).toBe('RESOURCE_NOT_FOUND');
+    }
+  });
+
+  it('el cliente nunca accede, ni siquiera con la misma organización: la visibilidad no lo amplía', () => {
+    const cliente = user('cliente', 'org-smartpr');
+    const r = authorizeInternalResource(cliente, 'influencer:read', 'org-smartpr');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe('RESOURCE_NOT_FOUND');
+  });
+
+  it('un rol sin la capacidad recibe FORBIDDEN_ROLE', () => {
+    const r = authorizeInternalResource(user('operativo'), 'influencer:manage', 'org-smartpr');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe('FORBIDDEN_ROLE');
+  });
+
+  it('un usuario inactivo no accede', () => {
+    const inactivo: User = { ...user('admin'), status: 'inactivo' };
+    expect(authorizeInternalResource(inactivo, 'influencer:read', 'org-smartpr').ok).toBe(false);
   });
 });
