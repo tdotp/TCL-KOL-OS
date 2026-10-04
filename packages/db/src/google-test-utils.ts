@@ -60,6 +60,34 @@ export function libroDeGoogle(pestanas: readonly PestanaDePrueba[], titulo = 'Li
   };
 }
 
+/** Cabeceras canónicas del esquema V1 (más las columnas futuras que pida el caso). */
+export const CABECERAS_V1 = ['clave_influencer', 'nombre', 'plataforma', 'handle', 'producto'] as const;
+
+/**
+ * Una pestaña del esquema TCL_KOL_OS_INFLUENCERS_V1: A1 = marcador, fila 2 =
+ * cabeceras, datos desde la fila 3. `filas` siguen el orden de `cabeceras`.
+ */
+export function pestanaDeInfluencers(
+  filas: readonly (readonly CeldaDePrueba[])[],
+  opciones: {
+    readonly gid?: number;
+    readonly nombre?: string;
+    readonly cabeceras?: readonly string[];
+    readonly marcador?: string | null;
+  } = {},
+): PestanaDePrueba {
+  const marcador = opciones.marcador === undefined ? 'TCL_KOL_OS_INFLUENCERS_V1' : opciones.marcador;
+  return {
+    nombre: opciones.nombre ?? 'Influencers',
+    gid: opciones.gid ?? 11,
+    filas: [
+      ...(marcador === null ? [[]] : [[marcador]]),
+      [...(opciones.cabeceras ?? CABECERAS_V1)],
+      ...filas,
+    ],
+  };
+}
+
 export class GoogleSimulado {
   private constructor(readonly directorio: string) {}
 

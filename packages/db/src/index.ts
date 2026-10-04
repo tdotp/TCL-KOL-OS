@@ -27,4 +27,5 @@ export * from './brief-workspace.ts';
 export * from './influencers.ts';
 export * from './campaign-influencers.ts';
 export * from './source-sync.ts';
+export * from './influencer-import.ts';
 export { migrate } from './migrate.ts';

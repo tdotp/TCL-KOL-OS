@@ -42,6 +42,13 @@ export async function eliminarCampanaDePrueba(idOids: string | readonly string[]
     // `source_documents` se borra, ya no hay ninguna `evidence` que lo
     // referencie.
     for (const id of ids) {
+      // V2 · Fase 5: la importación de influencers cuelga (RESTRICT) de la
+      // participación, la fuente y el snapshot: se limpia primero, hechos
+      // históricos incluidos, con el bypass restringido a bases `_test`.
+      await client.query(`DELETE FROM influencer_import_effects WHERE campaign_id = $1`, [id]);
+      await client.query(`DELETE FROM influencer_source_bindings WHERE campaign_id = $1`, [id]);
+      await client.query(`DELETE FROM influencer_import_resolutions WHERE campaign_id = $1`, [id]);
+      await client.query(`DELETE FROM influencer_import_plans WHERE campaign_id = $1`, [id]);
       // V2 · Fase 3: la participación de influencers y sus productos asignados
       // son FK RESTRICT hacia la campaña (nada se borra en cascada): se limpian
       // primero y solo aquí, con el bypass restringido a bases `_test`.
@@ -64,6 +71,10 @@ export async function eliminarInfluencersDePrueba(idOids: string | readonly stri
   await transaction(async (client) => {
     await client.query(`SET LOCAL tclkolos.permitir_borrado_historico = 'on'`);
     for (const id of ids) {
+      // V2 · Fase 5: bindings y decisiones que apuntan a la persona.
+      await client.query(`DELETE FROM influencer_import_effects WHERE entity_id = $1`, [id]);
+      await client.query(`DELETE FROM influencer_source_bindings WHERE influencer_id = $1`, [id]);
+      await client.query(`DELETE FROM influencer_import_resolutions WHERE influencer_id = $1`, [id]);
       await client.query(
         `DELETE FROM campaign_influencer_products
           WHERE campaign_influencer_id IN (SELECT id FROM campaign_influencers WHERE influencer_id = $1)`,
