@@ -11,6 +11,7 @@
  * siempre por las mismas guardas, sin excepción y sin reimplementarlas.
  */
 
+import type pg from 'pg';
 import {
   type Action,
   type Actor,
@@ -36,31 +37,31 @@ async function contextoDeGuardas(
   pendingQuestionsTotal: number;
   unresolvedCriticalFields: string[];
 }> {
-  const [criticas, total, sinResolver] = await Promise.all([
-    ejecutor.query<{ n: string }>(
-      `SELECT count(*)::text AS n FROM local_questions
-        WHERE brief_version_id = $1 AND criticidad = 'critico' AND status = 'pendiente'`,
-      [versionId],
-    ),
-    ejecutor.query<{ n: string }>(
-      `SELECT count(*)::text AS n FROM local_questions
-        WHERE brief_version_id = $1 AND status = 'pendiente'`,
-      [versionId],
-    ),
-    ejecutor.query<{ key: string }>(
-      `SELECT bf.key FROM brief_fields bf
-        WHERE bf.brief_version_id = $1 AND bf.criticidad = 'critico' AND bf.status <> 'found'
-          AND NOT EXISTS (
-            SELECT 1 FROM local_questions lq
-             WHERE lq.brief_version_id = bf.brief_version_id
-               AND lq.key = bf.key
-               AND lq.campaign_product_id IS NOT DISTINCT FROM bf.campaign_product_id
-               AND lq.status = 'descartada'
-          )
-        ORDER BY bf.key`,
-      [versionId],
-    ),
-  ]);
+  // En secuencia: con una única conexión transaccional (`PoolClient`) las
+  // consultas concurrentes están deprecadas en `pg`.
+  const criticas = await ejecutor.query<{ n: string }>(
+    `SELECT count(*)::text AS n FROM local_questions
+      WHERE brief_version_id = $1 AND criticidad = 'critico' AND status = 'pendiente'`,
+    [versionId],
+  );
+  const total = await ejecutor.query<{ n: string }>(
+    `SELECT count(*)::text AS n FROM local_questions
+      WHERE brief_version_id = $1 AND status = 'pendiente'`,
+    [versionId],
+  );
+  const sinResolver = await ejecutor.query<{ key: string }>(
+    `SELECT bf.key FROM brief_fields bf
+      WHERE bf.brief_version_id = $1 AND bf.criticidad = 'critico' AND bf.status <> 'found'
+        AND NOT EXISTS (
+          SELECT 1 FROM local_questions lq
+           WHERE lq.brief_version_id = bf.brief_version_id
+             AND lq.key = bf.key
+             AND lq.campaign_product_id IS NOT DISTINCT FROM bf.campaign_product_id
+             AND lq.status = 'descartada'
+        )
+      ORDER BY bf.key`,
+    [versionId],
+  );
 
   return {
     pendingCriticalQuestions: Number(criticas.rows[0]?.n ?? 0),
@@ -131,6 +132,38 @@ export async function transicionarBrief(
   to: BriefStatus,
   opciones?: OpcionesDeTransicion,
 ): Promise<Result<{ status: BriefStatus }>> {
+  return ejecutarTransicion(undefined, actor, versionId, to, opciones);
+}
+
+/**
+ * La misma transición, pero DENTRO de una transacción que abrió el llamador
+ * (V2 · Fase 1D, hardening). Lecturas y escrituras usan `client`; no hace
+ * COMMIT ni ROLLBACK: si algo posterior falla y el llamador revierte, la
+ * transición se revierte con todo lo demás. Es lo que permite que ejecutar una
+ * acción propuesta y marcarla `executed` sean un único cambio atómico.
+ *
+ * Todas las reglas (canal, permiso, visibilidad, guardas del dominio, auditoría)
+ * son exactamente las de `transicionarBrief`; se bloquea además la fila de la
+ * versión para que la comprobación y la escritura vean el mismo estado.
+ */
+export async function transicionarBriefEnTransaccion(
+  client: pg.PoolClient,
+  actor: Actor,
+  versionId: string,
+  to: BriefStatus,
+  opciones?: OpcionesDeTransicion,
+): Promise<Result<{ status: BriefStatus }>> {
+  return ejecutarTransicion(client, actor, versionId, to, opciones);
+}
+
+async function ejecutarTransicion(
+  client: pg.PoolClient | undefined,
+  actor: Actor,
+  versionId: string,
+  to: BriefStatus,
+  opciones?: OpcionesDeTransicion,
+): Promise<Result<{ status: BriefStatus }>> {
+  const ejecutor: pg.Pool | pg.PoolClient = client ?? getPool();
   const origen: AuditOrigin = opciones?.origen ?? (actor === 'system' ? 'system' : 'ui');
   if (DESTINOS_CRITICOS.includes(to) && origen !== 'ui') {
     return err({
@@ -155,7 +188,12 @@ export async function transicionarBrief(
     if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
   }
 
-  const datos = await cargarVersion(getPool(), versionId);
+  // Dentro de una transacción ajena, la versión se bloquea antes de leerla.
+  if (client !== undefined) {
+    await client.query(`SELECT 1 FROM brief_versions WHERE id = $1 FOR UPDATE`, [versionId]);
+  }
+
+  const datos = await cargarVersion(ejecutor, versionId);
   if (!datos) {
     return err({ code: 'RESOURCE_NOT_FOUND', message: 'El recurso no existe o no está disponible.' });
   }
@@ -166,7 +204,7 @@ export async function transicionarBrief(
     // roles lo bloquearía siempre. `canAccessResource` ya resuelve esto para
     // `campaign:read` (`packages/db/src/campaigns.ts`); aquí se aplica el
     // mismo criterio de visibilidad de la campaña sobre su brief.
-    const campana = await getPool().query<{
+    const campana = await ejecutor.query<{
       organization_id: string;
       confidentiality_level: string;
       visibility: string;
@@ -188,7 +226,7 @@ export async function transicionarBrief(
     }
   }
 
-  const contexto = await contextoDeGuardas(getPool(), versionId);
+  const contexto = await contextoDeGuardas(ejecutor, versionId);
   const from = datos.version.status;
 
   const resultado = transition(
@@ -210,27 +248,24 @@ export async function transicionarBrief(
     });
   }
 
-  await transaction(async (client) => {
+  const escribir = async (c: pg.PoolClient): Promise<void> => {
     if (to === 'approved') {
       // ADR-004: la vista de TCL es visible a partir de la aprobación de
       // SmartPR (antes, del envío a revisión del cliente). Solo sube el
       // nivel (interna → tcl); nunca lo baja ni toca una campaña ya
       // `compartida`. Sin esto una campaña nunca sería visible para `cliente`.
-      await client.query(`UPDATE campaigns SET visibility = 'tcl' WHERE id = $1 AND visibility = 'interna'`, [
+      await c.query(`UPDATE campaigns SET visibility = 'tcl' WHERE id = $1 AND visibility = 'interna'`, [
         datos.campaignId,
       ]);
-      await client.query(
+      await c.query(
         `UPDATE brief_versions SET status = $1::brief_status, approved_at = now() WHERE id = $2`,
         [to, versionId],
       );
     } else {
-      await client.query(`UPDATE brief_versions SET status = $1::brief_status WHERE id = $2`, [
-        to,
-        versionId,
-      ]);
+      await c.query(`UPDATE brief_versions SET status = $1::brief_status WHERE id = $2`, [to, versionId]);
     }
 
-    await recordAudit(client, {
+    await recordAudit(c, {
       actor,
       organizationId: datos.organizationId,
       origin: origen,
@@ -247,7 +282,10 @@ export async function transicionarBrief(
           : {}),
       },
     });
-  });
+  };
+
+  if (client !== undefined) await escribir(client);
+  else await transaction(escribir);
 
   return ok({ status: to });
 }

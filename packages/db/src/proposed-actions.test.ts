@@ -13,12 +13,12 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { User } from '@tcl-kol-os/domain';
-import { closePool, query } from './client.ts';
+import { closePool, getPool, query } from './client.ts';
 import { asegurarUsuarioDePrueba, eliminarCampanaDePrueba } from './test-utils.ts';
 import { findUserByEmail } from './users.ts';
 import { crearBriefManual } from './manual.ts';
 import { aprobarBrief } from './client-review.ts';
-import { transicionarBrief } from './transitions.ts';
+import { transicionarBrief, transicionarBriefEnTransaccion } from './transitions.ts';
 import { corregirCampo } from './brief-fields.ts';
 import {
   cancelarAccion,
@@ -506,5 +506,199 @@ describe('auditoría de propuesta → confirmación → ejecución', () => {
     );
     expect(transicion).toMatchObject({ origin: 'ui', actor_id: director.id });
     expect(transicion!.correlation).toMatchObject({ proposedActionId: propuesta.id });
+  });
+});
+
+// ─────────────────────────── Atomicidad de la ejecución ────────────────────────
+
+describe('atomicidad: o se aplica todo o no se aplica nada', () => {
+  const FUNCION = 'test_fallo_inyectado_hitl';
+
+  /**
+   * Inyecta un fallo real de base de datos en un punto concreto de la
+   * ejecución, SOLO para el recurso indicado (el resto de pruebas, que corren
+   * en paralelo contra la misma base, no se ven afectadas).
+   */
+  async function conFalloEn(
+    punto: 'marcar_executed' | 'auditoria_execute' | 'auditoria_transicion',
+    id: string,
+    fn: () => Promise<void>,
+  ): Promise<void> {
+    const pool = getPool();
+    await pool.query(`
+      CREATE OR REPLACE FUNCTION ${FUNCION}() RETURNS trigger AS $$
+      BEGIN
+        IF TG_ARGV[0] = 'marcar_executed' THEN
+          IF NEW.status = 'executed' AND NEW.id::text = TG_ARGV[1] THEN
+            RAISE EXCEPTION 'fallo inyectado: marcar executed';
+          END IF;
+        ELSIF TG_ARGV[0] = 'auditoria_execute' THEN
+          IF NEW.action = 'proposed_action.execute' AND NEW.entity_id::text = TG_ARGV[1] THEN
+            RAISE EXCEPTION 'fallo inyectado: auditoría de ejecución';
+          END IF;
+        ELSIF TG_ARGV[0] = 'auditoria_transicion' THEN
+          IF NEW.action = 'brief.transition' AND NEW.entity_id::text = TG_ARGV[1] THEN
+            RAISE EXCEPTION 'fallo inyectado: auditoría de la transición';
+          END IF;
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql`);
+    const tabla = punto === 'marcar_executed' ? 'proposed_actions' : 'audit_events';
+    const evento = punto === 'marcar_executed' ? 'UPDATE' : 'INSERT';
+    const trigger = `${FUNCION}_${id.replace(/-/g, '').slice(0, 12)}`;
+    await pool.query(
+      `CREATE TRIGGER ${trigger} BEFORE ${evento} ON ${tabla}
+         FOR EACH ROW EXECUTE FUNCTION ${FUNCION}('${punto}', '${id}')`,
+    );
+    try {
+      await fn();
+    } finally {
+      await pool.query(`DROP TRIGGER IF EXISTS ${trigger} ON ${tabla}`);
+    }
+  }
+
+  async function estadoDeCoherencia(versionId: string, campaignId: string, accionId: string) {
+    const [v] = await query<{ status: string; approved_at: Date | null }>(
+      `SELECT status::text, approved_at FROM brief_versions WHERE id = $1`,
+      [versionId],
+    );
+    const [c] = await query<{ visibility: string }>(`SELECT visibility::text FROM campaigns WHERE id = $1`, [
+      campaignId,
+    ]);
+    const [t] = await query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM audit_events
+        WHERE entity_type = 'brief_version' AND entity_id = $1 AND action = 'brief.transition'
+          AND metadata->>'to' = 'approved'`,
+      [versionId],
+    );
+    const [e] = await query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM audit_events
+        WHERE entity_type = 'proposed_action' AND entity_id = $1 AND action = 'proposed_action.execute'`,
+      [accionId],
+    );
+    return {
+      version: v!.status,
+      aprobadaEn: v!.approved_at,
+      visibilidad: c!.visibility,
+      accion: await estadoDeAccion(accionId),
+      transicionesAprobadas: Number(t!.n),
+      auditoriasDeEjecucion: Number(e!.n),
+    };
+  }
+
+  const PUNTOS = ['marcar_executed', 'auditoria_execute', 'auditoria_transicion'] as const;
+
+  for (const punto of PUNTOS) {
+    it(`si falla «${punto}», no queda dominio aplicado con la acción confirmed; y el reintento reconcilia`, async () => {
+      const { campaignId, versionId } = await nuevaVersionEnRevision(`atomica-${punto}`);
+      const propuesta = await proponer(versionId);
+      await confirmarAccion(director, propuesta.id, { canal: 'ui', payloadHash: propuesta.payloadHash });
+
+      // Antes del fallo: coherente y sin aprobar.
+      expect(await estadoDeCoherencia(versionId, campaignId, propuesta.id)).toMatchObject({
+        version: 'internal_review',
+        visibilidad: 'interna',
+        accion: 'confirmed',
+        transicionesAprobadas: 0,
+      });
+
+      const objetivo = punto === 'auditoria_transicion' ? versionId : propuesta.id;
+      await conFalloEn(punto, objetivo, async () => {
+        await expect(ejecutarAccion(director, propuesta.id, { canal: 'ui' })).rejects.toThrow(
+          /fallo inyectado/,
+        );
+      });
+
+      // Después del fallo: NADA se aplicó. Ni brief aprobado, ni campaña expuesta
+      // a TCL, ni transición auditada, ni acción marcada ejecutada.
+      expect(await estadoDeCoherencia(versionId, campaignId, propuesta.id)).toEqual({
+        version: 'internal_review',
+        aprobadaEn: null,
+        visibilidad: 'interna',
+        accion: 'confirmed',
+        transicionesAprobadas: 0,
+        auditoriasDeEjecucion: 0,
+      });
+
+      // Reconciliación: sin el fallo, el reintento completa UNA sola vez.
+      const reintento = await ejecutarAccion(director, propuesta.id, { canal: 'ui' });
+      expect(reintento.ok, !reintento.ok ? reintento.error.message : '').toBe(true);
+      const final = await estadoDeCoherencia(versionId, campaignId, propuesta.id);
+      expect(final).toMatchObject({
+        version: 'approved',
+        visibilidad: 'tcl',
+        accion: 'executed',
+        transicionesAprobadas: 1,
+        auditoriasDeEjecucion: 1,
+      });
+      expect(final.aprobadaEn).not.toBeNull();
+
+      // Y el replay sigue bloqueado.
+      expect((await ejecutarAccion(director, propuesta.id, { canal: 'ui' })).ok).toBe(false);
+    });
+  }
+
+  it('un rechazo del dominio (guarda) no deja nada a medias: acción confirmed, brief sin tocar', async () => {
+    const { campaignId, versionId } = await nuevaVersionEnRevision('atomica-guarda');
+    const propuesta = await proponer(versionId);
+    await confirmarAccion(director, propuesta.id, { canal: 'ui', payloadHash: propuesta.payloadHash });
+    const [campo] = await query<{ key: string }>(
+      `SELECT key FROM brief_fields WHERE brief_version_id = $1 LIMIT 1`,
+      [versionId],
+    );
+    await query(
+      `INSERT INTO local_questions (campaign_id, brief_version_id, key, question, reason, criticidad, status)
+       VALUES ($1, $2, $3, '¿?', 'prueba', 'critico', 'pendiente')`,
+      [campaignId, versionId, campo!.key],
+    );
+    const r = await ejecutarAccion(director, propuesta.id, { canal: 'ui' });
+    expect(r.ok).toBe(false);
+    expect(await estadoDeCoherencia(versionId, campaignId, propuesta.id)).toMatchObject({
+      version: 'internal_review',
+      visibilidad: 'interna',
+      accion: 'confirmed',
+      transicionesAprobadas: 0,
+      auditoriasDeEjecucion: 0,
+    });
+  });
+
+  it('la transición dentro de una transacción ajena se revierte con ella', async () => {
+    const { campaignId, versionId } = await nuevaVersionEnRevision('atomica-rollback-manual');
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+      const r = await transicionarBriefEnTransaccion(client, director, versionId, 'approved');
+      expect(r.ok).toBe(true);
+      await client.query('ROLLBACK');
+    } finally {
+      client.release();
+    }
+    expect(await estadoDe(versionId)).toBe('internal_review');
+    const [c] = await query<{ visibility: string }>(`SELECT visibility::text FROM campaigns WHERE id = $1`, [
+      campaignId,
+    ]);
+    expect(c!.visibility).toBe('interna');
+  });
+
+  it('la transición en transacción ajena respeta las mismas reglas de canal y permiso', async () => {
+    const { versionId } = await nuevaVersionEnRevision('atomica-reglas');
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+      const chat = await transicionarBriefEnTransaccion(client, director, versionId, 'approved', {
+        origen: 'chat',
+      });
+      expect(chat.ok).toBe(false);
+      if (!chat.ok) expect(chat.error.code).toBe('HUMAN_CONFIRMATION_REQUIRED');
+      const sinPermiso = await transicionarBriefEnTransaccion(client, operativo, versionId, 'approved');
+      expect(sinPermiso.ok).toBe(false);
+      const sistema = await transicionarBriefEnTransaccion(client, 'system', versionId, 'approved');
+      expect(sistema.ok).toBe(false);
+      await client.query('ROLLBACK');
+    } finally {
+      client.release();
+    }
+    expect(await estadoDe(versionId)).toBe('internal_review');
   });
 });

@@ -43,7 +43,7 @@ import {
 } from '@tcl-kol-os/domain';
 import { recordAudit, resolveOrigin } from './audit.ts';
 import { getPool, transaction } from './client.ts';
-import { transicionarBrief } from './transitions.ts';
+import { transicionarBriefEnTransaccion } from './transitions.ts';
 
 const TTL_POR_DEFECTO_SEGUNDOS = 24 * 60 * 60;
 
@@ -430,8 +430,12 @@ export async function confirmarAccion(
  * que dos ejecuciones simultáneas no puedan ambas proceder; la repetición
  * posterior falla porque el estado es terminal.
  *
- * Si el caso de uso falla (por ejemplo una guarda del dominio), la acción
- * queda `confirmed` y se devuelve el error real, sin marcarla ejecutada.
+ * Atomicidad: la aprobación del brief, el cambio a `executed` y la auditoría
+ * ocurren en UNA transacción. Si el caso de uso es rechazado (por ejemplo una
+ * guarda del dominio) la acción queda `confirmed` y se devuelve el error real;
+ * si algo falla a mitad de camino (error de base de datos), todo se revierte:
+ * nunca queda el dominio aplicado con la acción `confirmed`, ni `executed` sin
+ * dominio aplicado. La acción sigue `confirmed` y puede reintentarse.
  */
 export async function ejecutarAccion(
   actor: User | 'system',
@@ -455,7 +459,10 @@ export async function ejecutarAccion(
 
     // Caso de uso: la misma aprobación humana directa que ya existía, con
     // origen `ui` (una persona lo está ejecutando) y correlación a la propuesta.
-    const resultado = await transicionarBrief(humano, fila.resource_id, 'approved', {
+    // Corre DENTRO de esta transacción (misma conexión): el cambio de dominio,
+    // la marca `executed` y la auditoría se confirman juntos o no se confirman.
+    // Si cualquier paso posterior lanza, el ROLLBACK revierte también el brief.
+    const resultado = await transicionarBriefEnTransaccion(client, humano, fila.resource_id, 'approved', {
       origen: 'ui',
       correlation: { proposedActionId: id },
     });
