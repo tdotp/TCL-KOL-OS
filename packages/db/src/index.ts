@@ -25,4 +25,5 @@ export * from './proposed-actions.ts';
 export * from './brief-representations.ts';
 export * from './brief-workspace.ts';
 export * from './influencers.ts';
+export * from './campaign-influencers.ts';
 export { migrate } from './migrate.ts';

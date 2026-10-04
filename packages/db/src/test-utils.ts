@@ -42,6 +42,11 @@ export async function eliminarCampanaDePrueba(idOids: string | readonly string[]
     // `source_documents` se borra, ya no hay ninguna `evidence` que lo
     // referencie.
     for (const id of ids) {
+      // V2 · Fase 3: la participación de influencers y sus productos asignados
+      // son FK RESTRICT hacia la campaña (nada se borra en cascada): se limpian
+      // primero y solo aquí, con el bypass restringido a bases `_test`.
+      await client.query(`DELETE FROM campaign_influencer_products WHERE campaign_id = $1`, [id]);
+      await client.query(`DELETE FROM campaign_influencers WHERE campaign_id = $1`, [id]);
       await client.query(`DELETE FROM briefs WHERE campaign_id = $1`, [id]);
       await client.query(`DELETE FROM campaigns WHERE id = $1`, [id]);
     }
@@ -49,8 +54,9 @@ export async function eliminarCampanaDePrueba(idOids: string | readonly string[]
 }
 
 /**
- * Limpieza de influencers de prueba (V2 · Fase 3): cuentas e identidades,
- * con el mismo bypass acotado a bases `_test`.
+ * Limpieza de influencers de prueba (V2 · Fase 3): participaciones, cuentas e
+ * identidades, con el mismo bypass acotado a bases `_test`. Las campañas que los
+ * usan se eliminan antes (`eliminarCampanaDePrueba` ya vacía sus participaciones).
  */
 export async function eliminarInfluencersDePrueba(idOids: string | readonly string[]): Promise<void> {
   const ids = Array.isArray(idOids) ? idOids : [idOids];
@@ -58,6 +64,12 @@ export async function eliminarInfluencersDePrueba(idOids: string | readonly stri
   await transaction(async (client) => {
     await client.query(`SET LOCAL tclkolos.permitir_borrado_historico = 'on'`);
     for (const id of ids) {
+      await client.query(
+        `DELETE FROM campaign_influencer_products
+          WHERE campaign_influencer_id IN (SELECT id FROM campaign_influencers WHERE influencer_id = $1)`,
+        [id],
+      );
+      await client.query(`DELETE FROM campaign_influencers WHERE influencer_id = $1`, [id]);
       await client.query(`DELETE FROM influencer_accounts WHERE influencer_id = $1`, [id]);
       await client.query(`DELETE FROM influencers WHERE id = $1`, [id]);
     }
