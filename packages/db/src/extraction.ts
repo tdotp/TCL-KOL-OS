@@ -26,6 +26,7 @@
 
 import {
   type Result,
+  type SourceLocator,
   type User,
   type Visibility,
   canAccessResource,
@@ -37,6 +38,7 @@ import {
 import { assertCapability } from './authz.ts';
 import { query, transaction } from './client.ts';
 import { obtenerOCrearVersionDeTrabajo } from './brief-version.ts';
+import { SQL_LOCALIZADOR_DE_EVIDENCIA } from './locators.ts';
 import { transicionarBrief } from './transitions.ts';
 
 export interface EvidenciaExtraida {
@@ -123,9 +125,10 @@ export async function extraerCampos(
     slide: number | null;
     section: string | null;
     linea: number | null;
+    locator: unknown;
   }>(
     `SELECT f.id, f.source_id, s.filename, f.text AS texto,
-            f.page, f.slide, f.section, f.linea
+            f.page, f.slide, f.section, f.linea, f.locator
        FROM source_fragments f
        JOIN source_documents s ON s.id = f.source_id
       WHERE s.organization_id = $1
@@ -157,6 +160,7 @@ export async function extraerCampos(
         slide: f.slide,
         section: f.section,
         linea: f.linea,
+        locator: f.locator,
       })),
       productos: productos.map((p) => ({ id: p.campaignProductId, nombre_producto: p.nombreProducto })),
     }),
@@ -309,8 +313,8 @@ export async function persistirExtraccion(opciones: {
       for (const ev of campo.evidence) {
         await client.query(
           `INSERT INTO evidence (brief_field_id, source_id, fragment_id, quote, relation,
-                                 page, slide, section, linea)
-           SELECT $1, $2, $3, $4, $5::evidence_relation, f.page, f.slide, f.section, f.linea
+                                 page, slide, section, linea, locator)
+           SELECT $1, $2, $3, $4, $5::evidence_relation, f.page, f.slide, f.section, f.linea, f.locator
              FROM source_fragments f WHERE f.id = $3`,
           [fila.rows[0]!.id, ev.sourceId, ev.fragmentId, ev.quote, ev.relation],
         );
@@ -349,6 +353,8 @@ export async function camposDeVersion(versionId: string): Promise<
       slide: number | null;
       section: string | null;
       linea: number | null;
+      /** Ubicación citada con el contrato único (V2 · Fase 4). `null` en evidencia histórica sin ubicación. */
+      locator: SourceLocator | null;
       /** Visibilidad de la fuente citada (V2 · Fase 1A). */
       sourceVisibility: Visibility;
     }>;
@@ -374,7 +380,8 @@ export async function camposDeVersion(versionId: string): Promise<
                 json_build_object(
                   'quote', e.quote, 'relation', e.relation::text,
                   'filename', s.filename, 'sourceId', s.id, 'sourceVisibility', s.visibility::text,
-                  'page', e.page, 'slide', e.slide, 'section', e.section, 'linea', e.linea
+                  'page', e.page, 'slide', e.slide, 'section', e.section, 'linea', e.linea,
+                  'locator', ${SQL_LOCALIZADOR_DE_EVIDENCIA}
                 ) ORDER BY e.created_at
               ) FILTER (WHERE e.id IS NOT NULL),
               '[]'::json
@@ -408,6 +415,7 @@ export async function camposDeVersion(versionId: string): Promise<
       slide: number | null;
       section: string | null;
       linea: number | null;
+      locator: SourceLocator | null;
       sourceVisibility: Visibility;
     }>,
   }));

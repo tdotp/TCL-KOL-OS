@@ -21,3 +21,6 @@ export * from './workspace';
 export * from './proposed-actions';
 export * from './representations';
 export * from './influencers';
+export * from './source-locator';
+export * from './linked-sources';
+export { LOCATOR_CASOS_INVALIDOS, LOCATOR_CASOS_VALIDOS } from './source-locator.fixtures';

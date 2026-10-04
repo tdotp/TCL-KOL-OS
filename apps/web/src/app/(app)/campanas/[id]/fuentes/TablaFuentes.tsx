@@ -7,9 +7,10 @@ import { reintentarFuente } from '@/lib/actions';
 interface Fuente {
   readonly id: string;
   readonly filename: string;
-  readonly mime_type: string;
-  readonly size_bytes: string;
-  readonly status: 'pendiente' | 'procesando' | 'procesado' | 'fallido';
+  /** `null` en una fuente enlazada (V2 · Fase 4). */
+  readonly mime_type: string | null;
+  readonly size_bytes: string | null;
+  readonly status: 'pendiente' | 'por_resolver' | 'procesando' | 'procesado' | 'fallido';
   readonly fragmentos: number;
   readonly job_status: string | null;
   readonly job_intentos: number | null;
@@ -21,12 +22,15 @@ const ETIQUETA_TIPO: Record<string, string> = {
   'application/pdf': 'PDF',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
+  'text/csv': 'CSV',
   'image/png': 'PNG',
   'image/jpeg': 'JPG',
 };
 
 const ESTADO: Record<string, { texto: string; clase: string }> = {
   pendiente: { texto: 'en cola', clase: '' },
+  por_resolver: { texto: 'por resolver', clase: '' },
   procesando: { texto: 'procesando', clase: 'processing' },
   procesado: { texto: 'procesado', clase: 'ok' },
   fallido: { texto: 'fallido', clase: 'bad' },
@@ -40,7 +44,7 @@ export function TablaFuentes({ campaignId, fuentes }: { campaignId: string; fuen
   const visibles = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     if (q === '') return fuentes;
-    return fuentes.filter((f) => f.filename.toLowerCase().includes(q) || (ETIQUETA_TIPO[f.mime_type] ?? f.mime_type).toLowerCase().includes(q));
+    return fuentes.filter((f) => f.filename.toLowerCase().includes(q) || (ETIQUETA_TIPO[f.mime_type ?? ''] ?? f.mime_type ?? 'enlace').toLowerCase().includes(q));
   }, [fuentes, busqueda]);
 
   useEffect(() => {
@@ -73,7 +77,7 @@ export function TablaFuentes({ campaignId, fuentes }: { campaignId: string; fuen
             <tbody>
               {visibles.map((f) => {
                 const estado = ESTADO[f.status] ?? { texto: f.status, clase: '' };
-                const mb = Math.round((Number(f.size_bytes) / 1024 / 1024) * 10) / 10;
+                const mb = Math.round((Number(f.size_bytes ?? 0) / 1024 / 1024) * 10) / 10;
                 return (
                   <tr key={f.id}>
                     <td>
@@ -89,8 +93,8 @@ export function TablaFuentes({ campaignId, fuentes }: { campaignId: string; fuen
                         </div>
                       </div>
                     </td>
-                    <td className="table-secondary">{ETIQUETA_TIPO[f.mime_type] ?? f.mime_type}</td>
-                    <td className="table-secondary">{mb} MB</td>
+                    <td className="table-secondary">{ETIQUETA_TIPO[f.mime_type ?? ''] ?? f.mime_type ?? 'enlace'}</td>
+                    <td className="table-secondary">{f.size_bytes === null ? '—' : `${mb} MB`}</td>
                     <td><span className={`source-status ${estado.clase}`}><i />{estado.texto}</span></td>
                     <td className="table-secondary">{f.fragmentos > 0 ? f.fragmentos : '—'}</td>
                     <td>

@@ -144,10 +144,11 @@ export async function crearVersionHija(actor: User, parentVersionId: string): Pr
         slide: number | null;
         section: string | null;
         linea: number | null;
+        locator: unknown;
         quote: string;
         relation: string;
       }>(
-        `SELECT brief_field_id, source_id, fragment_id, page, slide, section, linea, quote, relation
+        `SELECT brief_field_id, source_id, fragment_id, page, slide, section, linea, locator, quote, relation
            FROM evidence WHERE brief_field_id = ANY($1::uuid[])`,
         [[...mapaIdCampo.keys()]],
       );
@@ -156,8 +157,8 @@ export async function crearVersionHija(actor: User, parentVersionId: string): Pr
         if (!nuevoFieldId) continue;
         await client.query(
           `INSERT INTO evidence
-                  (brief_field_id, source_id, fragment_id, page, slide, section, linea, quote, relation)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::evidence_relation)`,
+                  (brief_field_id, source_id, fragment_id, page, slide, section, linea, locator, quote, relation)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::evidence_relation)`,
           [
             nuevoFieldId,
             e.source_id,
@@ -166,6 +167,7 @@ export async function crearVersionHija(actor: User, parentVersionId: string): Pr
             e.slide,
             e.section,
             e.linea,
+            e.locator === null ? null : JSON.stringify(e.locator),
             e.quote,
             e.relation,
           ],

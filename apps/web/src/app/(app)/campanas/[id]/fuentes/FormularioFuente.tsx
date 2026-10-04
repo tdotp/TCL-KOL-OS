@@ -43,7 +43,7 @@ export function FormularioFuente({ campaignId }: { campaignId: string }) {
           type="file"
           required
           className="sr-file-input"
-          accept=".md,.markdown,.pdf,.pptx,.docx,.png,.jpg,.jpeg"
+          accept=".md,.markdown,.pdf,.pptx,.docx,.xlsx,.csv,.png,.jpg,.jpeg"
           onChange={(e) => {
             const f = e.target.files?.[0];
             setNombre(f?.name ?? '');

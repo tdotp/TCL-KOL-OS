@@ -54,6 +54,19 @@ export function calcularHash(contenido: Uint8Array): string {
 }
 
 /**
+ * Extensión del nombre original para el `fileId`, restringida a 1–10
+ * alfanuméricos ASCII. El nombre lo controla quien sube el archivo: nada de
+ * lo que traiga después del último punto (barras, `..`, caracteres de control)
+ * puede formar parte de una ruta.
+ */
+export function extensionSegura(nombreOriginal: string): string {
+  const punto = nombreOriginal.lastIndexOf('.');
+  if (punto < 0) return '';
+  const candidata = nombreOriginal.slice(punto + 1).toLowerCase();
+  return /^[a-z0-9]{1,10}$/.test(candidata) ? `.${candidata}` : '';
+}
+
+/**
  * Guarda el original y devuelve su referencia.
  *
  * El `fileId` se deriva del hash: el mismo contenido produce la misma ruta, así
@@ -65,7 +78,7 @@ export async function guardarOriginal(
   nombreOriginal: string,
 ): Promise<ArchivoAlmacenado> {
   const hash = calcularHash(contenido);
-  const extension = nombreOriginal.includes('.') ? nombreOriginal.slice(nombreOriginal.lastIndexOf('.')) : '';
+  const extension = extensionSegura(nombreOriginal);
 
   // Se reparte en dos niveles por los primeros caracteres del hash: un solo
   // directorio con decenas de miles de archivos degrada el sistema de archivos.

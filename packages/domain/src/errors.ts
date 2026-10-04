@@ -56,7 +56,17 @@ export type DomainErrorCode =
    * La operación choca con el estado actual de un recurso: ya existe (duplicado),
    * o su estado no la admite (V2 · Fase 3). `details` indica cuál es el recurso.
    */
-  | 'RESOURCE_CONFLICT';
+  | 'RESOURCE_CONFLICT'
+  /** El formato del archivo no tiene soporte (p. ej. `.xls` binario) (V2 · Fase 4). */
+  | 'UNSUPPORTED_SOURCE_FORMAT'
+  /** El enlace de una fuente no es válido, o su proveedor no está admitido (V2 · Fase 4). */
+  | 'INVALID_SOURCE_URL'
+  /** La fuente ya está registrada en la campaña (mismo contenido o mismo enlace) (V2 · Fase 4). */
+  | 'SOURCE_ALREADY_EXISTS'
+  /** El libro de cálculo es inválido, peligroso o excede los límites (V2 · Fase 4). */
+  | 'INVALID_SPREADSHEET'
+  /** El worker no pudo procesar la hoja de cálculo (V2 · Fase 4). */
+  | 'SPREADSHEET_PARSE_FAILED';
 
 export interface DomainErrorPayload {
   readonly code: DomainErrorCode;

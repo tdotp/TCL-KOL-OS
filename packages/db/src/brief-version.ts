@@ -20,6 +20,7 @@ import type {
   Criticality,
 } from '@tcl-kol-os/domain';
 import { getPool } from './client.ts';
+import { SQL_LOCALIZADOR_DE_EVIDENCIA, localizadorDeFila } from './locators.ts';
 
 type Ejecutor = pg.Pool | pg.PoolClient;
 
@@ -110,6 +111,7 @@ interface FilaCampo {
     fragmentId: string | null;
     page: number | null;
     slide: number | null;
+    locator: unknown;
     quote: string;
     relation: 'soporta' | 'contradice' | 'contexto';
   }>;
@@ -209,6 +211,7 @@ export async function cargarVersion(
                 json_build_object(
                   'sourceId', e.source_id, 'fragmentId', e.fragment_id,
                   'page', e.page, 'slide', e.slide, 'quote', e.quote,
+                  'locator', ${SQL_LOCALIZADOR_DE_EVIDENCIA},
                   'relation', e.relation::text
                 ) ORDER BY e.created_at
               ) FILTER (WHERE e.id IS NOT NULL),
@@ -236,6 +239,7 @@ export async function cargarVersion(
       fragmentId: e.fragmentId ?? undefined,
       page: e.page ?? undefined,
       slide: e.slide ?? undefined,
+      locator: localizadorDeFila({ locator: e.locator }),
       quote: e.quote,
       relation: e.relation,
     })),

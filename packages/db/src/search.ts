@@ -16,9 +16,10 @@
  * pone la autorización, que es lo que el worker no puede saber.
  */
 
-import type { Result, User } from '@tcl-kol-os/domain';
+import type { Result, SourceLocator, User } from '@tcl-kol-os/domain';
 import { err, ok } from '@tcl-kol-os/domain';
 import { query } from './client.ts';
+import { localizadorDeFila } from './locators.ts';
 import { resolverAlcanceDeFuentes } from './sources.ts';
 
 /** Un fragmento recuperado, con lo necesario para abrirlo en su fuente. */
@@ -33,6 +34,8 @@ export interface EvidenceHit {
   readonly slide: number | null;
   readonly section: string | null;
   readonly linea: number | null;
+  /** Ubicación con el contrato único: incluye hoja/fila/rango en hojas de cálculo (V2 · Fase 4). */
+  readonly locator: SourceLocator | undefined;
   /** 0 = idéntico, 2 = opuesto. Distancia coseno, tal como la da pgvector. */
   readonly distancia: number;
 }
@@ -75,6 +78,7 @@ interface Fila {
   slide: number | null;
   section: string | null;
   linea: number | null;
+  locator: unknown;
   distancia: string;
 }
 
@@ -102,7 +106,7 @@ export async function buscarEvidencia(opciones: BusquedaOpciones): Promise<Evide
             s.filename,
             s.type::text    AS source_type,
             f.text,
-            f.page, f.slide, f.section, f.linea,
+            f.page, f.slide, f.section, f.linea, f.locator,
             (f.embedding <=> $3::vector) AS distancia
        FROM source_fragments f
        JOIN source_documents s ON s.id = f.source_id
@@ -128,6 +132,7 @@ export async function buscarEvidencia(opciones: BusquedaOpciones): Promise<Evide
     slide: f.slide,
     section: f.section,
     linea: f.linea,
+    locator: localizadorDeFila(f),
     distancia: Number(f.distancia),
   }));
 }
@@ -183,4 +188,74 @@ export async function estadoDelIndice(
     sinIndexar: Number(fila?.sin_indexar ?? 0),
     excluidos: Number(fila?.excluidos ?? 0),
   };
+}
+
+// ─────────────────────────── Búsqueda textual ─────────────────────────────────
+
+export interface TextoHit {
+  readonly fragmentId: string;
+  readonly sourceId: string;
+  readonly filename: string;
+  readonly text: string;
+  readonly locator: SourceLocator | undefined;
+}
+
+/** Escapa `%`, `_` y `\` para que el texto buscado se compare literalmente. */
+function comoLiteralLike(texto: string): string {
+  return texto.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/**
+ * Búsqueda literal (sin IA ni embeddings) de un texto en los fragmentos de las
+ * fuentes que el actor puede leer. Es lo que permite, p. ej., buscar «Valentina»
+ * y llegar a «hoja Influencers, fila 14». No es búsqueda semántica: es una
+ * coincidencia de texto sin distinguir mayúsculas, acotada por el mismo alcance
+ * (organización, campaña, visibilidad hacia TCL) que la búsqueda vectorial.
+ */
+export async function buscarTextoEnFuentes(
+  actor: User,
+  opciones: { readonly campaignId: string; readonly texto: string; readonly limite?: number },
+): Promise<Result<TextoHit[]>> {
+  const texto = opciones.texto.trim();
+  if (texto.length < 2) {
+    return err({
+      code: 'VALIDATION_FAILED',
+      message: 'Escriba al menos 2 caracteres.',
+      details: { field: 'texto' },
+    });
+  }
+  const alcance = await resolverAlcanceDeFuentes(actor, opciones.campaignId);
+  if (!alcance.ok) return err({ code: alcance.error.code, message: alcance.error.message });
+
+  const limite = Math.min(Math.max(Math.trunc(opciones.limite ?? 20), 1), LIMITE_MAXIMO);
+  const filas = await query<Fila & { text: string }>(
+    `SELECT f.id AS fragment_id, s.id AS source_id, s.filename, s.type::text AS source_type, f.text,
+            f.page, f.slide, f.section, f.linea, f.locator, '0' AS distancia
+       FROM source_fragments f
+       JOIN source_documents s ON s.id = f.source_id
+      WHERE s.organization_id = $1
+        AND s.campaign_id     = $2
+        AND s.status          = 'procesado'
+        AND s.confidentiality_level <> 'sensible'
+        AND ($5::boolean = false OR s.visibility IN ('tcl', 'compartida'))
+        AND f.text ILIKE $3 ESCAPE '\\'
+      ORDER BY s.created_at, s.id, f.ordinal
+      LIMIT $4`,
+    [
+      alcance.value.organizationId,
+      opciones.campaignId,
+      `%${comoLiteralLike(texto)}%`,
+      limite,
+      alcance.value.soloVisibleParaTcl,
+    ],
+  );
+  return ok(
+    filas.map((f) => ({
+      fragmentId: f.fragment_id,
+      sourceId: f.source_id,
+      filename: f.filename,
+      text: f.text,
+      locator: localizadorDeFila(f),
+    })),
+  );
 }

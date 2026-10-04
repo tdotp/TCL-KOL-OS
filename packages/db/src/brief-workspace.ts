@@ -290,6 +290,7 @@ export async function obtenerBriefWorkspace(
         slide: e.slide ?? undefined,
         section: e.section ?? undefined,
         linea: e.linea ?? undefined,
+        locator: e.locator ?? undefined,
       })),
     });
     seccionesMap.set(seccionId, entrada);

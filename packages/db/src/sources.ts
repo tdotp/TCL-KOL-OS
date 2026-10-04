@@ -7,11 +7,15 @@
 
 import {
   FORMATOS_CON_EXTRACCION,
+  analizarEnlaceDeFuente,
   canAccessResource,
+  esHojaDeCalculo,
+  etiquetaDeProveedor,
   isTclVisible,
   roleCan,
   validarArchivo,
   type Result,
+  type SourceLocator,
   type User,
   type Visibility,
   err,
@@ -20,19 +24,35 @@ import {
 import { assertCapability } from './authz.ts';
 import { getPool, transaction } from './client.ts';
 import { recordAudit } from './audit.ts';
+import { type ContextoDeAuditoria, auditoriaDe, exigirPersona } from './influencers.ts';
+import { localizadorDeFila } from './locators.ts';
 import { guardarOriginal, rutaAbsoluta } from './storage.ts';
+import { Abortar, transaccionConResultado } from './tx-result.ts';
 
 export type SourceType = 'ppt_global' | 'ficha_tecnica' | 'brief_cliente' | 'imagen' | 'otro';
-export type SourceStatus = 'pendiente' | 'procesando' | 'procesado' | 'fallido';
+/**
+ * `por_resolver` (V2 · Fase 4): fuente enlazada registrada cuyo contenido aún no
+ * se resuelve; no hay job ni lectura externa.
+ */
+export type SourceStatus = 'pendiente' | 'por_resolver' | 'procesando' | 'procesado' | 'fallido';
+/** Una fuente es un archivo subido o un enlace externo (V2 · Fase 4). */
+export type SourceOrigin = 'file' | 'link';
 
 export interface SourceRow {
   readonly id: string;
   readonly campaign_id: string;
   readonly type: SourceType;
+  /** Nombre del archivo, o el título de un enlace. */
   readonly filename: string;
-  readonly mime_type: string;
-  readonly size_bytes: string;
-  readonly hash: string;
+  readonly origin: SourceOrigin;
+  /** Solo archivos; `null` en enlaces. */
+  readonly mime_type: string | null;
+  readonly size_bytes: string | null;
+  readonly hash: string | null;
+  /** Solo enlaces: proveedor reconocido, URL registrada y URL canónica. */
+  readonly external_provider: string | null;
+  readonly external_url: string | null;
+  readonly canonical_url: string | null;
   readonly status: SourceStatus;
   readonly created_at: Date;
   readonly fragmentos: number;
@@ -49,6 +69,8 @@ export interface FragmentRow {
   readonly slide: number | null;
   readonly section: string | null;
   readonly linea: number | null;
+  /** Ubicación con el contrato único (página, diapositiva, sección, hoja, fila, rango…). */
+  readonly locator: SourceLocator | undefined;
   readonly text: string;
   readonly metadata: Record<string, unknown>;
 }
@@ -131,8 +153,9 @@ export async function resolverAlcanceDeFuentes(
 // ─────────────────────────── Consultas ────────────────────────────────────────
 
 const SELECT_SOURCES = `
-  SELECT s.id, s.campaign_id, s.type, s.filename, s.mime_type,
-         s.size_bytes::text AS size_bytes, s.hash, s.status, s.created_at,
+  SELECT s.id, s.campaign_id, s.type, s.filename, s.origin::text AS origin, s.mime_type,
+         s.size_bytes::text AS size_bytes, s.hash,
+         s.external_provider, s.external_url, s.canonical_url, s.status, s.created_at,
          (SELECT count(*)::int FROM source_fragments f WHERE f.source_id = s.id) AS fragmentos,
          j.status::text AS job_status, j.intentos AS job_intentos,
          j.error AS job_error, j.disponible_en AS job_disponible_en
@@ -172,11 +195,15 @@ export async function listSources(actor: User, campaignId: string): Promise<Resu
   );
 }
 
-export async function getFragments(
+/**
+ * Autoriza la lectura de UNA fuente por id con el mismo alcance que el listado
+ * (`resolverAlcanceDeFuentes`). Es el único camino de lectura por id: lo usan
+ * `getSource`, `getFragments` y la representación normalizada.
+ */
+async function autorizarLecturaDeFuente(
   actor: User,
   sourceId: string,
-  limite = 200,
-): Promise<Result<FragmentRow[]>> {
+): Promise<Result<{ campaignId: string; organizationId: string; soloVisibleParaTcl: boolean }>> {
   const { rows: fuentes } = await getPool().query<{
     campaign_id: string;
     organization_id: string;
@@ -200,12 +227,141 @@ export async function getFragments(
   if (fuente.organization_id !== alcance.value.organizationId) return err(NO_ENCONTRADO);
   if (alcance.value.soloVisibleParaTcl && !isTclVisible(fuente.visibility)) return err(NO_ENCONTRADO);
 
-  const { rows } = await getPool().query<FragmentRow>(
-    `SELECT id, ordinal, page, slide, section, linea, text, metadata
+  return ok({
+    campaignId: fuente.campaign_id,
+    organizationId: fuente.organization_id,
+    soloVisibleParaTcl: alcance.value.soloVisibleParaTcl,
+  });
+}
+
+/** Una fuente por id (archivo o enlace), con el alcance de lectura del actor. */
+export async function getSource(actor: User, sourceId: string): Promise<Result<SourceRow>> {
+  const alcance = await autorizarLecturaDeFuente(actor, sourceId);
+  if (!alcance.ok) return err({ code: alcance.error.code, message: alcance.error.message });
+
+  const { rows } = await getPool().query<SourceRow>(`${SELECT_SOURCES} WHERE s.id = $1`, [sourceId]);
+  const fila = rows[0];
+  if (!fila) return err(NO_ENCONTRADO);
+  return ok(
+    alcance.value.soloVisibleParaTcl
+      ? { ...fila, job_status: null, job_intentos: null, job_error: null, job_disponible_en: null }
+      : fila,
+  );
+}
+
+interface FilaDeFragmento extends Omit<FragmentRow, 'locator'> {
+  readonly locator: unknown;
+}
+
+function comoFragmento(fila: FilaDeFragmento): FragmentRow {
+  return { ...fila, locator: localizadorDeFila(fila) };
+}
+
+export async function getFragments(
+  actor: User,
+  sourceId: string,
+  limite = 200,
+): Promise<Result<FragmentRow[]>> {
+  const alcance = await autorizarLecturaDeFuente(actor, sourceId);
+  if (!alcance.ok) return err({ code: alcance.error.code, message: alcance.error.message });
+
+  const { rows } = await getPool().query<FilaDeFragmento>(
+    `SELECT id, ordinal, page, slide, section, linea, locator, text, metadata
        FROM source_fragments WHERE source_id = $1 ORDER BY ordinal LIMIT $2`,
     [sourceId, limite],
   );
-  return ok(rows);
+  return ok(rows.map(comoFragmento));
+}
+
+// ─────────────────────────── Representación normalizada ───────────────────────
+
+/**
+ * Lo que obtiene el agente (y cualquier consumidor) de una fuente, en un solo
+ * sitio y con el mismo alcance de lectura que el resto:
+ *
+ *   original       la fuente tal como se registró (archivo con hash/MIME, o
+ *                  enlace con su URL); NUNCA se reemplaza.
+ *   estructura     el manifiesto normalizado de lo que no cabe en una lista de
+ *                  fragmentos (hoy: hojas, tablas, cabeceras y rangos de un
+ *                  libro de cálculo). `null` si el formato no la necesita.
+ *   fragmentos     el contenido procesable, cada uno con su localizador para
+ *                  volver al punto exacto del original.
+ */
+export interface RepresentacionNormalizada {
+  readonly source: SourceRow;
+  readonly original:
+    | {
+        readonly origin: 'file';
+        readonly mimeType: string;
+        readonly sizeBytes: string;
+        readonly hash: string;
+      }
+    | {
+        readonly origin: 'link';
+        readonly provider: string;
+        readonly url: string;
+        readonly canonicalUrl: string;
+      };
+  readonly estructura: {
+    readonly format: string;
+    readonly generator: string;
+    readonly content: Record<string, unknown>;
+  } | null;
+  readonly fragmentos: {
+    readonly total: number;
+    readonly items: readonly FragmentRow[];
+  };
+}
+
+export async function obtenerRepresentacionNormalizada(
+  actor: User,
+  sourceId: string,
+  opciones: { readonly limite?: number; readonly desde?: number } = {},
+): Promise<Result<RepresentacionNormalizada>> {
+  const fuente = await getSource(actor, sourceId);
+  if (!fuente.ok) return fuente;
+  const source = fuente.value;
+
+  const limite = Math.min(Math.max(Math.trunc(opciones.limite ?? 200), 1), 1000);
+  const desde = Math.max(Math.trunc(opciones.desde ?? 0), 0);
+
+  const { rows: estructuras } = await getPool().query<{
+    format: string;
+    generator: string;
+    content: Record<string, unknown>;
+  }>(
+    `SELECT format, generator, content FROM source_representations WHERE source_id = $1 AND kind = 'structure'`,
+    [sourceId],
+  );
+  const { rows: fragmentos } = await getPool().query<FilaDeFragmento>(
+    `SELECT id, ordinal, page, slide, section, linea, locator, text, metadata
+       FROM source_fragments WHERE source_id = $1 AND ordinal >= $2 ORDER BY ordinal LIMIT $3`,
+    [sourceId, desde, limite],
+  );
+  const { rows: total } = await getPool().query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM source_fragments WHERE source_id = $1`,
+    [sourceId],
+  );
+
+  return ok({
+    source,
+    original:
+      source.origin === 'link'
+        ? {
+            origin: 'link',
+            provider: source.external_provider!,
+            url: source.external_url!,
+            canonicalUrl: source.canonical_url!,
+          }
+        : {
+            origin: 'file',
+            mimeType: source.mime_type!,
+            sizeBytes: source.size_bytes!,
+            hash: source.hash!,
+          },
+    estructura: estructuras[0] ?? null,
+    fragmentos: { total: total[0]?.n ?? 0, items: fragmentos.map(comoFragmento) },
+  });
 }
 
 // ─────────────────────────── Visibilidad ──────────────────────────────────────
@@ -306,7 +462,9 @@ export async function uploadSource(actor: User, input: UploadInput): Promise<Res
 
   if (!validacion.valido || validacion.mimeType === undefined) {
     return err({
-      code: 'BRIEF_MISSING_CRITICAL_FIELD',
+      // Los rechazos con causa propia (Office antiguo, libro con macros o
+      // sospechoso) llevan su código semántico; el resto conserva el anterior.
+      code: validacion.codigo ?? 'BRIEF_MISSING_CRITICAL_FIELD',
       message: validacion.motivo ?? 'El archivo no es válido.',
     });
   }
@@ -322,57 +480,69 @@ export async function uploadSource(actor: User, input: UploadInput): Promise<Res
   const duplicado = existentes[0];
   if (duplicado !== undefined) {
     return err({
-      code: 'BRIEF_MISSING_CRITICAL_FIELD',
+      code: 'SOURCE_ALREADY_EXISTS',
       message: `Este archivo ya está cargado en la campaña como «${duplicado.filename}». Es el mismo contenido, aunque el nombre difiera.`,
+      details: { reason: 'same_content', sourceId: duplicado.id },
     });
   }
 
   const conExtraccion = FORMATOS_CON_EXTRACCION.includes(mimeType);
 
-  const id = await transaction(async (client) => {
-    const { rows } = await client.query<{ id: string }>(
-      `INSERT INTO source_documents
+  const subida = await transaccionConResultado(
+    async (client) => {
+      const { rows } = await client.query<{ id: string }>(
+        `INSERT INTO source_documents
               (campaign_id, organization_id, type, filename, file_id, storage_provider,
                mime_type, size_bytes, hash, status, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING id`,
-      [
-        input.campaignId,
-        actor.organizationId,
-        input.type ?? 'otro',
-        input.filename,
-        almacenado.fileId,
-        almacenado.provider,
-        mimeType,
-        almacenado.sizeBytes,
-        almacenado.hash,
-        conExtraccion ? 'pendiente' : 'procesado',
-        actor.id,
-      ],
-    );
-    const sourceId = rows[0]!.id;
+        [
+          input.campaignId,
+          actor.organizationId,
+          input.type ?? 'otro',
+          input.filename,
+          almacenado.fileId,
+          almacenado.provider,
+          mimeType,
+          almacenado.sizeBytes,
+          almacenado.hash,
+          conExtraccion ? 'pendiente' : 'procesado',
+          actor.id,
+        ],
+      );
+      const sourceId = rows[0]!.id;
 
-    // Solo se encola lo que tiene extracción automática. Una imagen se conserva
-    // y queda disponible, pero su OCR llega en E4-7.
-    if (conExtraccion) {
-      await client.query(`INSERT INTO processing_jobs (source_id) VALUES ($1)`, [sourceId]);
-    }
+      // Solo se encola lo que tiene extracción automática. Una imagen se conserva
+      // y queda disponible, pero su OCR llega en E4-7.
+      if (conExtraccion) {
+        await client.query(`INSERT INTO processing_jobs (source_id) VALUES ($1)`, [sourceId]);
+      }
 
-    await recordAudit(client, {
-      actor,
-      action: 'source.upload',
-      entityType: 'source_document',
-      entityId: sourceId,
-      metadata: {
-        filename: input.filename,
-        mimeType,
-        sizeBytes: almacenado.sizeBytes,
-        encolado: conExtraccion,
-      },
-    });
+      await recordAudit(client, {
+        actor,
+        action: 'source.upload',
+        entityType: 'source_document',
+        entityId: sourceId,
+        metadata: {
+          filename: input.filename,
+          mimeType,
+          sizeBytes: almacenado.sizeBytes,
+          encolado: conExtraccion,
+          hojaDeCalculo: esHojaDeCalculo(mimeType),
+        },
+      });
 
-    return sourceId;
-  });
+      return sourceId;
+    },
+    {
+      // Dos cargas simultáneas del mismo contenido: gana una, la otra es un duplicado.
+      code: 'SOURCE_ALREADY_EXISTS',
+      message: 'Este archivo ya está cargado en la campaña (mismo contenido).',
+      details: { reason: 'same_content' },
+    },
+  );
+  if (!subida.ok) return subida;
+  const id = subida.value;
 
   return ok({
     id,
@@ -384,19 +554,135 @@ export async function uploadSource(actor: User, input: UploadInput): Promise<Res
   });
 }
 
+// ─────────────────────────── Fuentes enlazadas (V2 · Fase 4) ──────────────────
+
+export interface RegistrarEnlaceInput {
+  readonly campaignId: string;
+  readonly url: string;
+  /** Nombre para mostrar; por defecto, el del proveedor. */
+  readonly title?: string | undefined;
+  readonly type?: SourceType | undefined;
+}
+
+export interface EnlaceRegistrado {
+  readonly id: string;
+  readonly provider: string;
+  readonly externalId: string;
+  readonly canonicalUrl: string;
+  readonly status: SourceStatus;
+}
+
+const MAX_TITULO = 200;
+
+const ENLACE_YA_REGISTRADO = {
+  code: 'SOURCE_ALREADY_EXISTS',
+  message: 'Este enlace ya está registrado en la campaña.',
+  details: { reason: 'same_link' },
+} as const;
+
+/**
+ * Registra una fuente cuyo origen es un enlace externo. SOLO registra: no
+ * descarga, no consulta ni autentica contra el proveedor — no hay ninguna
+ * llamada de red en esta ruta (la resolución del contenido será una
+ * integración específica). La fuente nace `interna` y `por_resolver`; la
+ * visibilidad hacia TCL es la misma decisión explícita de siempre
+ * (`setSourceVisibility`).
+ */
+export async function registerLinkedSource(
+  actor: User,
+  input: RegistrarEnlaceInput,
+  contexto?: ContextoDeAuditoria,
+): Promise<Result<EnlaceRegistrado>> {
+  const persona = exigirPersona(actor, contexto);
+  if (!persona.ok) return persona;
+  const permitido = assertCapability(actor, 'source:upload');
+  if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
+
+  if (!(await campanaPropia(actor, input.campaignId))) return err(NO_ENCONTRADO);
+
+  const enlace = analizarEnlaceDeFuente(input.url);
+  if (!enlace.ok) return enlace;
+  const { provider, externalId, originalUrl, canonicalUrl, metadata } = enlace.value;
+
+  const titulo = (input.title ?? '').replace(/\s+/gu, ' ').trim();
+  if (titulo.length > MAX_TITULO) {
+    return err({
+      code: 'VALIDATION_FAILED',
+      message: `El título no puede superar ${MAX_TITULO} caracteres.`,
+      details: { field: 'title' },
+    });
+  }
+  const nombre = titulo === '' ? `${etiquetaDeProveedor(provider)} · ${externalId.slice(0, 8)}…` : titulo;
+
+  return transaccionConResultado(async (client) => {
+    const { rows: existentes } = await client.query<{ id: string }>(
+      `SELECT id FROM source_documents WHERE campaign_id = $1 AND canonical_url = $2 AND origin = 'link'`,
+      [input.campaignId, canonicalUrl],
+    );
+    if (existentes[0] !== undefined) {
+      throw new Abortar({
+        ...ENLACE_YA_REGISTRADO,
+        details: { reason: 'same_link', sourceId: existentes[0].id },
+      });
+    }
+
+    const { rows } = await client.query<{ id: string }>(
+      `INSERT INTO source_documents
+              (campaign_id, organization_id, type, filename, origin, status, created_by,
+               external_provider, external_id, external_url, canonical_url, external_metadata)
+       VALUES ($1, $2, $3, $4, 'link', 'por_resolver', $5, $6, $7, $8, $9, $10::jsonb)
+       RETURNING id`,
+      [
+        input.campaignId,
+        actor.organizationId,
+        input.type ?? 'otro',
+        nombre,
+        actor.id,
+        provider,
+        externalId,
+        originalUrl,
+        canonicalUrl,
+        JSON.stringify(metadata),
+      ],
+    );
+    const id = rows[0]!.id;
+
+    // La auditoría guarda la URL canónica, no la original: un enlace de Drive
+    // puede traer una clave de acceso (`resourcekey`) que no debe viajar a logs.
+    await recordAudit(
+      client,
+      auditoriaDe(actor, contexto, {
+        action: 'source.link_register',
+        entityType: 'source_document',
+        entityId: id,
+        metadata: { campaignId: input.campaignId, provider, externalId, canonicalUrl, title: nombre },
+      }),
+    );
+    return { id, provider, externalId, canonicalUrl, status: 'por_resolver' as const };
+  }, ENLACE_YA_REGISTRADO);
+}
+
 // ─────────────────────────── Reintento (E4-9) ─────────────────────────────────
 
 export async function retrySource(actor: User, sourceId: string): Promise<Result<true>> {
   const permitido = assertCapability(actor, 'source:process');
   if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
 
-  const { rows } = await getPool().query<{ id: string; filename: string }>(
-    `SELECT id, filename FROM source_documents WHERE id = $1 AND organization_id = $2`,
+  const { rows } = await getPool().query<{ id: string; filename: string; origin: SourceOrigin }>(
+    `SELECT id, filename, origin::text AS origin FROM source_documents WHERE id = $1 AND organization_id = $2`,
     [sourceId, actor.organizationId],
   );
   const fuente = rows[0];
   if (fuente === undefined) {
     return err({ code: 'RESOURCE_NOT_FOUND', message: 'El recurso no existe o no está disponible.' });
+  }
+  // Una fuente enlazada no tiene qué reprocesar: no hay contenido resuelto.
+  if (fuente.origin === 'link') {
+    return err({
+      code: 'RESOURCE_CONFLICT',
+      message: 'Una fuente enlazada no se reprocesa: su contenido aún no se resuelve.',
+      details: { reason: 'link_not_processable' },
+    });
   }
 
   await transaction(async (client) => {

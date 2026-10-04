@@ -5,6 +5,8 @@
  * y a la sección 10.1 del documento maestro.
  */
 
+import type { SourceLocator } from './source-locator';
+
 // ─────────────────────────── Organización y usuarios ───────────────────────────
 
 export type OrganizationType = 'agencia' | 'cliente';
@@ -113,6 +115,11 @@ export interface Evidence {
   readonly fragmentId?: string | undefined;
   readonly page?: number | undefined;
   readonly slide?: number | undefined;
+  /**
+   * Ubicación citada (V2 · Fase 4): página, diapositiva, sección, hoja, fila,
+   * celda, rango o región. `page`/`slide` se conservan por compatibilidad.
+   */
+  readonly locator?: SourceLocator | undefined;
   /** Cita literal. Permite verificar sin abrir el original. */
   readonly quote: string;
   readonly relation: 'soporta' | 'contradice' | 'contexto';

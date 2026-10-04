@@ -19,6 +19,7 @@
  */
 
 import type { RepresentationSummary } from './representations';
+import type { SourceLocator } from './source-locator';
 import type { Criticality, FieldStatus, Language, ProvenanceType, ReviewStatus, Role } from './types';
 import type { BriefStatus } from './types';
 import type { CampoNivel, CampoValueType } from './brief-catalog';
@@ -58,6 +59,8 @@ export interface WorkspaceEvidence {
   readonly slide?: number | undefined;
   readonly section?: string | undefined;
   readonly linea?: number | undefined;
+  /** Ubicación citada con el contrato único (V2 · Fase 4). */
+  readonly locator?: SourceLocator | undefined;
 }
 
 export interface WorkspaceSectionField {
