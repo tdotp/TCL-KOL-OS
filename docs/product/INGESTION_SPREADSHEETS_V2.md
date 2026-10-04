@@ -89,6 +89,8 @@ PNG/JPEG se aceptan por firma, se guardan íntegros (hash) y quedan `procesado` 
 
 ## 9. Puntos de extensión para la Fase 5
 
+> **Resuelto en la Fase 5** (DEC-046): la resolución del enlace, los snapshots, el esquema del Sheet y la importación están en [`GOOGLE_SHEETS_IMPORT_V2.md`](GOOGLE_SHEETS_IMPORT_V2.md). Lo que sigue es la intención original de la Fase 4; no se levantó el trigger a ciegas, se estrechó a `google_sheet_sync` para `google_sheets`.
+
 registrar Google Sheet (**hecho**: `registerLinkedSource`, `externalId`, `gid`) → resolver mediante una integración (levantar el trigger de jobs para `origin='link'` y escribir fragmentos con `locator` de hoja, mismo contrato que XLSX) → validar esquema sobre `estructura.sheets[].headers` → `normalizeHandle` → `buscarInfluencerPorCuenta` → crear/asociar. El manifiesto, el localizador y `por_resolver → procesado` ya existen.
 
 ## 10. Riesgos y deuda

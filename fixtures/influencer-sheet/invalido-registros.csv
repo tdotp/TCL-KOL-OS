@@ -1,0 +1,9 @@
+TCL_KOL_OS_INFLUENCERS_V1
+clave_influencer,nombre,plataforma,handle,producto,tipo_acuerdo,fee
+INF-001,Valentina Rojas,instagram,@valentina.rojas,P80,mixto,1500000
+INF-002,Sin plataforma conocida,myspace,pedro,P80,,
+INF-003,Handle con espacio,tiktok,pedro perez,P80,,
+INF-004,Acuerdo inventado,youtube,ana.y,P80,regalo,
+INF-005,Fee en palabras,youtube,beto.y,P80,fee,mucho
+INF-006,Misma cuenta que INF-001,instagram,VALENTINA.ROJAS,P80,,
+,Fila sin clave,instagram,sinclave,,,
