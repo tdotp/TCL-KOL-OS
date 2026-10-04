@@ -674,6 +674,17 @@ posterior a aprobación». 15 de septiembre de 2026.
 - **Dónde vive:** `infra/db/migrations/015_influencers.sql`, `016_campaign_influencers.sql`; `packages/domain/src/influencers.ts`, `permissions.ts`; `packages/db/src/influencers.ts`, `campaign-influencers.ts`, `tx-result.ts`; detalle en `docs/product/INFLUENCER_MODEL_V2.md`.
 - **Responsable de aprobación:** Gerardo Calambás.
 
+### DEC-045 — Fuentes enlazadas, localizador generalizado y hojas de cálculo (ingestión ampliada)
+
+- **Fecha:** 4 de octubre de 2026
+- **Estado:** **aprobada** — V2 · Fase 4
+- **Origen:** el workflow V2 recibe documentos por chat (incluidos Excel y enlaces a Google Sheets) y exige conservar siempre el original y mantener la trazabilidad contenido↔fuente. El modelo anterior suponía que toda fuente es un archivo con página o diapositiva: no podía representar un enlace ni una celda, y rechazaba `.xlsx` explícitamente.
+- **Decisión:** (1) `source_documents` sigue siendo LA entidad de fuente, con un discriminador `origin` (`file` | `link`) y restricciones CHECK que imponen qué columnas lleva cada origen; se descartó una entidad superior `sources` (obligaba a migrar FK de evidencia, trabajos y fragmentos, con inmutabilidad, y a duplicar visibilidad y permisos). (2) Una fuente enlazada solo se REGISTRA: sin red, sin descarga, sin OAuth; proveedor y URL canónica se identifican de forma pura y estrecha (https, host exacto de Google, sin credenciales, `gid` preservado) y nace `por_resolver`, sin job. (3) El contrato de ubicación es `SourceLocator` (`page | slide | section | sheet | row | cell | range | region`), `jsonb` validado en la base (`source_locator_valido`) y espejo en dominio; las columnas `page/slide/section/linea` se conservan y un trigger deriva el localizador de ellas (nada histórico se reescribe; la evidencia congelada no se toca). (4) La evidencia que cita un fragmento hereda SIEMPRE su localizador y debe ser de la misma fuente (trigger). (5) `.xlsx` y `.csv` se procesan en el worker sin dependencias nuevas (`zipfile` + `xml.etree`), sin evaluar fórmulas ni ejecutar macros, con límites y rechazo (no truncado silencioso); un fragmento = filas contiguas con pares «cabecera: valor» y rango A1. (6) La representación normalizada es: original (siempre) + fragmentos localizados + estructura (`source_representations`, hoy el manifiesto del libro). (7) Un fallo determinista de ingestión (libro inválido) deja el job `fallido` sin reintentos; la ingestión completada/fallida se audita con origen `system`. Supersede la regla de DEC-010 que mandaba el Excel a «excepción manual».
+- **Migraciones:** `017_estado_por_resolver.sql`, `018_fuentes_enlazadas_y_localizador.sql` (forward-only, aditivas).
+- **Fuera de alcance:** Google Sheets (OAuth/API/lectura/sincronización), validación de columnas, importación y matching de influencers (Fase 5), OCR/visión, `.xls` binario, previews, UI.
+- **Dónde vive:** `infra/db/migrations/017…018`; `packages/domain/src/source-locator.ts`, `linked-sources.ts`, `file-validation.ts`; `packages/db/src/sources.ts`, `locators.ts`, `search.ts`, `storage.ts`; `services/ai-worker/app/parsers/{xlsx_parser,csv_parser,tabular}.py`, `runner.py`, `validation.py`; detalle en `docs/product/INGESTION_SPREADSHEETS_V2.md`.
+- **Responsable de aprobación:** Gerardo Calambás.
+
 ---
 
 ## Decisiones pendientes que no bloquean MVP 0
