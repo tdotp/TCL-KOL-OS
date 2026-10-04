@@ -30,6 +30,7 @@ import {
   type Criticality,
   type FieldStatus,
   type ProvenanceType,
+  type RepresentationSummary,
   type ReviewStatus,
   type Role,
   type User,
@@ -60,6 +61,7 @@ import { listBriefFieldRevisions } from './brief-fields.ts';
 import { listarPreguntas } from './local-questions.ts';
 import { verCamposDeVersion, versionesDelBrief } from './extraction.ts';
 import { getPool } from './client.ts';
+import { obtenerVersionLogica } from './brief-representations.ts';
 
 const ESTADOS_INMUTABLES = new Set<BriefStatus>(['approved', 'superseded', 'cancelled']);
 
@@ -341,6 +343,11 @@ export async function obtenerBriefWorkspace(
   }));
   const siguienteVersion = versiones.find((v) => v.version === ultima.version + 1);
 
+  const logica = await obtenerVersionLogica(actor, ultima.id);
+  const representations = logica.ok
+    ? (Object.values(logica.value.representations) as RepresentationSummary[])
+    : [];
+
   return ok({
     ...base,
     version: {
@@ -349,6 +356,7 @@ export async function obtenerBriefWorkspace(
       status,
       language: ultima.language === 'en' ? 'en' : 'es',
       editable: !ESTADOS_INMUTABLES.has(status),
+      representations,
     },
     progress: {
       percentage: total === 0 ? 0 : Math.round((ready / total) * 100),

@@ -44,6 +44,13 @@ export async function crearVersionHija(actor: User, parentVersionId: string): Pr
   if (!datos || datos.organizationId !== actor.organizationId) {
     return err({ code: 'RESOURCE_NOT_FOUND', message: 'El recurso no existe o no está disponible.' });
   }
+  if (datos.version.language !== 'es') {
+    return err({
+      code: 'BRIEF_INVALID_TRANSITION',
+      message:
+        'Esta es una versión en inglés anterior a V2: es una representación de la versión lógica. Cree la versión nueva desde la versión lógica.',
+    });
+  }
   if (datos.version.status !== 'approved') {
     return err({
       code: 'BRIEF_VERSION_IMMUTABLE',
@@ -166,12 +173,91 @@ export async function crearVersionHija(actor: User, parentVersionId: string): Pr
       }
     }
 
+    // V2 · Fase 2 — representaciones. La hija es una versión lógica nueva con SUS
+    // representaciones (la original nace por trigger); cada una conserva el
+    // linaje hacia la equivalente de la versión padre, y las traducciones se
+    // copian con su huella tal cual: si el padre estaba al día la hija también,
+    // y si estaba desactualizada o sin verificar, sigue estándolo (no se
+    // «blanquea» una traducción al copiarla).
+    const representacionesPadre = await client.query<{ id: string; language: string; kind: string }>(
+      `SELECT id, language, kind FROM brief_version_representations
+        WHERE brief_version_id = $1 ORDER BY (kind = 'original') DESC, language`,
+      [parentVersionId],
+    );
+    const hijaOriginal = await client.query<{ id: string }>(
+      `SELECT id FROM brief_version_representations WHERE brief_version_id = $1 AND kind = 'original'`,
+      [nuevaVersionId],
+    );
+    const mapaRepresentaciones = new Map<string, string>();
+    for (const rp of representacionesPadre.rows) {
+      if (rp.kind === 'original') {
+        await client.query(
+          `UPDATE brief_version_representations SET copied_from_representation_id = $1 WHERE id = $2`,
+          [rp.id, hijaOriginal.rows[0]!.id],
+        );
+        mapaRepresentaciones.set(rp.id, hijaOriginal.rows[0]!.id);
+      } else {
+        const copia = await client.query<{ id: string }>(
+          `INSERT INTO brief_version_representations
+                  (brief_version_id, language, kind, source_representation_id,
+                   copied_from_representation_id, created_by)
+           VALUES ($1, $2, 'translation', $3, $4, $5) RETURNING id`,
+          [nuevaVersionId, rp.language, hijaOriginal.rows[0]!.id, rp.id, actor.id],
+        );
+        mapaRepresentaciones.set(rp.id, copia.rows[0]!.id);
+      }
+    }
+    let traduccionesCopiadas = 0;
+    if (mapaRepresentaciones.size > 0) {
+      const traduccionesPadre = await client.query<{
+        brief_field_id: string;
+        representation_id: string;
+        value: unknown;
+        provenance_type: string;
+        translator: string;
+        source_value_hash: string | null;
+        translated_by: string | null;
+      }>(
+        `SELECT brief_field_id, representation_id, value, provenance_type::text AS provenance_type,
+                translator, source_value_hash, translated_by
+           FROM brief_field_translations WHERE representation_id = ANY($1::uuid[])`,
+        [[...mapaRepresentaciones.keys()]],
+      );
+      for (const t of traduccionesPadre.rows) {
+        const campoHijo = mapaIdCampo.get(t.brief_field_id);
+        const repHija = mapaRepresentaciones.get(t.representation_id);
+        if (campoHijo === undefined || repHija === undefined) continue;
+        await client.query(
+          `INSERT INTO brief_field_translations
+                  (brief_field_id, representation_id, value, provenance_type, translator,
+                   source_value_hash, translated_by)
+           VALUES ($1, $2, $3::jsonb, $4::provenance_type, $5, $6, $7)`,
+          [
+            campoHijo,
+            repHija,
+            JSON.stringify(t.value),
+            t.provenance_type,
+            t.translator,
+            t.source_value_hash,
+            t.translated_by,
+          ],
+        );
+        traduccionesCopiadas += 1;
+      }
+    }
+
     await recordAudit(client, {
       actor,
       action: 'brief.create_child_version',
       entityType: 'brief_version',
       entityId: nuevaVersionId,
-      metadata: { parentVersionId, version: nuevaVersion, camposCopiados: mapaIdCampo.size },
+      metadata: {
+        parentVersionId,
+        version: nuevaVersion,
+        camposCopiados: mapaIdCampo.size,
+        representacionesCopiadas: mapaRepresentaciones.size,
+        traduccionesCopiadas,
+      },
     });
     await recordAudit(client, {
       actor,

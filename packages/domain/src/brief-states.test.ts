@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   LEGACY_CLIENT_STATES,
+  REQUIRED_REPRESENTATION_LANGUAGES,
   TERMINAL_STATES,
   TRANSITIONS,
   allowedTransitions,
@@ -17,7 +18,8 @@ import {
   transition,
   transitionsFrom,
 } from './brief-states';
-import type { BriefField, BriefStatus, BriefVersion, Role, User } from './types';
+import type { BriefField, BriefRepresentation, BriefStatus, BriefVersion, Role, User } from './types';
+import { esEquivalenteAlOriginal, resumirSincronizacion } from './representations';
 
 // ─────────────────────────── Utilidades de prueba ──────────────────────────────
 
@@ -445,17 +447,168 @@ describe('guarda: preguntas locales pendientes bloquea volver al brief', () => {
   });
 });
 
-describe('guarda: traducción sin origen (caso F-33)', () => {
-  it('bloquea una versión EN sin translationOfId', () => {
-    const v = version('extraction_review', { language: 'en' });
-    const result = transition({ version: v, actor: user('consultor') }, 'internal_review');
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe('TRANSLATION_MISSING_ORIGIN');
+describe('versiones EN históricas (anteriores a V2): no son versiones lógicas', () => {
+  // Regla V2 que reemplaza el caso F-33 («una versión EN sin translationOfId
+  // bloquea»): ya no existen versiones EN independientes con estado propio. Una
+  // fila EN histórica es una representación de otra versión y no avanza sola;
+  // el origen de las traducciones nuevas lo verifica `guardRepresentationsHaveOrigin`.
+  it('ninguna transición se puede ejecutar sobre una fila EN histórica', () => {
+    for (const translationOfId of [undefined, 'bv-es-3']) {
+      const v = version('extraction_review', { language: 'en', translationOfId });
+      const result = transition({ version: v, actor: user('consultor') }, 'internal_review');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('BRIEF_INVALID_TRANSITION');
+        expect(result.error.details?.['motivo']).toBe('legacy_language_version');
+      }
+    }
   });
 
-  it('acepta una versión EN con origen declarado', () => {
-    const v = version('extraction_review', { language: 'en', translationOfId: 'bv-es-3' });
-    expect(transition({ version: v, actor: user('consultor') }, 'internal_review').ok).toBe(true);
+  it('ni siquiera aprobar: no existe «aprobar solo EN»', () => {
+    const v = version('internal_review', { language: 'en', translationOfId: 'bv-es-3' });
+    expect(transition({ version: v, actor: user('director') }, 'approved').ok).toBe(false);
+  });
+});
+
+// ─────────────────────────── Representaciones ES / EN (V2 · Fase 2) ────────────
+
+describe('guardas de representaciones lingüísticas', () => {
+  const original: BriefRepresentation = {
+    id: 'rep-es',
+    language: 'es',
+    kind: 'original',
+    createdAt: '2026-08-11T10:00:00-05:00',
+    staleFieldKeys: [],
+    unverifiedFieldKeys: [],
+    missingFieldKeys: [],
+  };
+  const traduccion = (overrides: Partial<BriefRepresentation> = {}): BriefRepresentation => ({
+    id: 'rep-en',
+    language: 'en',
+    kind: 'translation',
+    sourceRepresentationId: 'rep-es',
+    sourceLanguage: 'es',
+    createdAt: '2026-08-11T11:00:00-05:00',
+    staleFieldKeys: [],
+    unverifiedFieldKeys: [],
+    missingFieldKeys: [],
+    ...overrides,
+  });
+  const conReps = (status: BriefStatus, reps: BriefRepresentation[]) =>
+    version(status, { representations: reps });
+
+  it('una traducción sin origen verificable bloquea revisión interna y aprobación', () => {
+    const sinOrigen = traduccion({ sourceRepresentationId: undefined, sourceLanguage: undefined });
+    for (const [desde, hasta, actor] of [
+      ['extraction_review', 'internal_review', user('consultor')],
+      ['draft', 'internal_review', user('consultor')],
+      ['internal_review', 'approved', user('director')],
+      ['client_review', 'approved', user('director')],
+    ] as const) {
+      const r = transition({ version: conReps(desde, [original, sinOrigen]), actor }, hasta);
+      expect(r.ok, `${desde} → ${hasta}`).toBe(false);
+      if (!r.ok) expect(r.error.code).toBe('TRANSLATION_MISSING_ORIGIN');
+    }
+  });
+
+  it('un origen del mismo idioma tampoco es verificable', () => {
+    const r = transition(
+      {
+        version: conReps('internal_review', [original, traduccion({ sourceLanguage: 'en' })]),
+        actor: user('director'),
+      },
+      'approved',
+    );
+    expect(r.ok).toBe(false);
+  });
+
+  it('una traducción stale NO se aprueba (y no se da por equivalente)', () => {
+    const stale = traduccion({ staleFieldKeys: ['objetivo.negocio'] });
+    expect(esEquivalenteAlOriginal(stale)).toBe(false);
+    expect(resumirSincronizacion(stale)).toBe('stale');
+    const r = transition(
+      { version: conReps('internal_review', [original, stale]), actor: user('director') },
+      'approved',
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.code).toBe('TRANSLATION_STALE');
+      expect(r.error.details?.['representaciones']).toEqual([
+        { idioma: 'en', desactualizados: ['objetivo.negocio'], sinVerificar: [], sinTraducir: [] },
+      ]);
+    }
+  });
+
+  it('sin verificar (histórica) o incompleta tampoco se aprueban', () => {
+    for (const parcial of [{ unverifiedFieldKeys: ['a'] }, { missingFieldKeys: ['b'] }]) {
+      const r = transition(
+        {
+          version: conReps('internal_review', [original, traduccion(parcial)]),
+          actor: user('director'),
+        },
+        'approved',
+      );
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error.code).toBe('TRANSLATION_STALE');
+    }
+  });
+
+  it('una traducción al día sí se aprueba: la aprobación cubre la versión lógica completa', () => {
+    const al_dia = traduccion();
+    expect(esEquivalenteAlOriginal(al_dia)).toBe(true);
+    expect(resumirSincronizacion(al_dia)).toBe('current');
+    const r = transition(
+      { version: conReps('internal_review', [original, al_dia]), actor: user('director') },
+      'approved',
+    );
+    expect(r.ok).toBe(true);
+  });
+
+  it('sin representación EN (todavía no se genera) la versión se aprueba; el original es requerido', () => {
+    expect(
+      transition({ version: conReps('internal_review', [original]), actor: user('director') }, 'approved').ok,
+    ).toBe(true);
+    const sinOriginal = transition(
+      { version: conReps('internal_review', []), actor: user('director') },
+      'approved',
+    );
+    expect(sinOriginal.ok).toBe(false);
+    if (!sinOriginal.ok) expect(sinOriginal.error.code).toBe('REPRESENTATION_MISSING');
+    expect(REQUIRED_REPRESENTATION_LANGUAGES).toEqual(['es']);
+  });
+
+  it('una traducción stale no impide revisar o devolver; solo aprobar', () => {
+    const stale = traduccion({ staleFieldKeys: ['x'] });
+    expect(
+      transition(
+        { version: conReps('draft', [original, stale]), actor: user('consultor') },
+        'internal_review',
+      ).ok,
+    ).toBe(true);
+    expect(
+      transition(
+        { version: conReps('internal_review', [original, stale]), actor: user('director') },
+        'internal_changes_requested',
+      ).ok,
+    ).toBe(true);
+  });
+
+  it('las reglas de rol no cambian: cliente, consultor, sistema no aprueban aunque todo esté al día', () => {
+    const v = conReps('internal_review', [original, traduccion()]);
+    for (const actor of [user('cliente'), user('consultor'), user('operativo'), 'system' as const]) {
+      expect(transition({ version: v, actor }, 'approved').ok).toBe(false);
+    }
+  });
+
+  it('el resumen prioriza stale sobre sin verificar y este sobre incompleta', () => {
+    expect(resumirSincronizacion(traduccion({ staleFieldKeys: ['a'], unverifiedFieldKeys: ['b'] }))).toBe(
+      'stale',
+    );
+    expect(resumirSincronizacion(traduccion({ unverifiedFieldKeys: ['b'], missingFieldKeys: ['c'] }))).toBe(
+      'unverified',
+    );
+    expect(resumirSincronizacion(traduccion({ missingFieldKeys: ['c'] }))).toBe('incomplete');
+    expect(resumirSincronizacion(original)).toBe('original');
   });
 });
 

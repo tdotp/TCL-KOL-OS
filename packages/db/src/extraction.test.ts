@@ -300,6 +300,46 @@ describe('lo persistido respeta las reglas del brief', () => {
     expect(v!.approved_at).toBeNull();
   });
 
+  it('escribe en el modelo bilingüe: una sola versión lógica con su representación ES, sin versiones por idioma (V2)', async () => {
+    const versionId = await nuevaVersion();
+    await persistirExtraccion({
+      organizationId: orgId,
+      campaignId,
+      versionId,
+      resultado: resultadoDePrueba([
+        {
+          key: 'contexto.categoria',
+          value: 'Smartphones',
+          status: 'found',
+          criticidad: 'informativo',
+          confidence: null,
+          nota: null,
+          productoId: null,
+          evidence: [],
+        },
+      ]),
+    });
+
+    const reps = await query<{ language: string; kind: string }>(
+      `SELECT language, kind FROM brief_version_representations WHERE brief_version_id = $1`,
+      [versionId],
+    );
+    expect(reps).toEqual([{ language: 'es', kind: 'original' }]);
+    const idiomas = await query<{ language: string }>(
+      `SELECT DISTINCT v.language FROM brief_versions v
+         JOIN briefs b ON b.id = v.brief_id WHERE b.campaign_id = $1`,
+      [campaignId],
+    );
+    expect(idiomas).toEqual([{ language: 'es' }]);
+    // Sin traducciones todavía: nada que quede desactualizado.
+    const traducciones = await query(
+      `SELECT 1 FROM brief_field_translations t
+        JOIN brief_fields f ON f.id = t.brief_field_id WHERE f.brief_version_id = $1`,
+      [versionId],
+    );
+    expect(traducciones).toHaveLength(0);
+  });
+
   it('un conflicto se guarda sin valor, con sus dos evidencias', async () => {
     const frags = await query<{ id: string; source_id: string }>(
       `SELECT f.id, f.source_id

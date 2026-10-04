@@ -45,7 +45,11 @@ export type DomainErrorCode =
   | 'PROPOSAL_INVALID_STATE'
   | 'PROPOSAL_EXPIRED'
   /** El contenido cambió entre la propuesta y la confirmación/ejecución. */
-  | 'PROPOSAL_STALE';
+  | 'PROPOSAL_STALE'
+  /** Una traducción ya no corresponde al valor original vigente (V2 · Fase 2). */
+  | 'TRANSLATION_STALE'
+  /** Falta una representación lingüística requerida de la versión (V2 · Fase 2). */
+  | 'REPRESENTATION_MISSING';
 
 export interface DomainErrorPayload {
   readonly code: DomainErrorCode;

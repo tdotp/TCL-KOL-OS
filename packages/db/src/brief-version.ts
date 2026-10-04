@@ -12,6 +12,7 @@
 import type pg from 'pg';
 import type {
   BriefField,
+  BriefRepresentation,
   BriefVersion,
   ReviewStatus,
   FieldStatus,
@@ -121,6 +122,60 @@ export interface VersionCargada {
   readonly campaignId: string;
 }
 
+interface FilaRepresentacion {
+  id: string;
+  language: 'es' | 'en';
+  kind: BriefRepresentation['kind'];
+  source_representation_id: string | null;
+  source_language: 'es' | 'en' | null;
+  copied_from_representation_id: string | null;
+  legacy_version_id: string | null;
+  created_by: string | null;
+  created_at: Date;
+  stale_keys: string[];
+  unverified_keys: string[];
+  missing_keys: string[];
+}
+
+/**
+ * Representaciones lingüísticas de una versión lógica (V2 · Fase 2), con el
+ * estado de sincronización de cada traducción según `brief_translation_sync`
+ * (la única definición de «stale»).
+ */
+export async function cargarRepresentaciones(
+  ejecutor: Ejecutor,
+  versionId: string,
+): Promise<BriefRepresentation[]> {
+  const { rows } = await ejecutor.query<FilaRepresentacion>(
+    `SELECT r.id, r.language, r.kind, r.source_representation_id, src.language AS source_language,
+            r.copied_from_representation_id, r.legacy_version_id, r.created_by, r.created_at,
+            COALESCE(array_agg(s.key ORDER BY s.key) FILTER (WHERE s.state = 'stale'), '{}') AS stale_keys,
+            COALESCE(array_agg(s.key ORDER BY s.key) FILTER (WHERE s.state = 'unverified'), '{}') AS unverified_keys,
+            COALESCE(array_agg(s.key ORDER BY s.key) FILTER (WHERE s.state = 'missing'), '{}') AS missing_keys
+       FROM brief_version_representations r
+       LEFT JOIN brief_version_representations src ON src.id = r.source_representation_id
+       LEFT JOIN brief_translation_sync s ON s.representation_id = r.id
+      WHERE r.brief_version_id = $1
+      GROUP BY r.id, src.language
+      ORDER BY r.language`,
+    [versionId],
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    language: r.language,
+    kind: r.kind,
+    sourceRepresentationId: r.source_representation_id ?? undefined,
+    sourceLanguage: r.source_language ?? undefined,
+    copiedFromRepresentationId: r.copied_from_representation_id ?? undefined,
+    legacyVersionId: r.legacy_version_id ?? undefined,
+    createdBy: r.created_by ?? undefined,
+    createdAt: r.created_at.toISOString(),
+    staleFieldKeys: r.stale_keys,
+    unverifiedFieldKeys: r.unverified_keys,
+    missingFieldKeys: r.missing_keys,
+  }));
+}
+
 /**
  * Carga una versión con la forma exacta de dominio, incluida cada evidencia.
  * Es lo que necesita `transition()` para evaluar sus guardas — nunca una
@@ -190,6 +245,8 @@ export async function cargarVersion(
     revision: f.revision,
   }));
 
+  const representations = await cargarRepresentaciones(db, versionId);
+
   return {
     organizationId: version.organization_id,
     campaignId: version.campaign_id,
@@ -202,6 +259,7 @@ export async function cargarVersion(
       translationOfId: version.translation_of_id ?? undefined,
       status: version.status,
       fields,
+      representations,
       createdBy: version.created_by,
       createdAt: version.created_at.toISOString(),
     },

@@ -88,12 +88,36 @@ async function huellaDeContenidoDeVersion(
   ejecutor: pg.Pool | pg.PoolClient,
   versionId: string,
 ): Promise<string> {
-  const { rows } = await ejecutor.query<{ k: string; p: string | null; r: number; v: string; s: string }>(
+  const { rows: campos } = await ejecutor.query<{
+    k: string;
+    p: string | null;
+    r: number;
+    v: string;
+    s: string;
+  }>(
     `SELECT key AS k, campaign_product_id::text AS p, revision AS r, md5(value::text) AS v, status::text AS s
        FROM brief_fields WHERE brief_version_id = $1 ORDER BY key, campaign_product_id NULLS FIRST`,
     [versionId],
   );
-  return sha256(canonico(rows));
+  // V2 · Fase 2: también las representaciones. Quien confirma aprueba la
+  // versión lógica completa (ES y EN); si una traducción cambia entre la
+  // propuesta y la confirmación, la huella ya no coincide.
+  const { rows: traducciones } = await ejecutor.query<{
+    k: string;
+    p: string | null;
+    l: string;
+    v: string;
+    h: string | null;
+  }>(
+    `SELECT f.key AS k, f.campaign_product_id::text AS p, r.language AS l,
+            md5(t.value::text) AS v, t.source_value_hash AS h
+       FROM brief_field_translations t
+       JOIN brief_fields f ON f.id = t.brief_field_id
+       JOIN brief_version_representations r ON r.id = t.representation_id
+      WHERE f.brief_version_id = $1 ORDER BY f.key, f.campaign_product_id NULLS FIRST, r.language`,
+    [versionId],
+  );
+  return sha256(canonico({ campos, traducciones }));
 }
 
 // ─────────────────────────── Filas ─────────────────────────────────────────────

@@ -569,6 +569,9 @@ export async function versionesDelBrief(actor: User, campaignId: string): Promis
        JOIN briefs b ON b.id = v.brief_id
        LEFT JOIN ai_runs r ON r.brief_version_id = v.id AND r.task = 'extraer_campos'
       WHERE b.campaign_id = $1
+        -- V2: solo versiones LÓGICAS. Las filas EN históricas son representaciones
+        -- (o inconsistencias marcadas en brief_legacy_language_links), no versiones.
+        AND v.language = 'es'
       ORDER BY v.version DESC`,
     [campaignId],
   );

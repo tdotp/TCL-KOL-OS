@@ -18,6 +18,7 @@
  * "Revisar brief" no tenga que volver a consultar la base.
  */
 
+import type { RepresentationSummary } from './representations';
 import type { Criticality, FieldStatus, Language, ProvenanceType, ReviewStatus, Role } from './types';
 import type { BriefStatus } from './types';
 import type { CampoNivel, CampoValueType } from './brief-catalog';
@@ -155,8 +156,14 @@ export interface BriefWorkspace {
         readonly id: string;
         readonly number: number;
         readonly status: BriefStatus;
+        /** Idioma original de la versión lógica. NO es identidad: ES y EN comparten estado y aprobación. */
         readonly language: Language;
         readonly editable: boolean;
+        /**
+         * Representaciones lingüísticas de la versión (V2 · Fase 2): ES / EN como
+         * vistas de la MISMA versión, con su estado de sincronización.
+         */
+        readonly representations: readonly RepresentationSummary[];
       }
     | undefined;
   readonly products: readonly WorkspaceProduct[];

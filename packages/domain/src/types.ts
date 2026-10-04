@@ -165,7 +165,9 @@ export interface BriefFieldRevision {
   readonly id: string;
   readonly briefFieldId: string;
   readonly briefVersionId: string;
-  readonly accion: 'confirm' | 'correct' | 'resolve_conflict' | 'apply_answer';
+  readonly accion: 'confirm' | 'correct' | 'resolve_conflict' | 'apply_answer' | 'translate';
+  /** Idioma al que corresponde el cambio (V2). Histórico: `es`. */
+  readonly language?: Language | undefined;
   readonly valorAnterior: unknown;
   readonly valorNuevo: unknown;
   readonly motivo?: string | undefined;
@@ -173,13 +175,60 @@ export interface BriefFieldRevision {
   readonly createdAt: string;
 }
 
+/**
+ * Representación lingüística de una versión lógica del brief (V2 · Fase 2).
+ *
+ * ES y EN no son versiones distintas: son representaciones HIJAS de la misma
+ * versión, que comparten número, estado, aprobación y linaje. Una
+ * representación `original` vive en los campos de la versión; una `translation`
+ * (o `legacy_import`, importada de una fila EN histórica) deriva de otra
+ * representación de la MISMA versión y su sincronización con el original se
+ * puede comprobar.
+ */
+export type RepresentationKind = 'original' | 'translation' | 'legacy_import';
+
+/** Estado de una traducción frente al valor original vigente. */
+export type TranslationSyncState = 'current' | 'stale' | 'unverified' | 'missing';
+
+export interface BriefRepresentation {
+  readonly id: string;
+  readonly language: Language;
+  readonly kind: RepresentationKind;
+  /** Obligatorio en toda traducción: de qué representación proviene. */
+  readonly sourceRepresentationId?: string | undefined;
+  readonly sourceLanguage?: Language | undefined;
+  /** Representación equivalente de la versión padre (linaje entre versiones). */
+  readonly copiedFromRepresentationId?: string | undefined;
+  /** Fila EN histórica de la que se importó (solo `legacy_import`). */
+  readonly legacyVersionId?: string | undefined;
+  readonly createdBy?: string | undefined;
+  readonly createdAt: string;
+  /** Campos con valor cuya traducción ya no corresponde al valor original. */
+  readonly staleFieldKeys: readonly string[];
+  /** Campos con traducción que no se puede verificar (datos históricos). */
+  readonly unverifiedFieldKeys: readonly string[];
+  /** Campos con valor que todavía no tienen traducción. */
+  readonly missingFieldKeys: readonly string[];
+}
+
 export interface BriefVersion {
   readonly id: string;
   readonly briefId: string;
   readonly version: number;
+  /**
+   * Idioma original de la versión lógica (hoy siempre `es`). NO es identidad de
+   * negocio: el inglés es una representación (`representations`), no otra versión.
+   */
   readonly language: Language;
   readonly parentVersionId?: string | undefined;
+  /**
+   * LEGACY (anterior a V2): solo las filas EN históricas lo traen. Una versión
+   * nueva nunca lo usa; la relación de una traducción con su origen vive en
+   * `representations[].sourceRepresentationId`. Se conserva para leer el histórico.
+   */
   readonly translationOfId?: string | undefined;
+  /** Representaciones lingüísticas. `undefined` = no cargadas (p. ej. en pruebas). */
+  readonly representations?: readonly BriefRepresentation[] | undefined;
   readonly status: BriefStatus;
   readonly fields: readonly BriefField[];
   readonly createdBy: string;

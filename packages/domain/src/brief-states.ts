@@ -14,7 +14,7 @@
  * Toda transición valida rol, estado actual y datos mínimos requeridos (§7.3).
  */
 
-import type { BriefStatus, BriefField, BriefVersion, Role, User } from './types';
+import type { BriefStatus, BriefField, BriefVersion, Language, Role, User } from './types';
 import { type DomainErrorPayload, type Result, err, ok } from './errors';
 import { campoDelCatalogo } from './brief-catalog';
 
@@ -123,6 +123,74 @@ const guardTranslationHasOrigin: Guard = ({ version }) => {
     code: 'TRANSLATION_MISSING_ORIGIN',
     message: 'Una versión en inglés debe referenciar la versión en español de la que deriva.',
     details: { versionId: version.id, language: version.language },
+  };
+};
+
+/**
+ * Representaciones lingüísticas (V2 · Fase 2).
+ *
+ * Reemplazan, para las versiones nuevas, el papel de `guardTranslationHasOrigin`
+ * (que se conserva para las filas EN históricas): una traducción SIEMPRE tiene
+ * origen verificable, y no se aprueba una versión cuyas representaciones no
+ * corresponden al contenido vigente. La aprobación es de la versión lógica
+ * completa — ES y EN comparten estado y aprobación.
+ */
+
+/** Idiomas que toda versión debe tener para aprobarse. El inglés pasará a requerirse cuando exista la generación de traducciones. */
+export const REQUIRED_REPRESENTATION_LANGUAGES: readonly Language[] = ['es'];
+
+const guardRepresentationsHaveOrigin: Guard = ({ version }) => {
+  const sinOrigen = (version.representations ?? []).filter(
+    (r) =>
+      r.kind !== 'original' &&
+      (r.sourceRepresentationId === undefined ||
+        r.sourceLanguage === undefined ||
+        r.sourceLanguage === r.language),
+  );
+  if (sinOrigen.length === 0) return null;
+  return {
+    code: 'TRANSLATION_MISSING_ORIGIN',
+    message: 'Una representación traducida debe referenciar la representación de la que deriva.',
+    details: { idiomas: sinOrigen.map((r) => r.language) },
+  };
+};
+
+const guardRequiredRepresentations: Guard = ({ version }) => {
+  if (version.representations === undefined) return null;
+  const presentes = new Set(version.representations.map((r) => r.language));
+  const faltan = REQUIRED_REPRESENTATION_LANGUAGES.filter((l) => !presentes.has(l));
+  if (faltan.length === 0) return null;
+  return {
+    code: 'REPRESENTATION_MISSING',
+    message: `Falta la representación requerida: ${faltan.join(', ')}.`,
+    details: { idiomas: faltan },
+  };
+};
+
+/**
+ * No se aprueba una versión con una traducción desactualizada, sin verificar o
+ * incompleta: el sistema no debe dar por equivalente lo que ya no lo es.
+ */
+const guardTranslationsInSync: Guard = ({ version }) => {
+  const problemas = (version.representations ?? [])
+    .filter((r) => r.kind !== 'original')
+    .filter((r) => r.staleFieldKeys.length + r.unverifiedFieldKeys.length + r.missingFieldKeys.length > 0);
+  if (problemas.length === 0) return null;
+  const total = problemas.reduce(
+    (n, r) => n + r.staleFieldKeys.length + r.unverifiedFieldKeys.length + r.missingFieldKeys.length,
+    0,
+  );
+  return {
+    code: 'TRANSLATION_STALE',
+    message: `La traducción (${problemas.map((r) => r.language).join(', ')}) no corresponde al contenido vigente: ${total} campo(s) desactualizado(s), sin verificar o sin traducir.`,
+    details: {
+      representaciones: problemas.map((r) => ({
+        idioma: r.language,
+        desactualizados: r.staleFieldKeys,
+        sinVerificar: r.unverifiedFieldKeys,
+        sinTraducir: r.missingFieldKeys,
+      })),
+    },
   };
 };
 
@@ -289,6 +357,7 @@ export const TRANSITIONS: readonly TransitionRule[] = [
       guardProductFieldsAnchored,
       guardAllFieldsReviewed,
       guardTranslationHasOrigin,
+      guardRepresentationsHaveOrigin,
     ],
     description: 'El consultor solicita revisión interna.',
   },
@@ -306,6 +375,7 @@ export const TRANSITIONS: readonly TransitionRule[] = [
       guardProductFieldsAnchored,
       guardAllFieldsReviewed,
       guardTranslationHasOrigin,
+      guardRepresentationsHaveOrigin,
     ],
     description: 'Brief completado manualmente, sin asistencia de IA.',
   },
@@ -338,6 +408,9 @@ export const TRANSITIONS: readonly TransitionRule[] = [
       guardClaimsHaveEvidence,
       guardNoPendingCriticalQuestions,
       guardTranslationHasOrigin,
+      guardRepresentationsHaveOrigin,
+      guardRequiredRepresentations,
+      guardTranslationsInSync,
     ],
     description: 'Dirección de SmartPR aprueba el brief. Congela la versión (ADR-003).',
   },
@@ -357,6 +430,9 @@ export const TRANSITIONS: readonly TransitionRule[] = [
       guardClaimsHaveEvidence,
       guardNoPendingCriticalQuestions,
       guardTranslationHasOrigin,
+      guardRepresentationsHaveOrigin,
+      guardRequiredRepresentations,
+      guardTranslationsInSync,
     ],
     description: 'Estado heredado: Dirección de SmartPR cierra el brief que quedó en revisión del cliente.',
   },
@@ -434,6 +510,18 @@ export function allowedTransitions(from: BriefStatus, actor: Actor): readonly Br
  */
 export function transition(ctx: TransitionContext, to: BriefStatus): Result<BriefStatus> {
   const from = ctx.version.status;
+
+  // V2 · Fase 2: una fila EN histórica (versión independiente por idioma) no es
+  // una versión lógica: es una representación de otra. No tiene estado propio
+  // que mover ni aprobación propia; el flujo se opera sobre la versión lógica.
+  if (ctx.version.language !== 'es') {
+    return err({
+      code: 'BRIEF_INVALID_TRANSITION',
+      message:
+        'Esta es una versión en inglés anterior a V2: es una representación de la versión lógica y no tiene estado ni aprobación propios. Opere sobre la versión lógica.',
+      details: { from, to, motivo: 'legacy_language_version', language: ctx.version.language },
+    });
+  }
 
   const rule = TRANSITIONS.find((t) => t.from === from && t.to === to);
   if (rule === undefined) {

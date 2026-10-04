@@ -19,3 +19,4 @@ export * from './field-values';
 export * from './brief-presentation';
 export * from './workspace';
 export * from './proposed-actions';
+export * from './representations';

@@ -22,5 +22,6 @@ export * from './comments.ts';
 export * from './client-review.ts';
 export * from './versioning.ts';
 export * from './proposed-actions.ts';
+export * from './brief-representations.ts';
 export * from './brief-workspace.ts';
 export { migrate } from './migrate.ts';
