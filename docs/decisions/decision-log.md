@@ -652,6 +652,17 @@ posterior a aprobación». 15 de septiembre de 2026.
 - **Dónde vive:** `packages/domain/src/brief-states.ts`, `permissions.ts`, `brief-presentation.ts`; `packages/db/src/transitions.ts`, `client-review.ts`, `brief-workspace.ts`; `apps/web/.../brief/VistaCliente.tsx`, `page.tsx`, `apps/web/src/lib/actions.ts`; detalle en `docs/product/CLIENT_WORKFLOW_CORRECTION.md`.
 - **Responsable de aprobación:** Gerardo Calambás.
 
+### DEC-043 — Modelo bilingüe V2: una versión lógica con representaciones ES/EN
+
+- **Fecha:** 4 de octubre de 2026
+- **Estado:** **aprobada** — V2 · Fase 2
+- **Origen:** la regla funcional V2 («una entidad, una versión, un estado, una aprobación, dos representaciones») contradecía el modelo previo, donde ES y EN eran filas de `brief_versions` con estado, aprobación y linaje propios.
+- **Decisión:** la versión lógica es la fila `brief_versions` existente (estado, aprobación, linaje, inmutabilidad, comentarios, preguntas y evidencia sin duplicar). ES y EN son `brief_version_representations` hijas, sin estado propio; los valores localizados viven en `brief_field_translations` con origen verificable, procedencia y huella del valor original (staleness por valor, vista `brief_translation_sync`). La aprobación exige origen verificable y traducciones al día; la congelación al aprobar vale para ambas representaciones y se impone en la base de datos. Las versiones EN históricas no se reescriben: se clasifican (`folded` / `conflict` / `orphan`) sin reconciliar estados en silencio. Supersede lo dicho sobre traducciones como versiones separadas en el documento maestro §10.3 regla 2 y D0-08.
+- **Migración:** `014_modelo_bilingue_v2.sql` (forward-only, aditiva). Sin cambios en HITL (DEC de Fase 1) ni en DEC-042.
+- **Fuera de alcance:** IA de traducción, UI ES|EN, exportación, hacer el EN obligatorio para aprobar.
+- **Dónde vive:** `infra/db/migrations/014_modelo_bilingue_v2.sql`; `packages/domain/src/representations.ts`, `brief-states.ts`; `packages/db/src/brief-representations.ts`, `versioning.ts`, `brief-version.ts`; detalle en `docs/product/BILINGUAL_MODEL_V2.md`.
+- **Responsable de aprobación:** Gerardo Calambás.
+
 ---
 
 ## Decisiones pendientes que no bloquean MVP 0
