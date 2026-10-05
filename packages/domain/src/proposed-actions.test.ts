@@ -5,11 +5,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   PROPOSED_ACTION_SPECS,
+  capacidadesDe,
   puedeCancelar,
   puedeConfirmar,
   puedeEjecutar,
   puedeProponer,
+  rolPuedeConfirmar,
+  rolPuedeProponer,
+  specDeAccion,
   type ProposedAction,
+  type ProposedActionType,
 } from './proposed-actions';
 import type { Role, User } from './types';
 
@@ -136,4 +141,120 @@ describe('quién puede cancelar', () => {
     expect(puedeCancelar(user('operativo'), accion()).ok).toBe(false);
     expect(puedeCancelar(user('admin'), accion({ status: 'executed' })).ok).toBe(false);
   });
+});
+
+// ─────────────────────────── V2 · Fase 6: importación por el chat ──────────────
+
+const TIPOS_DE_IMPORTACION = ['influencer_import.apply', 'influencer_import.resolve_record'] as const;
+
+function accionDeImportacion(
+  type: (typeof TIPOS_DE_IMPORTACION)[number],
+  overrides: Partial<ProposedAction> = {},
+) {
+  return accion({
+    type,
+    resourceType: type === 'influencer_import.apply' ? 'influencer_import_plan' : 'influencer_import_record',
+    ...overrides,
+  });
+}
+
+describe('registro de tipos', () => {
+  it('hay un spec por tipo, con su recurso y capacidades; un nombre heredado del prototipo no es un tipo', () => {
+    expect(Object.keys(PROPOSED_ACTION_SPECS).sort()).toEqual(
+      ['brief.approve', ...TIPOS_DE_IMPORTACION].sort(),
+    );
+    for (const tipo of Object.keys(PROPOSED_ACTION_SPECS) as ProposedActionType[]) {
+      expect(specDeAccion(tipo)?.type).toBe(tipo);
+    }
+    expect(PROPOSED_ACTION_SPECS['influencer_import.apply'].resourceType).toBe('influencer_import_plan');
+    expect(PROPOSED_ACTION_SPECS['influencer_import.resolve_record'].resourceType).toBe(
+      'influencer_import_record',
+    );
+    for (const nombre of ['constructor', '__proto__', 'toString', 'hasOwnProperty', 'nope']) {
+      expect(specDeAccion(nombre), nombre).toBeUndefined();
+    }
+  });
+
+  it('brief.approve conserva su capacidad única (propone brief:request_review, confirma brief:approve_internal)', () => {
+    expect(capacidadesDe(PROPOSED_ACTION_SPECS['brief.approve'].proposeCapability)).toEqual([
+      'brief:request_review',
+    ]);
+    expect(capacidadesDe(PROPOSED_ACTION_SPECS['brief.approve'].confirmCapability)).toEqual([
+      'brief:approve_internal',
+    ]);
+  });
+
+  it('la importación exige TODAS sus capacidades para proponer y confirmar', () => {
+    for (const tipo of TIPOS_DE_IMPORTACION) {
+      const spec = PROPOSED_ACTION_SPECS[tipo];
+      expect(capacidadesDe(spec.proposeCapability)).toEqual([
+        'influencer:manage',
+        'campaign_influencer:manage',
+      ]);
+      expect(capacidadesDe(spec.confirmCapability)).toEqual([
+        'influencer:manage',
+        'campaign_influencer:manage',
+      ]);
+    }
+  });
+});
+
+describe('importación: quién propone, confirma, ejecuta y cancela', () => {
+  for (const tipo of TIPOS_DE_IMPORTACION) {
+    const spec = PROPOSED_ACTION_SPECS[tipo];
+
+    it(`${tipo}: propone el personal con la capacidad (y el sistema, que prepara); no cliente ni operativo`, () => {
+      expect(puedeProponer('system', spec).ok).toBe(true);
+      for (const rol of ['admin', 'director', 'consultor'] as const) {
+        expect(puedeProponer(user(rol), spec).ok, rol).toBe(true);
+        expect(rolPuedeProponer(rol, spec), rol).toBe(true);
+      }
+      for (const rol of ['cliente', 'operativo', 'analista', 'legal'] as const) {
+        const r = puedeProponer(user(rol), spec);
+        expect(r.ok, rol).toBe(false);
+        if (!r.ok) expect(r.error.code).toBe('FORBIDDEN_ROLE');
+        expect(rolPuedeProponer(rol, spec), rol).toBe(false);
+      }
+    });
+
+    it(`${tipo}: confirma una PERSONA con la capacidad desde la interfaz; nunca system ni el canal chat`, () => {
+      const a = accionDeImportacion(tipo);
+      for (const rol of ['admin', 'director', 'consultor'] as const) {
+        expect(puedeConfirmar(user(rol), 'ui', a, AHORA).ok, rol).toBe(true);
+        expect(rolPuedeConfirmar(rol, spec), rol).toBe(true);
+      }
+      for (const rol of ['cliente', 'operativo', 'analista', 'legal'] as const) {
+        expect(puedeConfirmar(user(rol), 'ui', a, AHORA).ok, rol).toBe(false);
+      }
+      for (const canal of ['chat', 'system'] as const) {
+        for (const rol of ['admin', 'director', 'consultor'] as const) {
+          const r = puedeConfirmar(user(rol), canal, a, AHORA);
+          expect(r.ok, `${rol}/${canal}`).toBe(false);
+          if (!r.ok) expect(r.error.code).toBe('HUMAN_CONFIRMATION_REQUIRED');
+        }
+      }
+      const sistema = puedeConfirmar('system', 'ui', a, AHORA);
+      expect(sistema.ok).toBe(false);
+      if (!sistema.ok) expect(sistema.error.code).toBe('HUMAN_CONFIRMATION_REQUIRED');
+      // Otra organización: no la ve.
+      const ajena = puedeConfirmar(user('admin', 'x', 'org-otra'), 'ui', a, AHORA);
+      expect(ajena.ok).toBe(false);
+      if (!ajena.ok) expect(ajena.error.code).toBe('RESOURCE_NOT_FOUND');
+    });
+
+    it(`${tipo}: ejecuta solo quien confirmó, desde la interfaz; chat y system nunca`, () => {
+      const confirmada = accionDeImportacion(tipo, { status: 'confirmed', confirmedBy: 'usr-consultor' });
+      expect(puedeEjecutar(user('consultor'), 'ui', confirmada, AHORA).ok).toBe(true);
+      expect(puedeEjecutar(user('admin'), 'ui', confirmada, AHORA).ok).toBe(false);
+      expect(puedeEjecutar(user('consultor'), 'chat', confirmada, AHORA).ok).toBe(false);
+      expect(puedeEjecutar('system', 'ui', confirmada, AHORA).ok).toBe(false);
+    });
+
+    it(`${tipo}: cancela quien la propuso o quien puede confirmarla`, () => {
+      const a = accionDeImportacion(tipo);
+      expect(puedeCancelar(user('consultor'), a).ok).toBe(true);
+      expect(puedeCancelar(user('operativo'), a).ok).toBe(false);
+      expect(puedeCancelar(user('cliente'), a).ok).toBe(false);
+    });
+  }
 });

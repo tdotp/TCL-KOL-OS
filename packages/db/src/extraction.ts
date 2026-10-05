@@ -25,6 +25,7 @@
  */
 
 import {
+  type AuditCorrelation,
   type Result,
   type SourceLocator,
   type User,
@@ -36,6 +37,7 @@ import {
   roleCan,
 } from '@tcl-kol-os/domain';
 import { assertCapability } from './authz.ts';
+import { type ContextoDeAuditoria, exigirPersona } from './audit-context.ts';
 import { query, transaction } from './client.ts';
 import { obtenerOCrearVersionDeTrabajo } from './brief-version.ts';
 import { SQL_FRAGMENTO_VIGENTE } from './fragment-scope.ts';
@@ -425,23 +427,34 @@ export async function camposDeVersion(versionId: string): Promise<
 
 // ═══════════════════ Capa autorizada, la que usa la interfaz ══════════════════
 
+function sinInvocacionDeTool(correlation: AuditCorrelation): AuditCorrelation {
+  const { toolInvocationId: _omitida, ...resto } = correlation;
+  void _omitida;
+  return resto;
+}
+
 /**
  * Recorre `extraerCampos` + `persistirExtraccion` sobre una versión ya en
  * `processing`. `processing → extraction_review` y `processing →
  * processing_failed` están reservadas al sistema en el dominio (nunca a un
  * humano) — por eso esta función siempre transiciona como `'system'`, sin
- * importar qué actor humano disparó la extracción.
+ * importar qué actor humano disparó la extracción. Esos eventos `system`
+ * heredan solo la CORRELACIÓN de quien disparó (V2 · Fase 6), nunca su canal.
  */
 async function ejecutarYPersistir(
   organizationId: string,
   campaignId: string,
   versionId: string,
+  correlationDelLlamador?: AuditCorrelation | undefined,
 ): Promise<Result<{ versionId: string; campos: number; evidencias: number; costoUsd: number }>> {
+  // Las transiciones del worker se registran como `system`; una correlación con
+  // `toolInvocationId` solo es válida con origen `chat` (audit.validarCorrelacion).
+  const correlation = correlationDelLlamador ? sinInvocacionDeTool(correlationDelLlamador) : undefined;
   try {
     const resultado = await extraerCampos(organizationId, campaignId);
     const guardado = await persistirExtraccion({ organizationId, campaignId, versionId, resultado });
 
-    const transicion = await transicionarBrief('system', versionId, 'extraction_review');
+    const transicion = await transicionarBrief('system', versionId, 'extraction_review', { correlation });
     if (!transicion.ok) {
       return err({ code: transicion.error.code, message: transicion.error.message });
     }
@@ -456,7 +469,7 @@ async function ejecutarYPersistir(
     // El detalle técnico va al log, no a la pantalla (§11.6). Lo que llega al
     // consultor es qué pasó y qué puede hacer.
     console.error('[extraccion]', error);
-    await transicionarBrief('system', versionId, 'processing_failed');
+    await transicionarBrief('system', versionId, 'processing_failed', { correlation });
     return err({
       code: 'AI_EXTRACTION_FAILED',
       message:
@@ -473,11 +486,17 @@ async function ejecutarYPersistir(
  * responde bien, o `processing → processing_failed` si no (Sprint 4, cierre,
  * corrección 1). Ninguna de estas transiciones usa `UPDATE` directo — todas
  * pasan por `transicionarBrief`, auditadas ahí.
+ *
+ * `contexto` (V2 · Fase 6, opcional): canal y correlación de quien la dispara
+ * (p. ej. una herramienta del chat con origen `chat`). Sin él, `ui` como siempre.
  */
 export async function extraerBrief(
   actor: User,
   campaignId: string,
+  contexto?: ContextoDeAuditoria,
 ): Promise<Result<{ versionId: string; campos: number; evidencias: number; costoUsd: number }>> {
+  const persona = exigirPersona(actor, contexto);
+  if (!persona.ok) return persona;
   const permitido = assertCapability(actor, 'brief:edit');
   if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
 
@@ -497,12 +516,15 @@ export async function extraerBrief(
     }),
   );
 
-  const aProcesamiento = await transicionarBrief(actor, version.versionId, 'processing');
+  const aProcesamiento = await transicionarBrief(actor, version.versionId, 'processing', {
+    origen: contexto?.origin,
+    correlation: contexto?.correlation,
+  });
   if (!aProcesamiento.ok) {
     return err({ code: aProcesamiento.error.code, message: aProcesamiento.error.message });
   }
 
-  return ejecutarYPersistir(actor.organizationId, campaignId, version.versionId);
+  return ejecutarYPersistir(actor.organizationId, campaignId, version.versionId, contexto?.correlation);
 }
 
 /**
@@ -514,16 +536,22 @@ export async function reintentarExtraccion(
   actor: User,
   campaignId: string,
   versionId: string,
+  contexto?: ContextoDeAuditoria,
 ): Promise<Result<{ versionId: string; campos: number; evidencias: number; costoUsd: number }>> {
+  const persona = exigirPersona(actor, contexto);
+  if (!persona.ok) return persona;
   const permitido = assertCapability(actor, 'brief:edit');
   if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
 
-  const aProcesamiento = await transicionarBrief(actor, versionId, 'processing');
+  const aProcesamiento = await transicionarBrief(actor, versionId, 'processing', {
+    origen: contexto?.origin,
+    correlation: contexto?.correlation,
+  });
   if (!aProcesamiento.ok) {
     return err({ code: aProcesamiento.error.code, message: aProcesamiento.error.message });
   }
 
-  return ejecutarYPersistir(actor.organizationId, campaignId, versionId);
+  return ejecutarYPersistir(actor.organizationId, campaignId, versionId, contexto?.correlation);
 }
 
 export interface VersionDelBrief {

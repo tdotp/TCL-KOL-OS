@@ -13,20 +13,40 @@
 
 import type { Action } from './permissions';
 import { roleCan } from './permissions';
-import type { AuditCorrelation, AuditOrigin, User } from './types';
+import type { AuditCorrelation, AuditOrigin, Role, User } from './types';
 import { type DomainErrorPayload, type Result, err, ok } from './errors';
 
 export type ProposedActionStatus = 'pending' | 'confirmed' | 'executed' | 'cancelled' | 'expired';
 
-export type ProposedActionType = 'brief.approve';
+/**
+ * Tipos de acción propuesta. Un solo sistema HITL (`proposed_actions`): un tipo
+ * nuevo se añade aquí (política pura) y en el registro de handlers de
+ * `packages/db/src/proposed-action-handlers.ts` (ejecución); no hay un segundo
+ * mecanismo de confirmación (V2 · Fase 6, D6).
+ *
+ *  · `brief.approve`                    aprobar una versión del brief (Fase 1D).
+ *  · `influencer_import.apply`          aplicar un plan de importación del Sheet
+ *                                       (Fase 5) propuesto desde el chat.
+ *  · `influencer_import.resolve_record` resolver un registro ambiguo del plan con
+ *                                       una decisión que el agente formaliza y una
+ *                                       persona confirma.
+ */
+export type ProposedActionType =
+  'brief.approve' | 'influencer_import.apply' | 'influencer_import.resolve_record';
+
+export type ProposedActionResourceType =
+  'brief_version' | 'influencer_import_plan' | 'influencer_import_record';
 
 export interface ProposedActionSpec {
   readonly type: ProposedActionType;
-  readonly resourceType: 'brief_version';
-  /** Capacidad que debe tener quien PROPONE (una persona o el agente en su nombre). */
-  readonly proposeCapability: Action;
-  /** Capacidad que debe tener la PERSONA que confirma y ejecuta. */
-  readonly confirmCapability: Action;
+  readonly resourceType: ProposedActionResourceType;
+  /**
+   * Capacidad(es) que debe tener quien PROPONE (una persona o el agente en su
+   * nombre). Con varias, se exigen TODAS.
+   */
+  readonly proposeCapability: Action | readonly Action[];
+  /** Capacidad(es) que debe tener la PERSONA que confirma y ejecuta (todas). */
+  readonly confirmCapability: Action | readonly Action[];
 }
 
 export const PROPOSED_ACTION_SPECS: Readonly<Record<ProposedActionType, ProposedActionSpec>> = {
@@ -36,10 +56,50 @@ export const PROPOSED_ACTION_SPECS: Readonly<Record<ProposedActionType, Proposed
     proposeCapability: 'brief:request_review',
     confirmCapability: 'brief:approve_internal',
   },
+  // Importación (Fase 5) por el canal chat: las mismas capacidades que exigen
+  // `applyInfluencerImport` / `resolveImportRecord` en la interfaz, tanto para
+  // proponer como para confirmar. La persona que confirma puede ser quien
+  // propuso (el HITL es la confirmación desde la interfaz, no la separación de
+  // roles que exige aprobar un brief).
+  'influencer_import.apply': {
+    type: 'influencer_import.apply',
+    resourceType: 'influencer_import_plan',
+    proposeCapability: ['influencer:manage', 'campaign_influencer:manage'],
+    confirmCapability: ['influencer:manage', 'campaign_influencer:manage'],
+  },
+  'influencer_import.resolve_record': {
+    type: 'influencer_import.resolve_record',
+    resourceType: 'influencer_import_record',
+    proposeCapability: ['influencer:manage', 'campaign_influencer:manage'],
+    confirmCapability: ['influencer:manage', 'campaign_influencer:manage'],
+  },
 };
 
 export function specDeAccion(type: string): ProposedActionSpec | undefined {
-  return (PROPOSED_ACTION_SPECS as Record<string, ProposedActionSpec | undefined>)[type];
+  // `Object.hasOwn`: «constructor», «__proto__», etc. no son tipos de acción.
+  return Object.hasOwn(PROPOSED_ACTION_SPECS, type)
+    ? (PROPOSED_ACTION_SPECS as Record<string, ProposedActionSpec>)[type]
+    : undefined;
+}
+
+/** Capacidades como lista (una o varias). */
+export function capacidadesDe(capacidad: Action | readonly Action[]): readonly Action[] {
+  return typeof capacidad === 'string' ? [capacidad] : capacidad;
+}
+
+/** ¿El rol tiene TODAS las capacidades? Devuelve la primera que falta, o `undefined`. */
+function capacidadFaltante(role: Role, capacidad: Action | readonly Action[]) {
+  return capacidadesDe(capacidad).find((c) => !roleCan(role, c));
+}
+
+/** ¿Puede este rol proponer ese tipo de acción? (lectura/UX; el control real es `puedeProponer`). */
+export function rolPuedeProponer(role: Role, spec: ProposedActionSpec): boolean {
+  return capacidadFaltante(role, spec.proposeCapability) === undefined;
+}
+
+/** ¿Puede este rol confirmar ese tipo de acción? */
+export function rolPuedeConfirmar(role: Role, spec: ProposedActionSpec): boolean {
+  return capacidadFaltante(role, spec.confirmCapability) === undefined;
 }
 
 export interface ProposedAction {
@@ -83,11 +143,12 @@ export function puedeProponer(actor: User | 'system', spec: ProposedActionSpec):
   if (actor.status !== 'activo') {
     return err({ code: 'FORBIDDEN_ROLE', message: 'El usuario no está activo.' });
   }
-  if (!roleCan(actor.role, spec.proposeCapability)) {
+  const falta = capacidadFaltante(actor.role, spec.proposeCapability);
+  if (falta !== undefined) {
     return err({
       code: 'FORBIDDEN_ROLE',
       message: `El rol ${actor.role} no puede proponer la acción ${spec.type}.`,
-      details: { action: spec.proposeCapability, role: actor.role },
+      details: { action: falta, role: actor.role },
     });
   }
   return ok(true);
@@ -116,11 +177,12 @@ function verificarHumanoConCapacidad(
   const spec = specDeAccion(accion.type);
   if (spec === undefined) return err(NO_ENCONTRADO);
   if (actor.organizationId !== accion.organizationId) return err(NO_ENCONTRADO);
-  if (!roleCan(actor.role, spec.confirmCapability)) {
+  const falta = capacidadFaltante(actor.role, spec.confirmCapability);
+  if (falta !== undefined) {
     return err({
       code: 'FORBIDDEN_ROLE',
       message: `El rol ${actor.role} no puede confirmar la acción ${accion.type}.`,
-      details: { action: spec.confirmCapability, role: actor.role },
+      details: { action: falta, role: actor.role },
     });
   }
   return ok(actor);
@@ -188,7 +250,7 @@ export function puedeCancelar(actor: User, accion: ProposedAction): Result<true>
   const spec = specDeAccion(accion.type);
   if (spec === undefined) return err(NO_ENCONTRADO);
   const esProponente = accion.proposedBy === actor.id;
-  if (!esProponente && !roleCan(actor.role, spec.confirmCapability)) {
+  if (!esProponente && !rolPuedeConfirmar(actor.role, spec)) {
     return err({
       code: 'FORBIDDEN_ROLE',
       message: `El rol ${actor.role} no puede cancelar la acción ${accion.type}.`,

@@ -895,6 +895,34 @@ describe('resolución humana', () => {
       'FORBIDDEN_ROLE',
     );
   });
+
+  // V2 · Fase 6 (D6): una PERSONA con permiso, pero por el canal chat, tampoco decide ni aplica
+  // directamente; solo lo hace una acción propuesta confirmada en la interfaz
+  // (`proposed-action-handlers.test.ts`). Cierra el hueco que dejaba el origen chat permitido.
+  si('el canal chat no resuelve ni aplica directamente, aunque la persona tenga permiso', async () => {
+    const hoja = await nuevaHoja(campanaA);
+    const p = await plan(hoja, [fila('INF-001', 'Desde El Chat', 'instagram', h('desde_chat'))]);
+    const registro = registroDe(p, 'INF-001');
+    const contextoChat = { origin: 'chat', correlation: { conversationId: 'c', messageId: 'm' } } as const;
+    for (const actor of [admin, director, consultor]) {
+      const r = await resolveImportRecord(
+        actor,
+        registro.id,
+        { kind: 'create_new_influencer' },
+        contextoChat,
+      );
+      expect(codigo(r), `resolve ${actor.role}`).toBe('HUMAN_CONFIRMATION_REQUIRED');
+      expect(codigo(await applyInfluencerImport(actor, p.plan.id, contextoChat)), `apply ${actor.role}`).toBe(
+        'HUMAN_CONFIRMATION_REQUIRED',
+      );
+    }
+    expect(await contar('influencer_import_resolutions', 'record_id = $1', [registro.id])).toBe(0);
+    expect(await influencersConHandle('desde_chat')).toHaveLength(0);
+    // La vía de la interfaz (origen ui, o sin contexto) no cambia.
+    expect(
+      valor(await applyInfluencerImport(consultor, p.plan.id, { origin: 'ui' })).records[0]!.status,
+    ).toBe('applied');
+  });
 });
 
 // ─────────────────────────── Sincronizaciones posteriores ──────────────────────

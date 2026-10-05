@@ -19,6 +19,7 @@ import {
 } from '@tcl-kol-os/domain';
 import { assertCapability } from './authz.ts';
 import { recordAudit } from './audit.ts';
+import { type ContextoDeAuditoria, auditoriaDe, exigirPersona } from './audit-context.ts';
 import { getPool, transaction } from './client.ts';
 import { cargarVersion } from './brief-version.ts';
 
@@ -97,8 +98,17 @@ function preguntaParaCampo(campo: {
  * índices únicos de la migración 005 hacen que ejecutarla dos veces no
  * duplique nada (prueba 2). Si crea al menos una y el estado es
  * `extraction_review`, dispara `extraction_review → local_questions`.
+ *
+ * `contexto` (V2 · Fase 6, opcional): canal y correlación de quien la dispara
+ * (p. ej. una herramienta del chat). Sin él, `ui` como siempre.
  */
-export async function generarPreguntas(actor: User, versionId: string): Promise<Result<{ creadas: number }>> {
+export async function generarPreguntas(
+  actor: User,
+  versionId: string,
+  contexto?: ContextoDeAuditoria,
+): Promise<Result<{ creadas: number }>> {
+  const persona = exigirPersona(actor, contexto);
+  if (!persona.ok) return persona;
   const permitido = assertCapability(actor, 'question:create');
   if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
 
@@ -134,19 +144,24 @@ export async function generarPreguntas(actor: User, versionId: string): Promise<
     }
 
     if (creadas > 0) {
-      await recordAudit(client, {
-        actor,
-        action: 'question.generate',
-        entityType: 'brief_version',
-        entityId: versionId,
-        metadata: { creadas },
-      });
+      await recordAudit(
+        client,
+        auditoriaDe(actor, contexto, {
+          action: 'question.generate',
+          entityType: 'brief_version',
+          entityId: versionId,
+          metadata: { creadas },
+        }),
+      );
     }
   });
 
   if (creadas > 0 && datos.version.status === 'extraction_review') {
     const { transicionarBrief } = await import('./transitions.ts');
-    await transicionarBrief(actor, versionId, 'local_questions');
+    await transicionarBrief(actor, versionId, 'local_questions', {
+      origen: contexto?.origin,
+      correlation: contexto?.correlation,
+    });
   }
 
   return ok({ creadas });
@@ -260,7 +275,10 @@ export async function responderPregunta(
   actor: User,
   questionId: string,
   opciones: { answerValue: unknown; answer?: string | undefined },
+  contexto?: ContextoDeAuditoria,
 ): Promise<Result<true>> {
+  const persona = exigirPersona(actor, contexto);
+  if (!persona.ok) return persona;
   const permitido = assertCapability(actor, 'question:answer');
   if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
 
@@ -334,13 +352,15 @@ export async function responderPregunta(
       ],
     );
 
-    await recordAudit(client, {
-      actor,
-      action: 'question.answer',
-      entityType: 'local_question',
-      entityId: questionId,
-      metadata: { questionId, campo: fila.key },
-    });
+    await recordAudit(
+      client,
+      auditoriaDe(actor, contexto, {
+        action: 'question.answer',
+        entityType: 'local_question',
+        entityId: questionId,
+        metadata: { questionId, campo: fila.key },
+      }),
+    );
   });
 
   return ok(true);

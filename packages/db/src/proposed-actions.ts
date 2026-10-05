@@ -16,13 +16,18 @@
  *    protegidos por trigger);
  *  · propuesta, confirmación y ejecución quedan en `audit_events`.
  *
- * Una herramienta del agente solo debería llamar a `proponerAccion`. Las
- * funciones `confirmarAccion` y `ejecutarAccion` exigen una persona y el canal
- * `ui`; y `transicionarBrief` rechaza `approved` desde cualquier otro canal,
- * así que no existe un atajo para aprobar «actuando como el usuario».
+ * Una herramienta del agente solo debería llamar a `proponerAccion` (y a las
+ * lecturas). Las funciones `confirmarAccion` y `ejecutarAccion` exigen una
+ * persona y el canal `ui`; y `transicionarBrief`, `applyInfluencerImport` y
+ * `resolveImportRecord` rechazan el canal `chat` para sus decisiones críticas,
+ * así que no existe un atajo para decidir «actuando como el usuario».
+ *
+ * Lo propio de cada TIPO de acción (qué recurso valida, qué huella calcula, qué
+ * caso de uso ejecuta y con qué garantía de atomicidad) vive en el registro de
+ * handlers `proposed-action-handlers.ts` (V2 · Fase 6); este módulo es el ciclo
+ * común y no conoce ningún tipo concreto.
  */
 
-import { createHash } from 'node:crypto';
 import type pg from 'pg';
 import {
   type AuditCorrelation,
@@ -38,14 +43,21 @@ import {
   puedeConfirmar,
   puedeEjecutar,
   puedeProponer,
+  rolPuedeConfirmar,
+  rolPuedeProponer,
   specDeAccion,
-  transitionsFrom,
 } from '@tcl-kol-os/domain';
 import { recordAudit, resolveOrigin } from './audit.ts';
+import { type ContextoDeAuditoria, exigirPersona } from './audit-context.ts';
 import { getPool, transaction } from './client.ts';
-import { transicionarBriefEnTransaccion } from './transitions.ts';
+import { canonico, handlerDe, sha256 } from './proposed-action-handlers.ts';
 
 const TTL_POR_DEFECTO_SEGUNDOS = 24 * 60 * 60;
+
+/** Reintentos ante una violación del UNIQUE parcial de propuestas abiertas (carrera). */
+const INTENTOS_DE_PROPUESTA = 3;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const NO_ENCONTRADO = {
   code: 'RESOURCE_NOT_FOUND',
@@ -53,21 +65,6 @@ const NO_ENCONTRADO = {
 } as const;
 
 // ─────────────────────────── Huellas ───────────────────────────────────────────
-
-function canonico(valor: unknown): string {
-  if (Array.isArray(valor)) return `[${valor.map(canonico).join(',')}]`;
-  if (valor !== null && typeof valor === 'object') {
-    const claves = Object.keys(valor as Record<string, unknown>).sort();
-    return `{${claves
-      .map((k) => `${JSON.stringify(k)}:${canonico((valor as Record<string, unknown>)[k])}`)
-      .join(',')}}`;
-  }
-  return JSON.stringify(valor);
-}
-
-function sha256(texto: string): string {
-  return createHash('sha256').update(texto).digest('hex');
-}
 
 /** Huella que liga tipo + recurso + payload; la confirmación debe presentarla idéntica. */
 export function huellaDeAccion(
@@ -77,47 +74,6 @@ export function huellaDeAccion(
   payload: Readonly<Record<string, unknown>>,
 ): string {
   return sha256(canonico({ type, resourceType, resourceId, payload }));
-}
-
-/**
- * Huella del CONTENIDO de la versión del brief (campos, valores, revisiones).
- * Si cambia entre la propuesta y la confirmación, quien confirma estaría
- * aprobando algo distinto de lo que se le propuso.
- */
-async function huellaDeContenidoDeVersion(
-  ejecutor: pg.Pool | pg.PoolClient,
-  versionId: string,
-): Promise<string> {
-  const { rows: campos } = await ejecutor.query<{
-    k: string;
-    p: string | null;
-    r: number;
-    v: string;
-    s: string;
-  }>(
-    `SELECT key AS k, campaign_product_id::text AS p, revision AS r, md5(value::text) AS v, status::text AS s
-       FROM brief_fields WHERE brief_version_id = $1 ORDER BY key, campaign_product_id NULLS FIRST`,
-    [versionId],
-  );
-  // V2 · Fase 2: también las representaciones. Quien confirma aprueba la
-  // versión lógica completa (ES y EN); si una traducción cambia entre la
-  // propuesta y la confirmación, la huella ya no coincide.
-  const { rows: traducciones } = await ejecutor.query<{
-    k: string;
-    p: string | null;
-    l: string;
-    v: string;
-    h: string | null;
-  }>(
-    `SELECT f.key AS k, f.campaign_product_id::text AS p, r.language AS l,
-            md5(t.value::text) AS v, t.source_value_hash AS h
-       FROM brief_field_translations t
-       JOIN brief_fields f ON f.id = t.brief_field_id
-       JOIN brief_version_representations r ON r.id = t.representation_id
-      WHERE f.brief_version_id = $1 ORDER BY f.key, f.campaign_product_id NULLS FIRST, r.language`,
-    [versionId],
-  );
-  return sha256(canonico({ campos, traducciones }));
 }
 
 // ─────────────────────────── Filas ─────────────────────────────────────────────
@@ -202,37 +158,15 @@ async function registrarVencimiento(client: pg.PoolClient, fila: Fila): Promise<
   });
 }
 
-// ─────────────────────────── Recurso: versión del brief ────────────────────────
-
-interface VersionDeBrief {
-  readonly status: string;
-  readonly campaignId: string;
-  readonly organizationId: string;
-}
-
-async function cargarVersionDeBrief(
-  ejecutor: pg.Pool | pg.PoolClient,
-  versionId: string,
-): Promise<VersionDeBrief | undefined> {
-  const { rows } = await ejecutor.query<{ status: string; campaign_id: string; organization_id: string }>(
-    `SELECT v.status::text AS status, b.campaign_id, c.organization_id
-       FROM brief_versions v
-       JOIN briefs b ON b.id = v.brief_id
-       JOIN campaigns c ON c.id = b.campaign_id
-      WHERE v.id = $1`,
-    [versionId],
-  );
-  const fila = rows[0];
-  return fila === undefined
-    ? undefined
-    : { status: fila.status, campaignId: fila.campaign_id, organizationId: fila.organization_id };
-}
-
 // ─────────────────────────── Proponer ──────────────────────────────────────────
 
 export interface PropuestaInput {
   readonly type: ProposedActionType;
-  /** Para `brief.approve`: el id de la versión del brief. */
+  /**
+   * El recurso sobre el que se propone: para `brief.approve`, la versión del
+   * brief; para `influencer_import.apply`, el plan; para
+   * `influencer_import.resolve_record`, el registro del plan.
+   */
   readonly resourceId: string;
   /** Canal que propone. Por defecto: `system` si propone el sistema; `ui` si una persona. */
   readonly origin?: AuditOrigin | undefined;
@@ -240,6 +174,22 @@ export interface PropuestaInput {
   /** Si se indica, solo esa persona puede confirmar. */
   readonly assignedTo?: string | undefined;
   readonly ttlSegundos?: number | undefined;
+  /**
+   * Parámetros propios del tipo (p. ej. `{ decision }` de
+   * `influencer_import.resolve_record`). Entrada NO confiable: la valida el
+   * handler del tipo.
+   */
+  readonly parametros?: Readonly<Record<string, unknown>> | undefined;
+  /**
+   * Alcance de campaña: si se indica (el chat pasa la de la conversación), el
+   * recurso debe pertenecer a esa campaña; si es de otra, `RESOURCE_NOT_FOUND`.
+   */
+  readonly campaignId?: string | undefined;
+}
+
+/** Violación de un índice UNIQUE (propuesta abierta duplicada por una carrera). */
+function esViolacionUnica(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '23505';
 }
 
 /**
@@ -250,13 +200,23 @@ export interface PropuestaInput {
  * Idempotente: si ya hay una propuesta abierta e idéntica para el mismo recurso
  * y contenido, la devuelve; si el contenido cambió, la anterior vence y se crea
  * una nueva.
+ *
+ * Concurrencia (V2 · Fase 6, D7): N propuestas simultáneas sobre el mismo
+ * (tipo, recurso) dejan UNA vigente. Un bloqueo consultivo transaccional por
+ * (tipo, recurso) las serializa (no hay fila que bloquear cuando aún no hay
+ * propuesta abierta); además, antes de insertar se vencen las abiertas cuyo
+ * plazo pasó (si no, ocuparían el índice único parcial), y si el índice único
+ * parcial `(action_type, resource_id) WHERE status IN ('pending','confirmed')`
+ * (migración 021) rechaza el INSERT, se relee y se devuelve la vigente en lugar
+ * de fallar. Funciona con y sin ese índice.
  */
 export async function proponerAccion(
   actor: User | 'system',
   input: PropuestaInput,
 ): Promise<Result<ProposedAction>> {
   const spec = specDeAccion(input.type);
-  if (spec === undefined) {
+  const handler = handlerDe(input.type);
+  if (spec === undefined || handler === undefined) {
     return err({
       code: 'BRIEF_FIELD_INVALID',
       message: `«${String(input.type)}» no es una acción propuesta válida.`,
@@ -273,83 +233,101 @@ export async function proponerAccion(
     return err({ code: 'HUMAN_CONFIRMATION_REQUIRED', message: (error as Error).message });
   }
 
-  const version = await cargarVersionDeBrief(getPool(), input.resourceId);
-  if (version === undefined || (actor !== 'system' && actor.organizationId !== version.organizationId)) {
+  // Un id mal formado nunca es un recurso (y no debe llegar al motor como un 22P02).
+  if (!UUID.test(input.resourceId)) return err(NO_ENCONTRADO);
+
+  const preparada = await handler.prepararPropuesta(getPool(), actor, input.resourceId, input.parametros);
+  if (!preparada.ok) return preparada;
+  // El recurso es de otra campaña que la del alcance pedido: no se revela que existe.
+  if (input.campaignId !== undefined && preparada.value.campaignId !== input.campaignId) {
     return err(NO_ENCONTRADO);
   }
+  const { organizationId, campaignId, payload } = preparada.value;
 
-  // Falla pronto lo que nunca podría ejecutarse: no se propone aprobar una
-  // versión que no admite la transición.
-  if (!transitionsFrom(version.status as never).some((t) => t.to === 'approved')) {
-    return err({
-      code: 'BRIEF_INVALID_TRANSITION',
-      message: `Una versión en estado ${version.status} no se puede aprobar.`,
-      details: { status: version.status },
-    });
-  }
-
-  const payload = {
-    versionId: input.resourceId,
-    contentFingerprint: await huellaDeContenidoDeVersion(getPool(), input.resourceId),
-  };
   const payloadHash = huellaDeAccion(input.type, spec.resourceType, input.resourceId, payload);
   const ttl = Math.max(1, Math.floor(input.ttlSegundos ?? TTL_POR_DEFECTO_SEGUNDOS));
 
-  return transaction(async (client) => {
-    // Una propuesta abierta del mismo recurso: se reutiliza si es idéntica.
-    const { rows: abiertas } = await client.query<Fila>(
-      `SELECT ${COLUMNAS} FROM proposed_actions
-        WHERE action_type = $1 AND resource_id = $2 AND status IN ('pending', 'confirmed')
-          AND expires_at > now()
-        FOR UPDATE`,
-      [input.type, input.resourceId],
-    );
-    for (const abierta of abiertas) {
-      if (abierta.payload_hash === payloadHash) return ok(comoAccion(abierta));
-      await registrarVencimiento(client, abierta);
-    }
+  const intentar = () =>
+    transaction(async (client): Promise<Result<ProposedAction>> => {
+      // Serializa las propuestas del mismo (tipo, recurso): sin esto, dos
+      // transacciones que no ven ninguna abierta insertan ambas.
+      await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [
+        `proposed_action:${input.type}:${input.resourceId}`,
+      ]);
 
-    const { rows } = await client.query<Fila>(
-      `INSERT INTO proposed_actions
-         (organization_id, campaign_id, action_type, resource_type, resource_id, payload, payload_hash,
-          proposed_by, proposed_origin, correlation, assigned_to, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now() + make_interval(secs => $12))
-       RETURNING ${COLUMNAS}`,
-      [
-        version.organizationId,
-        version.campaignId,
-        input.type,
-        spec.resourceType,
-        input.resourceId,
-        JSON.stringify(payload),
-        payloadHash,
-        actor === 'system' ? null : actor.id,
+      // Abiertas del mismo recurso (también las de plazo vencido: ocuparían el
+      // índice único parcial). Una idéntica y vigente se reutiliza; el resto vence.
+      const { rows: abiertas } = await client.query<Fila>(
+        `SELECT ${COLUMNAS} FROM proposed_actions
+          WHERE action_type = $1 AND resource_id = $2 AND status IN ('pending', 'confirmed')
+          FOR UPDATE`,
+        [input.type, input.resourceId],
+      );
+      for (const abierta of abiertas) {
+        if (abierta.payload_hash === payloadHash && abierta.expires_at.getTime() > Date.now()) {
+          return ok(comoAccion(abierta));
+        }
+        await registrarVencimiento(client, abierta);
+      }
+
+      const { rows } = await client.query<Fila>(
+        `INSERT INTO proposed_actions
+           (organization_id, campaign_id, action_type, resource_type, resource_id, payload, payload_hash,
+            proposed_by, proposed_origin, correlation, assigned_to, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now() + make_interval(secs => $12))
+         RETURNING ${COLUMNAS}`,
+        [
+          organizationId,
+          campaignId,
+          input.type,
+          spec.resourceType,
+          input.resourceId,
+          JSON.stringify(payload),
+          payloadHash,
+          actor === 'system' ? null : actor.id,
+          origin,
+          input.correlation === undefined ? null : JSON.stringify(input.correlation),
+          input.assignedTo ?? null,
+          ttl,
+        ],
+      );
+      const creada = rows[0]!;
+
+      await recordAudit(client, {
+        actor,
+        organizationId,
         origin,
-        input.correlation === undefined ? null : JSON.stringify(input.correlation),
-        input.assignedTo ?? null,
-        ttl,
-      ],
-    );
-    const creada = rows[0]!;
+        correlation: { ...input.correlation, proposedActionId: creada.id },
+        action: 'proposed_action.propose',
+        entityType: 'proposed_action',
+        entityId: creada.id,
+        metadata: {
+          type: input.type,
+          resourceId: input.resourceId,
+          payloadHash,
+          ...(input.assignedTo !== undefined ? { assignedTo: input.assignedTo } : {}),
+        },
+      });
 
-    await recordAudit(client, {
-      actor,
-      organizationId: version.organizationId,
-      origin,
-      correlation: { ...input.correlation, proposedActionId: creada.id },
-      action: 'proposed_action.propose',
-      entityType: 'proposed_action',
-      entityId: creada.id,
-      metadata: {
-        type: input.type,
-        resourceId: input.resourceId,
-        payloadHash,
-        ...(input.assignedTo !== undefined ? { assignedTo: input.assignedTo } : {}),
-      },
+      return ok(comoAccion(creada));
     });
 
-    return ok(comoAccion(creada));
-  });
+  for (let intento = 1; ; intento += 1) {
+    try {
+      return await intentar();
+    } catch (error) {
+      // El índice único parcial vio otra propuesta abierta concurrente: se relee
+      // (la otra ya confirmó su transacción) y se devuelve la vigente.
+      if (!esViolacionUnica(error)) throw error;
+      if (intento >= INTENTOS_DE_PROPUESTA) {
+        return err({
+          code: 'RESOURCE_CONFLICT',
+          message: 'Otra propuesta para este recurso se está registrando. Reintente.',
+          details: { reason: 'proposal_in_progress' },
+        });
+      }
+    }
+  }
 }
 
 // ─────────────────────────── Confirmar ─────────────────────────────────────────
@@ -364,8 +342,15 @@ export interface ConfirmacionInput {
   readonly payloadHash: string;
 }
 
-/** Comprueba que el recurso no cambió desde la propuesta. */
-async function verificarContenidoVigente(client: pg.PoolClient, fila: Fila): Promise<Result<true>> {
+/**
+ * Comprueba que lo propuesto no cambió: el payload guardado sigue coincidiendo
+ * con su huella y el handler del tipo confirma que el recurso es el mismo.
+ */
+async function verificarContenidoVigente(
+  client: pg.PoolClient,
+  fila: Fila,
+  fase: 'confirmar' | 'ejecutar',
+): Promise<Result<true>> {
   const recalculada = huellaDeAccion(fila.action_type, fila.resource_type, fila.resource_id, fila.payload);
   if (recalculada !== fila.payload_hash) {
     return err({
@@ -373,16 +358,9 @@ async function verificarContenidoVigente(client: pg.PoolClient, fila: Fila): Pro
       message: 'El contenido de la acción propuesta no coincide con su huella.',
     });
   }
-  if (fila.action_type === 'brief.approve') {
-    const actual = await huellaDeContenidoDeVersion(client, fila.resource_id);
-    if (actual !== fila.payload['contentFingerprint']) {
-      return err({
-        code: 'PROPOSAL_STALE',
-        message: 'El brief cambió después de proponerse la aprobación. Hay que proponerla de nuevo.',
-      });
-    }
-  }
-  return ok(true);
+  const handler = handlerDe(fila.action_type);
+  if (handler === undefined) return err(NO_ENCONTRADO);
+  return handler.verificarVigente(client, fila, fase);
 }
 
 /**
@@ -413,7 +391,7 @@ export async function confirmarAccion(
         message: 'La confirmación no corresponde a la acción propuesta (la huella no coincide).',
       });
     }
-    const vigente = await verificarContenidoVigente(client, fila);
+    const vigente = await verificarContenidoVigente(client, fila, 'confirmar');
     if (!vigente.ok) return vigente;
 
     const { rows } = await client.query<Fila>(
@@ -454,12 +432,22 @@ export async function confirmarAccion(
  * que dos ejecuciones simultáneas no puedan ambas proceder; la repetición
  * posterior falla porque el estado es terminal.
  *
- * Atomicidad: la aprobación del brief, el cambio a `executed` y la auditoría
- * ocurren en UNA transacción. Si el caso de uso es rechazado (por ejemplo una
- * guarda del dominio) la acción queda `confirmed` y se devuelve el error real;
- * si algo falla a mitad de camino (error de base de datos), todo se revierte:
- * nunca queda el dominio aplicado con la acción `confirmed`, ni `executed` sin
- * dominio aplicado. La acción sigue `confirmed` y puede reintentarse.
+ * La ejecución la hace el handler del tipo (`proposed-action-handlers.ts`), que
+ * llama al caso de uso existente como la persona, con origen `ui` y correlación
+ * a la acción. Garantía según el MODO del tipo:
+ *
+ *  · `atomic` (`brief.approve`): el cambio de dominio, la marca `executed` y la
+ *    auditoría ocurren en UNA transacción. Si el caso de uso es rechazado (por
+ *    ejemplo una guarda del dominio) la acción queda `confirmed` y se devuelve
+ *    el error real; si algo falla a mitad de camino (error de base de datos),
+ *    todo se revierte: nunca queda el dominio aplicado con la acción
+ *    `confirmed`, ni `executed` sin dominio aplicado. Puede reintentarse.
+ *
+ *  · `idempotent_external` (`influencer_import.*`): el caso de uso usa sus
+ *    propias transacciones, así que NO es atómico con la marca `executed`. La
+ *    garantía es más débil (DEC-047): la ejecución única la da el bloqueo de fila
+ *    mientras dura la llamada; si el caso de uso se aplicó y la marca falla, la
+ *    acción queda `confirmed` y reintentar reconcilia sin duplicar.
  */
 export async function ejecutarAccion(
   actor: User | 'system',
@@ -478,18 +466,12 @@ export async function ejecutarAccion(
     }
     const humano = permitido.value;
 
-    const vigente = await verificarContenidoVigente(client, fila);
+    const vigente = await verificarContenidoVigente(client, fila, 'ejecutar');
     if (!vigente.ok) return vigente;
 
-    // Caso de uso: la misma aprobación humana directa que ya existía, con
-    // origen `ui` (una persona lo está ejecutando) y correlación a la propuesta.
-    // Corre DENTRO de esta transacción (misma conexión): el cambio de dominio,
-    // la marca `executed` y la auditoría se confirman juntos o no se confirman.
-    // Si cualquier paso posterior lanza, el ROLLBACK revierte también el brief.
-    const resultado = await transicionarBriefEnTransaccion(client, humano, fila.resource_id, 'approved', {
-      origen: 'ui',
-      correlation: { proposedActionId: id },
-    });
+    const handler = handlerDe(fila.action_type);
+    if (handler === undefined) return err(NO_ENCONTRADO);
+    const resultado = await handler.ejecutar(client, humano, fila);
     if (!resultado.ok) return err(resultado.error);
 
     const { rows } = await client.query<Fila>(
@@ -515,6 +497,8 @@ export async function ejecutarAccion(
         type: fila.action_type,
         resourceId: fila.resource_id,
         proposedOrigin: fila.proposed_origin,
+        mode: handler.modo,
+        ...(resultado.value ?? {}),
       },
     });
 
@@ -524,8 +508,20 @@ export async function ejecutarAccion(
 
 // ─────────────────────────── Cancelar, leer, vencer ────────────────────────────
 
-/** Cancela una acción pendiente o confirmada (quien la propuso, o quien puede confirmarla). */
-export async function cancelarAccion(actor: User, id: string): Promise<Result<ProposedAction>> {
+/**
+ * Cancela una acción pendiente o confirmada (quien la propuso, o quien puede
+ * confirmarla). Cancelar solo reduce riesgo: lo puede pedir también el chat en
+ * nombre de la persona (`contexto.origin = 'chat'`); sin contexto, `ui`.
+ */
+export async function cancelarAccion(
+  actor: User,
+  id: string,
+  contexto?: ContextoDeAuditoria,
+): Promise<Result<ProposedAction>> {
+  const persona = exigirPersona(actor, contexto);
+  if (!persona.ok) return persona;
+  if (!UUID.test(id)) return err(NO_ENCONTRADO);
+
   return transaction(async (client) => {
     const fila = await cargarBloqueada(client, id);
     if (fila === undefined) return err(NO_ENCONTRADO);
@@ -547,8 +543,8 @@ export async function cancelarAccion(actor: User, id: string): Promise<Result<Pr
     await recordAudit(client, {
       actor,
       organizationId: fila.organization_id,
-      origin: 'ui',
-      correlation: { proposedActionId: id },
+      origin: contexto?.origin ?? 'ui',
+      correlation: { ...contexto?.correlation, proposedActionId: id },
       action: 'proposed_action.cancel',
       entityType: 'proposed_action',
       entityId: id,
@@ -559,18 +555,41 @@ export async function cancelarAccion(actor: User, id: string): Promise<Result<Pr
   });
 }
 
-/** Lee una acción propuesta de la organización del actor. */
-export async function obtenerAccionPropuesta(actor: User, id: string): Promise<Result<ProposedAction>> {
+/**
+ * Lee una acción propuesta de la organización del actor. Lectura acotada:
+ *
+ *  · el actor debe estar activo y su ROL poder proponer o confirmar ESE tipo
+ *    (cada handler/spec declara su capacidad); sin ella, el recurso no existe
+ *    para él (`RESOURCE_NOT_FOUND`, no revela que existe);
+ *  · el recurso es de SU organización; uno ajeno es `RESOURCE_NOT_FOUND`;
+ *  · con `alcance.campaignId` (el chat pasa la de la conversación), una acción de
+ *    otra campaña también es `RESOURCE_NOT_FOUND`.
+ */
+export async function obtenerAccionPropuesta(
+  actor: User,
+  id: string,
+  alcance?: { readonly campaignId?: string | undefined },
+): Promise<Result<ProposedAction>> {
+  if (actor.status !== 'activo' || !UUID.test(id)) return err(NO_ENCONTRADO);
   const { rows } = await getPool().query<Fila>(
     `SELECT ${COLUMNAS} FROM proposed_actions WHERE id = $1 AND organization_id = $2`,
     [id, actor.organizationId],
   );
   const fila = rows[0];
-  if (fila === undefined || actor.status !== 'activo') return err(NO_ENCONTRADO);
+  if (fila === undefined) return err(NO_ENCONTRADO);
   const spec = specDeAccion(fila.action_type);
-  if (spec === undefined) return err(NO_ENCONTRADO);
+  if (spec === undefined || handlerDe(fila.action_type) === undefined) return err(NO_ENCONTRADO);
+  if (!rolPuedeProponer(actor.role, spec) && !rolPuedeConfirmar(actor.role, spec)) {
+    return err(NO_ENCONTRADO);
+  }
+  if (alcance?.campaignId !== undefined && fila.campaign_id !== alcance.campaignId) {
+    return err(NO_ENCONTRADO);
+  }
   return ok(comoAccion(fila));
 }
+
+/** Nombre explícito de la lectura acotada para quien llama «como actor» (el adaptador del chat). */
+export const obtenerAccionPropuestaComoActor = obtenerAccionPropuesta;
 
 /**
  * Marca como vencidas las acciones pendientes o confirmadas cuyo plazo pasó.

@@ -66,7 +66,21 @@ export type DomainErrorCode =
   /** El libro de cálculo es inválido, peligroso o excede los límites (V2 · Fase 4). */
   | 'INVALID_SPREADSHEET'
   /** El worker no pudo procesar la hoja de cálculo (V2 · Fase 4). */
-  | 'SPREADSHEET_PARSE_FAILED';
+  | 'SPREADSHEET_PARSE_FAILED'
+  /** La IA está apagada (`AI_ENABLED`): el agente no admite ni continúa runs (V2 · Fase 6). */
+  | 'AI_DISABLED'
+  /** El modelo no está disponible (proveedor caído, timeout, límite de tasa) (V2 · Fase 6). */
+  | 'AGENT_MODEL_UNAVAILABLE'
+  /** El modelo pidió una tool inexistente, prohibida o con argumentos inválidos (V2 · Fase 6). */
+  | 'AGENT_INVALID_TOOL_CALL'
+  /** Una tool falló por una causa que no es un error de dominio (V2 · Fase 6). */
+  | 'AGENT_TOOL_FAILED'
+  /** No se pudo ensamblar el contexto del agente (V2 · Fase 6). */
+  | 'AGENT_CONTEXT_FAILED'
+  /** El run excedió su plazo (V2 · Fase 6). */
+  | 'AGENT_RUN_TIMEOUT'
+  /** El run alcanzó el límite de pasos; terminal pero no es un fallo (V2 · Fase 6). */
+  | 'AGENT_STEP_LIMIT';
 
 export interface DomainErrorPayload {
   readonly code: DomainErrorCode;

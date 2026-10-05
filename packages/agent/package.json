@@ -1,0 +1,25 @@
+{
+  "name": "@tcl-kol-os/agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Agente de Cuenta (V2 · Fase 6): registro de tools y runtime. Orquesta casos de uso existentes; no contiene reglas de negocio (ADR-008).",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@tcl-kol-os/db": "*",
+    "@tcl-kol-os/domain": "*"
+  },
+  "devDependencies": {
+    "@types/node": "*",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

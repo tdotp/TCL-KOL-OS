@@ -57,7 +57,8 @@ import { recordAudit } from './audit.ts';
 import { getPool, transaction } from './client.ts';
 import { agregarCuenta, buscarInfluencerPorCuenta, crearInfluencer, cuentasDe } from './influencers.ts';
 import { asociarInfluencerACampana, asociarProductoAInfluencer } from './campaign-influencers.ts';
-import { type ContextoDeAuditoria, NO_ENCONTRADO, auditoriaDe, exigirPersona } from './influencers.ts';
+import { NO_ENCONTRADO } from './influencers.ts';
+import { type ContextoDeAuditoria, auditoriaDe, exigirPersona } from './audit-context.ts';
 import { cargarRejillaDeSnapshot } from './source-sync.ts';
 import { Abortar } from './tx-result.ts';
 
@@ -227,6 +228,26 @@ function exigir(
 }
 
 const CONTEXTO_VACIO: ContextoDeAuditoria = {};
+
+/**
+ * Aplicar un plan y resolver un registro son decisiones humanas. Desde el
+ * canal chat NO se ejecutan directamente (V2 · Fase 6, D6): el agente solo
+ * puede PROPONERLAS (`proponerAccion`: `influencer_import.apply` /
+ * `influencer_import.resolve_record`); las ejecuta la acción confirmada por
+ * una persona desde la interfaz, con origen `ui` y la correlación de la
+ * acción propuesta. Mismo patrón que `transicionarBrief` → `approved`.
+ */
+function exigirCanalHumano(contexto: ContextoDeAuditoria | undefined, accion: string): Result<true> {
+  if (contexto?.origin === 'chat') {
+    return err({
+      code: 'HUMAN_CONFIRMATION_REQUIRED',
+      message:
+        'Esta decisión es humana: desde el chat debe proponerse como acción y confirmarla una persona desde la interfaz.',
+      details: { accion, origen: 'chat' },
+    });
+  }
+  return ok(true);
+}
 
 // ─────────────────────────── Filas ─────────────────────────────────────────────
 
@@ -1598,6 +1619,35 @@ async function idDeAsignacion(participacionId: string, campaignProductId: string
 }
 
 /**
+ * Lo que `applyInfluencerImport` verifica antes de tocar nada (permiso, campaña
+ * activa, plan aplicable). Solo lee y lanza `Abortar`; la reutiliza la propuesta
+ * de aplicar (HITL, Fase 6) para no duplicar ninguna regla.
+ */
+async function validarAplicacion(actor: User, planId: string): Promise<PlanRow> {
+  const { rows } = await getPool().query<PlanRow>(`${SELECT_PLAN} WHERE id = $1`, [planId]);
+  const plan = rows[0];
+  if (plan === undefined) throw new Abortar(NO_ENCONTRADO);
+  exigir(actor, plan.organization_id, 'influencer:manage', 'campaign_influencer:manage');
+  const campana = await cargarCampana(getPool(), actor, plan.campaign_id);
+  exigirCampanaActiva(campana);
+  if (plan.status === 'schema_invalid') {
+    throw new Abortar({
+      code: 'VALIDATION_FAILED',
+      message: 'El Sheet no cumple el esquema: corríjalo, sincronice y prepare un plan nuevo.',
+      details: { reason: 'schema_invalid' },
+    });
+  }
+  if (plan.status === 'superseded') {
+    throw new Abortar({
+      code: 'RESOURCE_CONFLICT',
+      message: 'Este plan fue reemplazado por uno más reciente del mismo Sheet.',
+      details: { reason: 'plan_superseded' },
+    });
+  }
+  return plan;
+}
+
+/**
  * Aplica un plan: crea o asocia lo inequívoco y deja pendiente lo ambiguo.
  * Idempotente (aplicarlo dos veces no duplica nada) y ligado a su snapshot.
  */
@@ -1608,28 +1658,11 @@ export async function applyInfluencerImport(
 ): Promise<Result<ImportApplication>> {
   const persona = exigirPersona(actor, contexto);
   if (!persona.ok) return persona;
+  const humano = exigirCanalHumano(contexto, 'influencer_import.apply');
+  if (!humano.ok) return humano;
 
   return resultado(async () => {
-    const { rows } = await getPool().query<PlanRow>(`${SELECT_PLAN} WHERE id = $1`, [planId]);
-    const plan = rows[0];
-    if (plan === undefined) throw new Abortar(NO_ENCONTRADO);
-    exigir(actor, plan.organization_id, 'influencer:manage', 'campaign_influencer:manage');
-    const campana = await cargarCampana(getPool(), actor, plan.campaign_id);
-    exigirCampanaActiva(campana);
-    if (plan.status === 'schema_invalid') {
-      throw new Abortar({
-        code: 'VALIDATION_FAILED',
-        message: 'El Sheet no cumple el esquema: corríjalo, sincronice y prepare un plan nuevo.',
-        details: { reason: 'schema_invalid' },
-      });
-    }
-    if (plan.status === 'superseded') {
-      throw new Abortar({
-        code: 'RESOURCE_CONFLICT',
-        message: 'Este plan fue reemplazado por uno más reciente del mismo Sheet.',
-        details: { reason: 'plan_superseded' },
-      });
-    }
+    const plan = await validarAplicacion(actor, planId);
 
     // El plan se bloquea mientras se aplica: dos aplicaciones simultáneas se serializan.
     return transaction(async (bloqueo) => {
@@ -1666,6 +1699,154 @@ export async function applyInfluencerImport(
 
 // ─────────────────────────── Resolución humana ─────────────────────────────────
 
+/** La resolución que una acción propuesta concreta ya dejó sobre un registro (si la hay). */
+async function resolucionDeAccion(
+  recordId: string,
+  decidedBy: string,
+  proposedActionId: string,
+): Promise<ImportResolution | undefined> {
+  const { rows } = await getPool().query<ResolutionRow>(
+    `${SELECT_RESOLUCION}
+      WHERE record_id = $1 AND decided_by = $2 AND correlation->>'proposedActionId' = $3
+      ORDER BY created_at, id LIMIT 1`,
+    [recordId, decidedBy, proposedActionId],
+  );
+  return rows[0] === undefined ? undefined : comoResolucion(rows[0]);
+}
+
+/**
+ * Todo lo que `resolveImportRecord` verifica ANTES de escribir la decisión
+ * (permiso, campaña activa, plan vigente, reglas de cada tipo de decisión). Solo
+ * lee y lanza `Abortar`. Lo usa también la propuesta de una resolución (HITL,
+ * Fase 6) para fallar pronto sin duplicar ninguna regla.
+ */
+async function validarResolucion(
+  actor: User,
+  recordId: string,
+  decision: ImportDecision,
+  opciones: { readonly omitirReglasDeDecision?: boolean } = {},
+): Promise<{ readonly fila: RecordRow; readonly plan: PlanRow }> {
+  const { rows } = await getPool().query<RecordRow>(`${SELECT_REGISTRO} WHERE id = $1`, [recordId]);
+  const fila = rows[0];
+  if (fila === undefined) throw new Abortar(NO_ENCONTRADO);
+  exigir(actor, fila.organization_id, 'influencer:manage', 'campaign_influencer:manage');
+  const { rows: planes } = await getPool().query<PlanRow>(`${SELECT_PLAN} WHERE id = $1`, [fila.plan_id]);
+  const plan = planes[0]!;
+  const campana = await cargarCampana(getPool(), actor, plan.campaign_id);
+  exigirCampanaActiva(campana);
+  if (plan.status === 'schema_invalid' || plan.status === 'superseded') {
+    throw new Abortar({
+      code: 'RESOURCE_CONFLICT',
+      message: 'Este plan ya no admite decisiones (esquema inválido o reemplazado).',
+      details: { reason: plan.status === 'superseded' ? 'plan_superseded' : 'schema_invalid' },
+    });
+  }
+  if (decision.reason !== undefined && decision.reason.length > 500) {
+    throw new Abortar({
+      code: 'VALIDATION_FAILED',
+      message: 'El motivo no puede superar 500 caracteres.',
+      details: { field: 'reason' },
+    });
+  }
+
+  // Reintento de una resolución ya registrada por la MISMA acción propuesta: el
+  // estado ya refleja su efecto, así que las reglas de la decisión no se vuelven
+  // a exigir (se reconcilia, no se vuelve a decidir).
+  if (opciones.omitirReglasDeDecision === true) return { fila, plan };
+
+  const registro = registroDesdeFila(fila);
+  const evaluacion = (await evaluarRegistros(getPool(), actor, campana, plan.source_id, [registro])).get(
+    registro.sourceKey,
+  )!;
+  const conflicto = (reason: string, message: string) =>
+    new Abortar({ code: 'RESOURCE_CONFLICT', message, details: { reason, recordId } });
+
+  switch (decision.kind) {
+    case 'use_existing_influencer': {
+      if (fila.kind !== 'person' || fila.identity_outcome === 'invalid') {
+        throw conflicto(
+          'record_not_resolvable',
+          'Este registro no admite una persona: no cumple el esquema.',
+        );
+      }
+      const { rows: influencers } = await getPool().query<{ id: string }>(
+        `SELECT id FROM influencers WHERE id = $1 AND organization_id = $2`,
+        [decision.influencerId, plan.organization_id],
+      );
+      if (influencers[0] === undefined) throw new Abortar(NO_ENCONTRADO);
+      const binding = await getPool().query<{ influencer_id: string }>(
+        `SELECT influencer_id FROM influencer_source_bindings WHERE source_id = $1 AND source_key = $2`,
+        [plan.source_id, fila.source_key],
+      );
+      if (binding.rows[0] !== undefined && binding.rows[0].influencer_id !== decision.influencerId) {
+        throw conflicto('already_bound', 'La clave ya está vinculada a otra persona; no se reasigna.');
+      }
+      // Las cuentas del Sheet que ya son de OTRA persona no se mueven.
+      for (const cuenta of registro.accounts) {
+        const dueno = await buscarInfluencerPorCuenta(actor, cuenta.platform, cuenta.handle);
+        if (dueno.ok && dueno.value !== undefined && dueno.value.influencer.id !== decision.influencerId) {
+          throw conflicto(
+            'account_owned_by_other',
+            'Una cuenta del registro pertenece a otro Influencer: no se mueve.',
+          );
+        }
+      }
+      const otraClave = await getPool().query<{ source_key: string }>(
+        `SELECT source_key FROM influencer_source_bindings WHERE source_id = $1 AND influencer_id = $2 AND source_key <> $3`,
+        [plan.source_id, decision.influencerId, fila.source_key],
+      );
+      if (otraClave.rows[0] !== undefined) {
+        throw conflicto(
+          'influencer_bound_to_other_key',
+          'Esa persona ya está vinculada a otra clave del mismo Sheet.',
+        );
+      }
+      break;
+    }
+    case 'create_new_influencer': {
+      if (fila.kind !== 'person' || fila.identity_outcome === 'invalid') {
+        throw conflicto(
+          'record_not_resolvable',
+          'Este registro no admite una persona: no cumple el esquema.',
+        );
+      }
+      if (evaluacion.decision.influencerId !== undefined || evaluacion.decision.candidates.length > 0) {
+        throw conflicto(
+          'accounts_already_exist',
+          'Alguna cuenta del registro ya existe: no se puede crear una persona nueva con ella.',
+        );
+      }
+      const binding = await getPool().query(
+        `SELECT 1 FROM influencer_source_bindings WHERE source_id = $1 AND source_key = $2`,
+        [plan.source_id, fila.source_key],
+      );
+      if (binding.rows[0] !== undefined)
+        throw conflicto('already_bound', 'La clave ya está vinculada a una persona.');
+      break;
+    }
+    case 'choose_product': {
+      const normalizada = normalizeProductRef(decision.productRef);
+      if (!fila.product_refs.some((p) => p.normalizedRef === normalizada)) {
+        throw new Abortar({
+          code: 'VALIDATION_FAILED',
+          message: 'Ese producto no es una referencia de este registro.',
+          details: { field: 'productRef' },
+        });
+      }
+      // El producto debe ser de ESTA campaña (también lo impone la base).
+      const { rows: productos } = await getPool().query<{ id: string }>(
+        `SELECT id FROM campaign_products WHERE id = $1 AND campaign_id = $2`,
+        [decision.campaignProductId, plan.campaign_id],
+      );
+      if (productos[0] === undefined) throw new Abortar(NO_ENCONTRADO);
+      break;
+    }
+    case 'ignore_record':
+      break;
+  }
+  return { fila, plan };
+}
+
 /**
  * Registra la decisión de una PERSONA sobre un registro ambiguo o bloqueado y la
  * aplica a ese registro. Elegir un Influencer existente, crear uno nuevo, elegir
@@ -1686,121 +1867,18 @@ export async function resolveImportRecord(
 > {
   const persona = exigirPersona(actor, contexto);
   if (!persona.ok) return persona;
+  const humano = exigirCanalHumano(contexto, 'influencer_import.resolve_record');
+  if (!humano.ok) return humano;
 
   return resultado(async () => {
-    const { rows } = await getPool().query<RecordRow>(`${SELECT_REGISTRO} WHERE id = $1`, [recordId]);
-    const fila = rows[0];
-    if (fila === undefined) throw new Abortar(NO_ENCONTRADO);
-    exigir(actor, fila.organization_id, 'influencer:manage', 'campaign_influencer:manage');
-    const { rows: planes } = await getPool().query<PlanRow>(`${SELECT_PLAN} WHERE id = $1`, [fila.plan_id]);
-    const plan = planes[0]!;
-    const campana = await cargarCampana(getPool(), actor, plan.campaign_id);
-    exigirCampanaActiva(campana);
-    if (plan.status === 'schema_invalid' || plan.status === 'superseded') {
-      throw new Abortar({
-        code: 'RESOURCE_CONFLICT',
-        message: 'Este plan ya no admite decisiones (esquema inválido o reemplazado).',
-        details: { reason: plan.status === 'superseded' ? 'plan_superseded' : 'schema_invalid' },
-      });
-    }
-    if (decision.reason !== undefined && decision.reason.length > 500) {
-      throw new Abortar({
-        code: 'VALIDATION_FAILED',
-        message: 'El motivo no puede superar 500 caracteres.',
-        details: { field: 'reason' },
-      });
-    }
-
-    const registro = registroDesdeFila(fila);
-    const evaluacion = (await evaluarRegistros(getPool(), actor, campana, plan.source_id, [registro])).get(
-      registro.sourceKey,
-    )!;
-    const conflicto = (reason: string, message: string) =>
-      new Abortar({ code: 'RESOURCE_CONFLICT', message, details: { reason, recordId } });
-
-    switch (decision.kind) {
-      case 'use_existing_influencer': {
-        if (fila.kind !== 'person' || fila.identity_outcome === 'invalid') {
-          throw conflicto(
-            'record_not_resolvable',
-            'Este registro no admite una persona: no cumple el esquema.',
-          );
-        }
-        const { rows: influencers } = await getPool().query<{ id: string }>(
-          `SELECT id FROM influencers WHERE id = $1 AND organization_id = $2`,
-          [decision.influencerId, plan.organization_id],
-        );
-        if (influencers[0] === undefined) throw new Abortar(NO_ENCONTRADO);
-        const binding = await getPool().query<{ influencer_id: string }>(
-          `SELECT influencer_id FROM influencer_source_bindings WHERE source_id = $1 AND source_key = $2`,
-          [plan.source_id, fila.source_key],
-        );
-        if (binding.rows[0] !== undefined && binding.rows[0].influencer_id !== decision.influencerId) {
-          throw conflicto('already_bound', 'La clave ya está vinculada a otra persona; no se reasigna.');
-        }
-        // Las cuentas del Sheet que ya son de OTRA persona no se mueven.
-        for (const cuenta of registro.accounts) {
-          const dueno = await buscarInfluencerPorCuenta(actor, cuenta.platform, cuenta.handle);
-          if (dueno.ok && dueno.value !== undefined && dueno.value.influencer.id !== decision.influencerId) {
-            throw conflicto(
-              'account_owned_by_other',
-              'Una cuenta del registro pertenece a otro Influencer: no se mueve.',
-            );
-          }
-        }
-        const otraClave = await getPool().query<{ source_key: string }>(
-          `SELECT source_key FROM influencer_source_bindings WHERE source_id = $1 AND influencer_id = $2 AND source_key <> $3`,
-          [plan.source_id, decision.influencerId, fila.source_key],
-        );
-        if (otraClave.rows[0] !== undefined) {
-          throw conflicto(
-            'influencer_bound_to_other_key',
-            'Esa persona ya está vinculada a otra clave del mismo Sheet.',
-          );
-        }
-        break;
-      }
-      case 'create_new_influencer': {
-        if (fila.kind !== 'person' || fila.identity_outcome === 'invalid') {
-          throw conflicto(
-            'record_not_resolvable',
-            'Este registro no admite una persona: no cumple el esquema.',
-          );
-        }
-        if (evaluacion.decision.influencerId !== undefined || evaluacion.decision.candidates.length > 0) {
-          throw conflicto(
-            'accounts_already_exist',
-            'Alguna cuenta del registro ya existe: no se puede crear una persona nueva con ella.',
-          );
-        }
-        const binding = await getPool().query(
-          `SELECT 1 FROM influencer_source_bindings WHERE source_id = $1 AND source_key = $2`,
-          [plan.source_id, fila.source_key],
-        );
-        if (binding.rows[0] !== undefined)
-          throw conflicto('already_bound', 'La clave ya está vinculada a una persona.');
-        break;
-      }
-      case 'choose_product': {
-        const normalizada = normalizeProductRef(decision.productRef);
-        if (!fila.product_refs.some((p) => p.normalizedRef === normalizada)) {
-          throw new Abortar({
-            code: 'VALIDATION_FAILED',
-            message: 'Ese producto no es una referencia de este registro.',
-            details: { field: 'productRef' },
-          });
-        }
-        // El producto debe ser de ESTA campaña (también lo impone la base).
-        const { rows: productos } = await getPool().query<{ id: string }>(
-          `SELECT id FROM campaign_products WHERE id = $1 AND campaign_id = $2`,
-          [decision.campaignProductId, plan.campaign_id],
-        );
-        if (productos[0] === undefined) throw new Abortar(NO_ENCONTRADO);
-        break;
-      }
-      case 'ignore_record':
-        break;
-    }
+    // Reintento de la ejecución de una acción propuesta (HITL, Fase 6): si esta
+    // misma acción ya dejó su resolución, no se escribe otra; se reconcilia.
+    const accionId = contexto.correlation?.proposedActionId;
+    const previa =
+      accionId === undefined ? undefined : await resolucionDeAccion(recordId, actor.id, accionId);
+    const { fila, plan } = await validarResolucion(actor, recordId, decision, {
+      omitirReglasDeDecision: previa !== undefined,
+    });
 
     const dimension =
       decision.kind === 'ignore_record'
@@ -1809,48 +1887,50 @@ export async function resolveImportRecord(
           ? 'product'
           : 'identity';
     const productoRef = decision.kind === 'choose_product' ? normalizeProductRef(decision.productRef) : null;
-    const resolucion = await transaction(async (client) => {
-      const { rows: creada } = await client.query<ResolutionRow>(
-        `INSERT INTO influencer_import_resolutions
+    const resolucion =
+      previa ??
+      (await transaction(async (client) => {
+        const { rows: creada } = await client.query<ResolutionRow>(
+          `INSERT INTO influencer_import_resolutions
                 (organization_id, campaign_id, record_id, dimension, decision, influencer_id, campaign_product_id,
                  product_ref, decided_by, reason, correlation)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
          RETURNING id, record_id, dimension, decision, influencer_id, campaign_product_id, product_ref, decided_by,
                    reason, created_at`,
-        [
-          plan.organization_id,
-          plan.campaign_id,
-          recordId,
-          dimension,
-          decision.kind,
-          decision.kind === 'use_existing_influencer' ? decision.influencerId : null,
-          decision.kind === 'choose_product' ? decision.campaignProductId : null,
-          productoRef,
-          actor.id,
-          decision.reason ?? null,
-          contexto.correlation === undefined ? null : JSON.stringify(contexto.correlation),
-        ],
-      );
-      await recordAudit(
-        client,
-        auditoriaDe(actor, contexto, {
-          action: 'influencer_import.record_resolve',
-          entityType: 'influencer_import_record',
-          entityId: recordId,
-          metadata: {
-            planId: plan.id,
-            snapshotId: plan.snapshot_id,
-            sourceKey: fila.source_key,
-            decision: decision.kind,
-            influencerId: decision.kind === 'use_existing_influencer' ? decision.influencerId : undefined,
-            campaignProductId: decision.kind === 'choose_product' ? decision.campaignProductId : undefined,
-            productRef: productoRef ?? undefined,
-            reason: decision.reason,
-          },
-        }),
-      );
-      return comoResolucion(creada[0]!);
-    });
+          [
+            plan.organization_id,
+            plan.campaign_id,
+            recordId,
+            dimension,
+            decision.kind,
+            decision.kind === 'use_existing_influencer' ? decision.influencerId : null,
+            decision.kind === 'choose_product' ? decision.campaignProductId : null,
+            productoRef,
+            actor.id,
+            decision.reason ?? null,
+            contexto.correlation === undefined ? null : JSON.stringify(contexto.correlation),
+          ],
+        );
+        await recordAudit(
+          client,
+          auditoriaDe(actor, contexto, {
+            action: 'influencer_import.record_resolve',
+            entityType: 'influencer_import_record',
+            entityId: recordId,
+            metadata: {
+              planId: plan.id,
+              snapshotId: plan.snapshot_id,
+              sourceKey: fila.source_key,
+              decision: decision.kind,
+              influencerId: decision.kind === 'use_existing_influencer' ? decision.influencerId : undefined,
+              campaignProductId: decision.kind === 'choose_product' ? decision.campaignProductId : undefined,
+              productRef: productoRef ?? undefined,
+              reason: decision.reason,
+            },
+          }),
+        );
+        return comoResolucion(creada[0]!);
+      }));
 
     // La decisión se materializa de inmediato sobre ESE registro (y crea el binding estable).
     const resultadoAplicado =
@@ -1858,6 +1938,244 @@ export async function resolveImportRecord(
     const planStatus = await recalcularEstadoDelPlan(getPool(), plan.id);
     return { resolution: resolucion, result: resultadoAplicado, planStatus };
   });
+}
+
+// ─────────────────────────── Propuesta humana (HITL · Fase 6) ───────────────────
+
+/*
+ * Aplicar un plan y resolver un registro, por el canal chat, pasan por una
+ * ACCIÓN PROPUESTA que una persona confirma desde la interfaz
+ * (`proposed-action-handlers.ts`). Lo que sigue es lo que ese registro de
+ * handlers necesita de la importación, sin duplicar ninguna de sus reglas: las
+ * validaciones son las MISMAS funciones que usan `applyInfluencerImport` y
+ * `resolveImportRecord`, y el «material» es el contenido que la persona
+ * confirma, listo para huellar. La huella cubre exactamente lo que se le muestra:
+ *
+ *  · `estable`: el contenido inmutable del plan o del registro (filas del plan,
+ *    contenido del snapshot) más las resoluciones humanas que ya existen. Cambia
+ *    solo si alguien decide algo nuevo: confirmar y ejecutar lo exigen igual.
+ *  · `vivo`: el estado actual derivado (qué está aplicado, bloqueado, vinculado).
+ *    Se exige al CONFIRMAR (la persona ve lo que hay hoy) pero no al EJECUTAR: si
+ *    una ejecución se aplicó a medias y se reintenta, el estado ya avanzó y el
+ *    reintento debe poder reconciliar sin duplicar (modo `idempotent_external`).
+ */
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Lee y normaliza la decisión que formaliza el agente. Es entrada NO confiable:
+ * claves exactas por tipo, identificadores bien formados y motivo acotado.
+ */
+export function leerDecisionDeImportacion(valor: unknown): Result<ImportDecision> {
+  const invalida = (message: string, field?: string) =>
+    err<never>({ code: 'VALIDATION_FAILED', message, details: { field: field ?? 'decision' } });
+  if (typeof valor !== 'object' || valor === null || Array.isArray(valor)) {
+    return invalida('La decisión debe ser un objeto.');
+  }
+  const d = valor as Record<string, unknown>;
+  const permitidas: Record<string, readonly string[]> = {
+    use_existing_influencer: ['kind', 'influencerId', 'reason'],
+    create_new_influencer: ['kind', 'reason'],
+    choose_product: ['kind', 'productRef', 'campaignProductId', 'reason'],
+    ignore_record: ['kind', 'reason'],
+  };
+  const kind = d['kind'];
+  if (typeof kind !== 'string' || !Object.hasOwn(permitidas, kind)) {
+    return invalida('El tipo de decisión no es válido.', 'kind');
+  }
+  for (const clave of Object.keys(d)) {
+    if (!permitidas[kind]!.includes(clave)) return invalida(`La decisión no admite «${clave}».`, clave);
+  }
+  const reason = d['reason'];
+  if (reason !== undefined && (typeof reason !== 'string' || reason.length > 500)) {
+    return invalida('El motivo debe ser un texto de hasta 500 caracteres.', 'reason');
+  }
+  const motivo = reason === undefined ? {} : { reason };
+  switch (kind) {
+    case 'use_existing_influencer': {
+      const id = d['influencerId'];
+      if (typeof id !== 'string' || !UUID.test(id))
+        return invalida('influencerId no es un id válido.', 'influencerId');
+      return ok({ kind, influencerId: id.toLowerCase(), ...motivo });
+    }
+    case 'choose_product': {
+      const ref = d['productRef'];
+      const id = d['campaignProductId'];
+      if (typeof ref !== 'string' || ref.trim() === '' || ref.length > 200) {
+        return invalida('productRef debe ser un texto de 1 a 200 caracteres.', 'productRef');
+      }
+      if (typeof id !== 'string' || !UUID.test(id)) {
+        return invalida('campaignProductId no es un id válido.', 'campaignProductId');
+      }
+      return ok({ kind, productRef: ref.trim(), campaignProductId: id.toLowerCase(), ...motivo });
+    }
+    default:
+      return ok({ kind: kind as 'create_new_influencer' | 'ignore_record', ...motivo });
+  }
+}
+
+/** ¿Se puede PROPONER aplicar este plan? Las mismas reglas que aplicarlo (más: que haya algo por hacer). */
+export async function validarAplicacionDePlan(
+  actor: User,
+  planId: string,
+): Promise<Result<{ organizationId: string; campaignId: string }>> {
+  return resultado(async () => {
+    const plan = await validarAplicacion(actor, planId);
+    if (plan.status === 'applied') {
+      throw new Abortar({
+        code: 'RESOURCE_CONFLICT',
+        message: 'Este plan ya está aplicado por completo: no queda nada por aplicar.',
+        details: { reason: 'plan_already_applied' },
+      });
+    }
+    return { organizationId: plan.organization_id, campaignId: plan.campaign_id };
+  });
+}
+
+/** ¿Se puede PROPONER esta decisión? Las mismas reglas que resolverla. */
+export async function validarResolucionDeRegistro(
+  actor: User,
+  recordId: string,
+  decision: ImportDecision,
+): Promise<Result<{ organizationId: string; campaignId: string; planId: string }>> {
+  return resultado(async () => {
+    const { plan } = await validarResolucion(actor, recordId, decision);
+    return { organizationId: plan.organization_id, campaignId: plan.campaign_id, planId: plan.id };
+  });
+}
+
+export interface MaterialDePlan {
+  readonly organizationId: string;
+  readonly campaignId: string;
+  readonly planId: string;
+  readonly planStatus: ImportPlanStatus;
+  readonly snapshotId: string;
+  readonly snapshotContentHash: string;
+  readonly estable: unknown;
+  readonly vivo: unknown;
+  /** Lo que se muestra a la persona (cifras). Va en el payload de la propuesta. */
+  readonly muestra: {
+    readonly registros: number;
+    readonly porEstado: Readonly<Record<string, number>>;
+    readonly bloqueantesAlPlanear: number;
+  };
+}
+
+const COLUMNAS_INMUTABLES_DE_REGISTRO = `id, source_key, kind, display_name, accounts, product_refs, locators,
+  future_fields, content_hash, change, change_detail, identity_outcome, identity_detail,
+  participation_outcome, product_outcomes, problems`;
+
+/** Material de un plan para la propuesta de aplicarlo. `undefined` si no existe. */
+export async function materialDePlan(db: Consultor, planId: string): Promise<MaterialDePlan | undefined> {
+  const { rows: planes } = await db.query<PlanRow>(`${SELECT_PLAN} WHERE id = $1`, [planId]);
+  const plan = planes[0];
+  if (plan === undefined) return undefined;
+  const { rows: registros } = await db.query(
+    `SELECT ${COLUMNAS_INMUTABLES_DE_REGISTRO} FROM influencer_import_records
+      WHERE plan_id = $1 ORDER BY source_key`,
+    [planId],
+  );
+  const { rows: resoluciones } = await db.query<{ id: string }>(
+    `SELECT res.id::text AS id FROM influencer_import_resolutions res
+       JOIN influencer_import_records r ON r.id = res.record_id
+      WHERE r.plan_id = $1 ORDER BY res.id`,
+    [planId],
+  );
+  const { rows: snapshots } = await db.query<{ content_hash: string }>(
+    `SELECT content_hash FROM source_snapshots WHERE id = $1`,
+    [plan.snapshot_id],
+  );
+  const snapshotContentHash = snapshots[0]?.content_hash ?? '';
+  const detalle = await cargarDetalle(db, planId);
+  const porEstado: Record<string, number> = {};
+  for (const r of detalle.records) porEstado[r.state] = (porEstado[r.state] ?? 0) + 1;
+  return {
+    organizationId: plan.organization_id,
+    campaignId: plan.campaign_id,
+    planId,
+    planStatus: detalle.plan.status,
+    snapshotId: plan.snapshot_id,
+    snapshotContentHash,
+    estable: {
+      planId,
+      snapshotId: plan.snapshot_id,
+      snapshotContentHash,
+      registros,
+      resoluciones: resoluciones.map((r) => r.id),
+    },
+    vivo: detalle.records.map((r) => ({
+      id: r.id,
+      state: r.state,
+      pending: r.pending,
+      binding: r.binding ?? null,
+    })),
+    muestra: {
+      registros: detalle.records.length,
+      porEstado,
+      bloqueantesAlPlanear: plan.summary.blocking,
+    },
+  };
+}
+
+export interface MaterialDeRegistro {
+  readonly organizationId: string;
+  readonly campaignId: string;
+  readonly planId: string;
+  readonly planStatus: ImportPlanStatus;
+  readonly estable: unknown;
+  readonly vivo: unknown;
+  readonly muestra: {
+    readonly sourceKey: string;
+    readonly displayName: string | null;
+    readonly accounts: readonly { platform: string; handle: string }[];
+    readonly productRefs: readonly string[];
+    readonly state: ImportRecordState;
+    readonly pending: readonly string[];
+  };
+}
+
+/**
+ * Material de un registro para la propuesta de resolverlo. `ignorarAccionId`
+ * excluye de las resoluciones existentes las que dejó ESA acción propuesta (para
+ * reconciliar un reintento de su ejecución sin que su propio efecto la invalide).
+ */
+export async function materialDeRegistro(
+  db: Consultor,
+  recordId: string,
+  ignorarAccionId?: string,
+): Promise<MaterialDeRegistro | undefined> {
+  const { rows: filas } = await db.query<RecordRow>(`${SELECT_REGISTRO} WHERE id = $1`, [recordId]);
+  const fila = filas[0];
+  if (fila === undefined) return undefined;
+  const { rows: planes } = await db.query<PlanRow>(`${SELECT_PLAN} WHERE id = $1`, [fila.plan_id]);
+  const plan = planes[0]!;
+  const { rows: inmutables } = await db.query(
+    `SELECT ${COLUMNAS_INMUTABLES_DE_REGISTRO} FROM influencer_import_records WHERE id = $1`,
+    [recordId],
+  );
+  const { rows: resoluciones } = await db.query<{ id: string }>(
+    `SELECT id::text AS id FROM influencer_import_resolutions
+      WHERE record_id = $1 AND ($2::text IS NULL OR correlation->>'proposedActionId' IS DISTINCT FROM $2)
+      ORDER BY id`,
+    [recordId, ignorarAccionId ?? null],
+  );
+  const [vista] = await vistaDeRegistros(db, plan, [fila]);
+  return {
+    organizationId: plan.organization_id,
+    campaignId: plan.campaign_id,
+    planId: plan.id,
+    planStatus: plan.status,
+    estable: { planId: plan.id, registro: inmutables[0], resoluciones: resoluciones.map((r) => r.id) },
+    vivo: { state: vista!.state, pending: vista!.pending, binding: vista!.binding ?? null },
+    muestra: {
+      sourceKey: fila.source_key,
+      displayName: fila.display_name,
+      accounts: fila.accounts.map((c) => ({ platform: c.platform, handle: c.handle })),
+      productRefs: fila.product_refs.map((p) => p.ref),
+      state: vista!.state,
+      pending: vista!.pending,
+    },
+  };
 }
 
 // ─────────────────────────── Procedencia ───────────────────────────────────────

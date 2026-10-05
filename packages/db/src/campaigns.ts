@@ -14,6 +14,8 @@ import { authorize, type CampaignProduct, type Result, type User, err, ok } from
 import { assertCapability } from './authz.ts';
 import { getPool, transaction } from './client.ts';
 import { recordAudit } from './audit.ts';
+import { type ContextoDeAuditoria, auditoriaDe, exigirPersona } from './audit-context.ts';
+import { Abortar, transaccionConResultado } from './tx-result.ts';
 
 /**
  * Comprobación de capacidad, sin recurso de por medio.
@@ -271,4 +273,168 @@ export async function archiveCampaign(actor: User, id: string): Promise<Result<t
   });
 
   return ok(true);
+}
+
+// ─────────────────────────── Actualizar metadatos (V2 · Fase 6) ───────────────
+
+export interface ActualizarCampanaInput {
+  readonly name?: string | undefined;
+  /** `YYYY-MM-DD`; `null` la borra. Ausente = no se toca. */
+  readonly startDate?: string | null | undefined;
+  readonly endDate?: string | null | undefined;
+}
+
+export interface CampanaActualizada {
+  readonly cambios: readonly ('name' | 'startDate' | 'endDate')[];
+  readonly antes: { name: string; startDate: string | null; endDate: string | null };
+  readonly despues: { name: string; startDate: string | null; endDate: string | null };
+}
+
+const LONGITUD_MAXIMA_NOMBRE = 200;
+
+function fechaIsoValida(valor: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
+  const [anio, mes, dia] = valor.split('-').map(Number) as [number, number, number];
+  const fecha = new Date(Date.UTC(anio, mes - 1, dia));
+  return fecha.getUTCFullYear() === anio && fecha.getUTCMonth() === mes - 1 && fecha.getUTCDate() === dia;
+}
+
+/**
+ * Actualiza el nombre y las fechas de una campaña ACTIVA. Es el único cambio de
+ * metadatos que existe: no toca el estado, la visibilidad, el responsable, el
+ * mercado ni los productos (archivar y crear siguen siendo decisiones propias).
+ *
+ *  · Capacidad `campaign:update`; una campaña de otra organización responde
+ *    `RESOURCE_NOT_FOUND` (el filtro por organización va en el propio SQL).
+ *  · La coherencia de fechas se valida mezclando lo enviado con lo vigente (el
+ *    CHECK de la base daría un 23514 crudo, no un error accionable).
+ *  · Una campaña archivada o cancelada no se edita.
+ *  · Sin cambios reales no escribe ni audita (idempotente); con cambios, UN
+ *    evento `campaign.update` con el antes y el después, el canal y la
+ *    correlación de quien la invoca (`contexto`; `ui` por defecto).
+ */
+export async function actualizarCampana(
+  actor: User,
+  campaignId: string,
+  input: ActualizarCampanaInput,
+  contexto?: ContextoDeAuditoria,
+): Promise<Result<CampanaActualizada>> {
+  const persona = exigirPersona(actor, contexto);
+  if (!persona.ok) return persona;
+  const permitido = assertCapability(actor, 'campaign:update');
+  if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
+
+  let nombre: string | undefined;
+  if (input.name !== undefined) {
+    nombre = input.name.trim();
+    if (nombre === '' || nombre.length > LONGITUD_MAXIMA_NOMBRE) {
+      return err({
+        code: 'VALIDATION_FAILED',
+        message: `El nombre debe tener entre 1 y ${LONGITUD_MAXIMA_NOMBRE} caracteres.`,
+        details: { field: 'name' },
+      });
+    }
+  }
+  for (const [campo, valor] of [
+    ['startDate', input.startDate],
+    ['endDate', input.endDate],
+  ] as const) {
+    if (valor !== undefined && valor !== null && !fechaIsoValida(valor)) {
+      return err({
+        code: 'VALIDATION_FAILED',
+        message: 'La fecha debe ser un día real con formato AAAA-MM-DD.',
+        details: { field: campo },
+      });
+    }
+  }
+  if (nombre === undefined && input.startDate === undefined && input.endDate === undefined) {
+    return err({
+      code: 'VALIDATION_FAILED',
+      message: 'No hay nada que actualizar: indique el nombre o alguna de las fechas.',
+      details: { reason: 'empty_update' },
+    });
+  }
+
+  return transaccionConResultado(
+    async (client) => {
+      const { rows } = await client.query<{
+        organization_id: string;
+        confidentiality_level: string;
+        visibility: string;
+        status: string;
+        name: string;
+        start_date: string | null;
+        end_date: string | null;
+      }>(
+        `SELECT organization_id, confidentiality_level::text AS confidentiality_level,
+                visibility::text AS visibility, status::text AS status, name,
+                to_char(start_date, 'YYYY-MM-DD') AS start_date, to_char(end_date, 'YYYY-MM-DD') AS end_date
+           FROM campaigns WHERE id = $1 AND organization_id = $2 FOR UPDATE`,
+        [campaignId, actor.organizationId],
+      );
+      const fila = rows[0];
+      // Inexistente o de otra organización: la misma respuesta (caso S-01).
+      if (fila === undefined) {
+        throw new Abortar({
+          code: 'RESOURCE_NOT_FOUND',
+          message: 'El recurso no existe o no está disponible.',
+        });
+      }
+      const alcance = authorize(
+        actor,
+        'campaign:update',
+        scopeOf({
+          organization_id: fila.organization_id,
+          confidentiality_level: fila.confidentiality_level,
+          visibility: fila.visibility,
+        }),
+      );
+      if (!alcance.ok) throw new Abortar({ code: alcance.error.code, message: alcance.error.message });
+      if (fila.status !== 'activa') {
+        throw new Abortar({
+          code: 'RESOURCE_CONFLICT',
+          message: `La campaña está ${fila.status}: ya no se edita.`,
+          details: { reason: 'campaign_not_active', campaignStatus: fila.status },
+        });
+      }
+
+      const antes = { name: fila.name, startDate: fila.start_date, endDate: fila.end_date };
+      const despues = {
+        name: nombre ?? antes.name,
+        startDate: input.startDate === undefined ? antes.startDate : input.startDate,
+        endDate: input.endDate === undefined ? antes.endDate : input.endDate,
+      };
+      if (
+        despues.startDate !== null &&
+        despues.endDate !== null &&
+        despues.endDate < despues.startDate // ISO: el orden de texto es el cronológico
+      ) {
+        throw new Abortar({
+          code: 'VALIDATION_FAILED',
+          message: 'La fecha de fin no puede ser anterior a la de inicio.',
+          details: { field: 'endDate', startDate: despues.startDate, endDate: despues.endDate },
+        });
+      }
+
+      const cambios = (['name', 'startDate', 'endDate'] as const).filter((c) => antes[c] !== despues[c]);
+      if (cambios.length === 0) return { cambios, antes, despues };
+
+      await client.query(
+        `UPDATE campaigns SET name = $2, start_date = $3::date, end_date = $4::date, updated_at = now()
+          WHERE id = $1`,
+        [campaignId, despues.name, despues.startDate, despues.endDate],
+      );
+      await recordAudit(
+        client,
+        auditoriaDe(actor, contexto, {
+          action: 'campaign.update',
+          entityType: 'campaign',
+          entityId: campaignId,
+          metadata: { cambios, antes, despues },
+        }),
+      );
+      return { cambios, antes, despues };
+    },
+    { code: 'RESOURCE_CONFLICT', message: 'La campaña cambió mientras se actualizaba: reintente.' },
+  );
 }
