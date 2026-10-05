@@ -54,11 +54,16 @@ async function sembrarConfirmada(): Promise<string> {
   const [fila] = await query<{ id: string }>(
     `INSERT INTO proposed_actions
        (organization_id, campaign_id, action_type, resource_type, resource_id, payload, payload_hash,
-        status, proposed_by, proposed_origin, confirmed_by, confirmed_at, expires_at)
+        status, proposed_by, proposed_origin, expires_at)
      VALUES ($1, $2, 'influencer_import.apply', 'influencer_import_plan', $3, '{}'::jsonb, $4,
-             'confirmed', $5, 'chat', $5, now(), now() + interval '1 hour')
+             'pending', $5, 'chat', now() + interval '1 hour')
      RETURNING id`,
     [director.organizationId, campaignId, recurso, huella, director.id],
+  );
+  // Una acción nace `pending` (migración 022): se confirma por transición, como en producción.
+  await query(
+    `UPDATE proposed_actions SET status = 'confirmed', confirmed_by = $2, confirmed_at = now() WHERE id = $1`,
+    [fila!.id, director.id],
   );
   return fila!.id;
 }

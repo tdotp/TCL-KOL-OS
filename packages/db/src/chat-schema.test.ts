@@ -116,7 +116,8 @@ describe('aislamiento por organización y campaña (FK compuestas)', () => {
          VALUES ($1, $2, $3, 'user', $4, 'x', 'cm-otra-org-0001')`,
         [e.ajeno.organizationId, e.campanaId, conv, e.ajeno.id],
       ),
-    ).rejects.toThrow(/chat_messages_conversation_fkey/);
+      // 022: la regla de dueño actúa antes que la FK; las dos cierran el caso.
+    ).rejects.toThrow(/chat_messages_conversation_fkey|conversación es personal/);
   });
 
   it('el autor de un mensaje debe ser de la organización de la conversación', async () => {
@@ -127,7 +128,8 @@ describe('aislamiento por organización y campaña (FK compuestas)', () => {
          VALUES ($1, $2, $3, 'user', $4, 'x', 'cm-autor-ajeno-1')`,
         [e.admin.organizationId, e.campanaId, conv, e.ajeno.id],
       ),
-    ).rejects.toThrow(/chat_messages_usuario_fkey/);
+      // 022: la regla de dueño actúa antes que la FK; las dos cierran el caso.
+    ).rejects.toThrow(/chat_messages_usuario_fkey|conversación es personal/);
   });
 
   it('un run, un adjunto y una invocación no cruzan organización ni campaña', async () => {
@@ -170,7 +172,7 @@ describe('el chat es del personal de la agencia, no de un cliente', () => {
         e.campanaId,
         clienteDeAgencia.id,
       ]),
-    ).rejects.toThrow(/cliente no crea conversaciones/);
+    ).rejects.toThrow(/personal de la agencia/);
   });
 
   it('el usuario de TCL tampoco, ni siquiera en una campaña de su propia organización', async () => {
@@ -185,7 +187,7 @@ describe('el chat es del personal de la agencia, no de un cliente', () => {
         c!.id,
         e.cliente.id,
       ]),
-    ).rejects.toThrow(/cliente no crea conversaciones/);
+    ).rejects.toThrow(/personal de la agencia/);
   });
 });
 
@@ -539,7 +541,8 @@ describe('runs: un solo run activo y transiciones', () => {
       );
     await expect(insertar(e.consultor.id)).rejects.toThrow(/solo se escribe para un run en ejecución/);
     await iniciar(run);
-    await expect(insertar(e.director.id)).rejects.toThrow(/en nombre de la persona/);
+    // 022: otra persona (no dueña) tampoco escribe: rechaza la regla de dueño o la del run.
+    await expect(insertar(e.director.id)).rejects.toThrow(/en nombre de la persona|conversación es personal/);
     await insertar(e.consultor.id);
     // Un run produce a lo sumo UNA respuesta.
     await expect(insertar(e.consultor.id)).rejects.toThrow(/chat_messages_run_key/);
@@ -697,12 +700,20 @@ describe('una sola propuesta abierta por acción y recurso (D7)', () => {
   async function proponer(tipo: string, recurso: string, estado = 'pending') {
     return query(
       `INSERT INTO proposed_actions (organization_id, campaign_id, action_type, resource_type, resource_id, payload,
-                                     payload_hash, status, proposed_origin, expires_at, confirmed_by, confirmed_at)
-       VALUES ($1, $2, $3, 'brief_version', $4, '{}'::jsonb, $5, $6, 'chat', now() + interval '1 day',
-               CASE WHEN $6 = 'confirmed' THEN $7::uuid END, CASE WHEN $6 = 'confirmed' THEN now() END)
+                                     payload_hash, status, proposed_origin, expires_at)
+       VALUES ($1, $2, $3, 'brief_version', $4, '{}'::jsonb, $5, 'pending', 'chat', now() + interval '1 day')
        RETURNING id`,
-      [e.admin.organizationId, e.campanaId, tipo, recurso, `h-${Math.random()}`, estado, e.admin.id],
-    );
+      [e.admin.organizationId, e.campanaId, tipo, recurso, `h-${Math.random()}`],
+    ).then(async (filas) => {
+      // 022: una acción nace `pending`; `confirmed` se alcanza por transición.
+      if (estado === 'confirmed') {
+        await query(
+          `UPDATE proposed_actions SET status = 'confirmed', confirmed_by = $2, confirmed_at = now() WHERE id = $1`,
+          [(filas[0] as { id: string }).id, e.admin.id],
+        );
+      }
+      return filas;
+    });
   }
 
   it('la base rechaza dos abiertas (pending/confirmed) y admite una nueva tras vencer la anterior', async () => {

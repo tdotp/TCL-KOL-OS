@@ -1,6 +1,6 @@
 # Chat y agente de Cuenta (V2 · Fase 6)
 
-Decisión: DEC-047. Migración: `021_chat_agente.sql`. Paquete nuevo: `packages/agent`. Endpoint nuevo del worker: `POST /modelo/turno`.
+Decisión: DEC-047. Migraciones: `021_chat_agente.sql` y `022_endurecimiento_chat.sql` (hardening F6.1). Paquete nuevo: `packages/agent`. Endpoint nuevo del worker: `POST /modelo/turno`.
 
 > **El chat no es una base paralela: produce estructura.** El agente actúa **en nombre de una persona autorizada** (`origin = 'chat'`), usa los casos de uso que ya existen y **no sustituye decisiones humanas**. Aprobar, confirmar y ejecutar una acción propuesta no existen como herramienta del agente.
 
@@ -130,6 +130,7 @@ Pipeline por llamada (sin caché): reclama la invocación → existe → esquema
 - `/extraccion` sin kill-switch; `ai_runs.provider` por extracción sigue fijo en `openrouter`.
 - Diferidos a v1.1: `brief_confirm_field`, `brief_correct_field`, `brief_create_manual`, `source_retry`, búsqueda semántica, comentarios, traducciones, listados de snapshots/compare.
 - Sin límite de tasa por usuario en el envío de mensajes.
+- La lista de roles con acceso al chat existe en dos sitios (matriz de permisos del dominio y trigger de la 022); una prueba de paridad en `chat-endurecimiento.test.ts` falla si divergen.
 
 ## 10. Resultados de QA adversarial y mutaciones
 
@@ -145,9 +146,9 @@ Pipeline por llamada (sin caché): reclama la invocación → existe → esquema
 | P2 | QA-26 interbloqueo del pool con ejecuciones HITL de importación simultáneas | corregido (cupo de 2 + `connectionTimeoutMillis`) |
 | P2 | QA-14 test estático D15 ignoraba `export *` | corregido (test endurecido, 19 → 31 pruebas) |
 | P3 | QA-03, 05, 06, 07, 08, 13, 15, 17–23, 25 (replay de lecturas, NUL/ids largos, ledger fuera de rango, `<think>` sin cerrar, sanitización con homoglifos, `__proto__`, texto libre de campaña fuera de sobre, worker: cuerpo chunked, `1e999`, NaN, log, recursión) | corregidos, con prueba de regresión |
-| P3 | QA-10/11/12 owner-scope, rol del dueño y INSERT de estados terminales solo en casos de uso, no en triggers | **deuda declarada** (migración 022); documentado con `it.fails` en `qa-chat-deuda.test.ts` |
+| P3 | QA-10/11/12 owner-scope, rol del dueño e INSERT de estados terminales solo en casos de uso, no en triggers | **corregido en F6.1** (migración 022): triggers de dueño, rol con `chat:write` y estado inicial `pending`; probado por SQL directo y por mutación |
 
-Las pruebas de QA quedaron como regresión: 98 verdes + 20 antes rojas en `packages/agent/src/qa`, 20 + 3 de deuda en db, 46 en el worker (`test_qa_modelo_turno.py`). Cuidado: el harness de mutación del manifiesto copia `HEAD`.
+Las pruebas de QA quedaron como regresión: 118 en `packages/agent/src/qa`, 20 en db (`qa-chat-*`) más 12 de `chat-endurecimiento.test.ts` (F6.1), 46 en el worker (`test_qa_modelo_turno.py`). Cuidado: el harness de mutación del manifiesto copia `HEAD`.
 
 **Mutaciones del agente principal** (se rompió la regla, las pruebas fallaron, se restauró y se verificó): confirmar/ejecutar aceptan canal `chat` (3 fallos), `transicionarBrief → approved` acepta origen `chat` (2), `applyInfluencerImport`/`resolveImportRecord` aceptan origen `chat` (3), las tools auditan como `ui` (7), la capacidad base de las tools deja de exigir `chat:write` (2). Los implementadores comprobaron además: no releer el actor, no limitar pasos, más de 4 tool calls, resultados crudos en el historial, alias no registrados, cerco de campaña, filtro de legibilidad para IA, grounding, claim de idempotencia, tool prohibida registrada, prefijo `│` del sobre, neutralización del nonce, índice de un run activo, trigger de citas e índice de propuestas abiertas.
 

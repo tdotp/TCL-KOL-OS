@@ -394,7 +394,10 @@ describe('V9 · mensajes: append-only y reglas de autoría', () => {
       );
     expect(await ins(t.run.id, e.consultor.id, t.conv.id)).toMatch(/run en ejecución/); // en cola
     valor(await iniciarRun(e.consultor, t.run.id, { contextHash: HASH, contextManifest: {} }));
-    expect(await ins(t.run.id, e.director.id, t.conv.id)).toMatch(/nombre de la persona/); // otro autor
+    // otro autor: desde la 022 lo frena primero la regla de dueño de la conversación
+    expect(await ins(t.run.id, e.director.id, t.conv.id)).toMatch(
+      /nombre de la persona|conversación es personal/,
+    );
     const otra = await turno(e.director);
     expect(await ins(t.run.id, e.consultor.id, otra.conv.id)).not.toBe(''); // run de otra conversación
     expect(await ins(t.run.id, e.consultor.id, t.conv.id, 'system')).not.toBe(''); // rol no válido
