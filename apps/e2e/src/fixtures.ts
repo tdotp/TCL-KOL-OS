@@ -25,7 +25,7 @@ import {
 import { eliminarCampanaDePrueba } from '@tcl-kol-os/db/test-utils';
 import type { User } from '@tcl-kol-os/domain';
 
-function candadoDeBaseDePrueba(): void {
+export function candadoDeBaseDePrueba(): void {
   const url = process.env['DATABASE_URL'] ?? '';
   let nombre = '';
   try {

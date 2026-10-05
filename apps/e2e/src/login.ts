@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import type { Page } from '@playwright/test';
 
 /**
@@ -24,4 +25,22 @@ export async function login(page: Page, email: string): Promise<void> {
       if (intento === 2) throw error;
     }
   }
+}
+
+/** Secreto de sesión de prueba de los servidores del chat (el mismo de `playwright.config.ts`). */
+const SESSION_SECRET_CHAT = 'e2e-session-secret-no-es-real-0123456789';
+
+/**
+ * Sesión para un usuario sembrado que el selector del login de desarrollo NO ofrece (p. ej. operativo).
+ * Firma la cookie con el secreto de prueba de los servidores del chat, con el mismo formato que
+ * `buildSessionValue` (`id.expira.firma`). Solo sirve contra los puertos del chat (3012–3014).
+ */
+export async function loginPorCookie(page: Page, userId: string): Promise<void> {
+  const expira = Date.now() + 60 * 60 * 1000;
+  const payload = `${userId}.${expira}`;
+  const firma = createHmac('sha256', SESSION_SECRET_CHAT).update(payload).digest('base64url');
+  await page.context().clearCookies();
+  await page
+    .context()
+    .addCookies([{ name: 'tclkolos_session', value: `${payload}.${firma}`, domain: 'localhost', path: '/' }]);
 }

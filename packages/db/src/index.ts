@@ -103,4 +103,31 @@ export type {
   EfectoDeAuditoria,
   OpcionesDeTraza,
 } from './chat-trace.ts';
+export {
+  ETIQUETA_DE_ESTADO_DE_ADJUNTO,
+  obtenerConversacionDeCampana,
+  obtenerMensajesDeChat,
+  obtenerRunsRecientes,
+  listarActividadDeHerramientas,
+  listarAccionesDeConversacion,
+  listarAccionesPendientesDeCampana,
+  obtenerAccionDeChat,
+  estadoDeAdjuntos,
+  cargarVistaDeChat,
+} from './chat-views.ts';
+export type {
+  VistaDeConversacion,
+  VistaDeAdjunto,
+  VistaDeCita,
+  VistaDeMensaje,
+  VistaDeRun,
+  VistaDeActividad,
+  VistaDeAccionPropuesta,
+  VistaDeChat,
+  EstadoDeAdjunto,
+  OpcionesDeMensajes,
+  OpcionesDeRuns,
+  OpcionesDeActividad,
+  OpcionesDeVistaDeChat,
+} from './chat-views.ts';
 export { migrate } from './migrate.ts';

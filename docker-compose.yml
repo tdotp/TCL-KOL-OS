@@ -137,6 +137,21 @@ services:
       WORKER_URL: http://worker:8000
       NODE_ENV: ${NODE_ENV:-development}
       AI_ENABLED: ${AI_ENABLED:-false}
+      # V2 · Fase 6 — chat del agente de Cuenta. La web orquesta el bucle y las tools, pero NO
+      # llama al proveedor ni recibe su clave: cada vuelta de modelo es un POST a
+      # `WORKER_URL/modelo/turno`. Estas variables solo registran con qué configuración se
+      # admite el turno, fijan los límites del run y firman el nonce de los sobres (ver
+      # `.env.example`). Vacías = el runtime usa sus valores por defecto.
+      AI_PROVIDER: ${AI_PROVIDER:-}
+      AI_MODEL_EQUILIBRADO: ${AI_MODEL_EQUILIBRADO:-}
+      AGENT_NONCE_SECRET: ${AGENT_NONCE_SECRET:-}
+      AGENT_MAX_TOOL_STEPS: ${AGENT_MAX_TOOL_STEPS:-}
+      AGENT_RUN_DEADLINE_S: ${AGENT_RUN_DEADLINE_S:-}
+      AGENT_MODEL_TIMEOUT_S: ${AGENT_MODEL_TIMEOUT_S:-}
+      AGENT_MAX_TOKENS: ${AGENT_MAX_TOKENS:-}
+      # Adjuntos del chat (ruta HTTP, no server action: Next limita estas a 1 MB).
+      CHAT_ATTACHMENT_MAX_MB: ${CHAT_ATTACHMENT_MAX_MB:-}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-50}
       # `packages/domain/src/brief-catalog.ts` necesita el mismo catálogo que
       # lee el worker (Sprint 4, corrección 4 del cierre) — sin este montaje,
       # el contenedor `web` no tenía `docs/` en absoluto.

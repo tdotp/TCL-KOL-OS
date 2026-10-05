@@ -266,6 +266,16 @@ export const MANIFIESTO_DE_DB: Readonly<Record<string, ClasificacionDeExport>> =
   trazaDeRun: UI,
   trazaDeInvocacion: UI,
   trazaDeAccionPropuesta: UI,
+  ETIQUETA_DE_ESTADO_DE_ADJUNTO: UI,
+  obtenerConversacionDeCampana: UI,
+  obtenerMensajesDeChat: UI,
+  obtenerRunsRecientes: UI,
+  listarActividadDeHerramientas: UI,
+  listarAccionesDeConversacion: UI,
+  listarAccionesPendientesDeCampana: UI,
+  obtenerAccionDeChat: UI,
+  estadoDeAdjuntos: UI,
+  cargarVistaDeChat: UI,
   migrate: UI,
 };
 

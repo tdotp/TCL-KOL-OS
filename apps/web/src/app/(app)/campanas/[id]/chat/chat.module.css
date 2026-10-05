@@ -1,0 +1,534 @@
+/**
+ * Estilos del chat de Cuenta (V2 · Fase 6). CSS Module propio: no toca `globals.css`.
+ * Usa los tokens del sistema (`--brand`, `--line`, `--chip`, …) y las clases globales
+ * `.card`, `.btn`, `.pill`, `.aviso`, `.confirm-*` para verse como el resto de la app.
+ *
+ * Todo el texto del hilo es TEXTO PLANO: `white-space: pre-wrap` conserva los saltos de
+ * línea y `overflow-wrap: anywhere` evita que una cadena larga rompa el diseño.
+ */
+
+.pagina {
+  display: grid;
+  gap: 16px;
+}
+
+.cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cabecera h1 {
+  margin: 0;
+}
+
+.nota {
+  margin: 6px 0 0;
+  max-width: 720px;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.panel {
+  padding: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.hilo {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  min-height: 280px;
+  max-height: min(62vh, 640px);
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+
+.vacio {
+  margin: auto;
+  max-width: 460px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.vacio strong {
+  display: block;
+  color: var(--ink);
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.mensaje {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: min(780px, 92%);
+}
+
+.mensaje.usuario {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.mensaje.asistente {
+  align-self: flex-start;
+}
+
+.meta {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.meta strong {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.burbuja {
+  background: var(--chip);
+  border-radius: 14px 14px 14px 4px;
+  padding: 10px 14px;
+}
+
+.usuario .burbuja {
+  background: var(--brand-soft-strong);
+  border-radius: 14px 14px 4px 14px;
+}
+
+.texto {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.chipNombre {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
+.chipEstado {
+  color: var(--muted);
+}
+
+.chipEstado[data-estado='listo'] {
+  color: var(--ok);
+}
+
+.chipEstado[data-estado='fallido'],
+.chipEstado[data-estado='restringido'] {
+  color: var(--bad);
+}
+
+.chipQuitar {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.chipQuitar:hover {
+  color: var(--bad);
+}
+
+.citas {
+  margin: 8px 0 0;
+  padding: 8px 0 0;
+  border-top: 1px dashed var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.citas summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.citas ol {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 2px;
+}
+
+.citas li {
+  overflow-wrap: anywhere;
+}
+
+.actividad {
+  align-self: flex-start;
+  max-width: min(780px, 92%);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.actividad summary {
+  cursor: pointer;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+}
+
+.actividad summary::-webkit-details-marker {
+  display: none;
+}
+
+.actividad ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0 0 0 4px;
+  display: grid;
+  gap: 3px;
+}
+
+.actividad li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.puntoOk,
+.puntoCurso,
+.puntoMal,
+.puntoNeutro {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  transform: translateY(-1px);
+}
+
+.puntoOk {
+  background: var(--ok);
+}
+
+.puntoCurso {
+  background: var(--warn);
+}
+
+.puntoMal {
+  background: var(--bad);
+}
+
+.puntoNeutro {
+  background: var(--muted-soft);
+}
+
+.estado {
+  align-self: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  font-size: 13px;
+  color: var(--ink);
+  max-width: min(780px, 92%);
+}
+
+.estado[data-status='failed'],
+.estado[data-status='cancelled'] {
+  border-color: var(--bad-soft-strong);
+  background: var(--bad-soft);
+}
+
+.estadoCodigo {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.pulso {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warn);
+  animation: pulso 1.2s ease-in-out infinite;
+}
+
+@keyframes pulso {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulso {
+    animation: none;
+  }
+  .hilo {
+    scroll-behavior: auto;
+  }
+}
+
+.error {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--bad);
+}
+
+/* ── Composer ─────────────────────────────────────────────────────────────── */
+
+.composer {
+  display: grid;
+  gap: 8px;
+  padding: 12px 16px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.composerFila {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.entrada {
+  flex: 1;
+  min-height: 44px;
+  max-height: 200px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.entrada:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+
+.entrada:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.composerPie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.adjuntar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: var(--ink);
+  font-size: 12.5px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg);
+}
+
+.adjuntar:hover {
+  border-color: var(--muted-soft);
+}
+
+.adjuntar[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ocultoVisualmente {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ── Tarjeta de acción propuesta ──────────────────────────────────────────── */
+
+.propuesta {
+  align-self: flex-start;
+  width: min(780px, 92%);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--warn);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 12px 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.propuesta[data-estado='executed'] {
+  border-left-color: var(--ok);
+}
+
+.propuesta[data-estado='cancelled'],
+.propuesta[data-estado='expired'] {
+  border-left-color: var(--muted-soft);
+  opacity: 0.85;
+}
+
+.propuesta[data-obsoleta='true'] {
+  border-left-color: var(--bad);
+}
+
+.propuestaCabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.propuestaCabecera h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.propuestaTexto {
+  margin: 0;
+  font-size: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.propuestaDetalle {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 2px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.propuestaMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.huella {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  background: var(--chip);
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+
+.propuestaAcciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.otroRol {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--warn);
+}
+
+.pendientes {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+}
+
+.pendientes h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.pendientes .propuesta {
+  width: 100%;
+}
+
+.dialogoDetalle {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  background: var(--chip);
+  border-radius: 10px;
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.sinAcceso {
+  padding: 14px 16px;
+}
+
+@media (max-width: 720px) {
+  .hilo {
+    padding: 14px 12px;
+    max-height: 58vh;
+  }
+  .mensaje,
+  .actividad,
+  .estado,
+  .propuesta {
+    max-width: 100%;
+    width: auto;
+  }
+  .composerFila {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+.adjuntar:focus-within {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}

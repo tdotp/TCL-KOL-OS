@@ -36,7 +36,7 @@ cargarEnvRaiz();
 const nextConfig = {
   reactStrictMode: true,
   // Los paquetes del monorepo se consumen como fuente TypeScript.
-  transpilePackages: ['@tcl-kol-os/domain', '@tcl-kol-os/db'],
+  transpilePackages: ['@tcl-kol-os/domain', '@tcl-kol-os/db', '@tcl-kol-os/agent'],
   // No se exponen rutas internas ni trazas al cliente (§11.6).
   poweredByHeader: false,
 };

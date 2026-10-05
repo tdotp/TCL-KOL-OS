@@ -6,7 +6,7 @@ import {
   verCamposDeVersion,
   versionesDelBrief,
 } from '@tcl-kol-os/db';
-import { allowedTransitions, type BriefStatus } from '@tcl-kol-os/domain';
+import { allowedTransitions, roleCan, type BriefStatus } from '@tcl-kol-os/domain';
 import { currentUser } from '@/lib/session';
 import { archivarCampana, crearBriefManualDeCampana } from '@/lib/actions';
 import { ConfirmarAccion } from '@/components/ConfirmarAccion';
@@ -135,6 +135,11 @@ export default async function DetalleCampanaPage({
         </a>
         <a href={`/campanas/${campaign.id}/brief`}>Brief</a>
         {user.role !== 'cliente' && <a href={`/campanas/${campaign.id}/brief/editar`}>Editar</a>}
+        {roleCan(user.role, 'chat:write') && (
+          <a href={`/campanas/${campaign.id}/chat`} data-testid="chat-nav-link">
+            Asistente
+          </a>
+        )}
       </nav>
 
       <div className="stepper campaign-stepper">

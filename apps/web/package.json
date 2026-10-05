@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@tcl-kol-os/agent": "*",
     "@tcl-kol-os/domain": "*",
     "next": "^15.1.3",
     "react": "^19.0.0",
