@@ -38,6 +38,7 @@ import {
   type ItemDeContexto,
   type SeccionCandidata,
 } from './agent-context';
+import { CHAT_LIMITS } from './chat';
 import { ROLES, type Role } from './types';
 import type { BriefWorkspace } from './workspace';
 
@@ -823,7 +824,7 @@ describe('ensamblarSecciones · presupuesto', () => {
       destino: 'mensaje_actual',
       modo: 'confiable',
       encabezado: '',
-      items: [{ id: 'm', texto: 'q'.repeat(9_000), obligatorio: true }],
+      items: [{ id: 'm', texto: 'q'.repeat(CHAT_LIMITS.mensajeMax + 1), obligatorio: true }],
     };
     const r = ensamblarSecciones([actual], { nonce: NONCE });
     expect(r.ok).toBe(false);
@@ -832,14 +833,43 @@ describe('ensamblarSecciones · presupuesto', () => {
       reason: CODIGO_PRESUPUESTO_EXCEDIDO,
       section: 'current_message',
     });
-    // Dentro del tope pasa íntegro y sin tocar.
-    const ok8 = ensamblarSecciones(
-      [{ ...actual, items: [{ id: 'm', texto: 'q'.repeat(8_000), obligatorio: true }] }],
+    // Dentro del tope (el límite de admisión del chat) pasa íntegro y sin tocar.
+    const okMax = ensamblarSecciones(
+      [{ ...actual, items: [{ id: 'm', texto: 'q'.repeat(CHAT_LIMITS.mensajeMax), obligatorio: true }] }],
       {
         nonce: NONCE,
       },
     );
-    expect(ok8.ok && ok8.value.secciones[0]!.texto).toBe('q'.repeat(8_000));
+    expect(okMax.ok && okMax.value.secciones[0]!.texto).toBe('q'.repeat(CHAT_LIMITS.mensajeMax));
+  });
+
+  it('QA-09: lo obligatorio al máximo (política, persona, campaña y un mensaje de 20 000) cabe en el presupuesto global', () => {
+    const obligatoria = (
+      id: 'policy' | 'actor' | 'campaign' | 'current_message',
+      largo: number,
+    ): SeccionCandidata => ({
+      id,
+      titulo: id,
+      destino: id === 'current_message' ? 'mensaje_actual' : 'sistema',
+      modo: 'confiable',
+      encabezado: '',
+      items: [{ id, texto: 'x'.repeat(largo), obligatorio: true }],
+    });
+    const r = ensamblarSecciones(
+      [
+        obligatoria('policy', 4_000),
+        obligatoria('actor', 1_200),
+        obligatoria('campaign', 1_200),
+        obligatoria('current_message', CHAT_LIMITS.mensajeMax),
+      ],
+      { nonce: NONCE },
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.totalChars).toBeLessThanOrEqual(PRESUPUESTO_POR_DEFECTO.globalChars);
+    expect(r.value.secciones.find((x) => x.id === 'current_message')!.texto).toBe(
+      'x'.repeat(CHAT_LIMITS.mensajeMax),
+    );
   });
 
   it('un presupuesto mínimo no admite lo obligatorio ni el piso', () => {
@@ -957,7 +987,9 @@ describe('ensamblarSecciones · presupuesto', () => {
   it('el presupuesto por defecto es coherente con el contrato', () => {
     const s = PRESUPUESTO_POR_DEFECTO.secciones;
     expect(PRESUPUESTO_POR_DEFECTO.globalChars).toBe(48_000);
-    expect(s.current_message.maxChars).toBe(8_000);
+    // QA-09: el mensaje actual alcanza el límite de admisión del chat.
+    expect(s.current_message.maxChars).toBeGreaterThanOrEqual(CHAT_LIMITS.mensajeMax);
+    expect(s.current_message.maxCharsPorItem).toBeGreaterThanOrEqual(CHAT_LIMITS.mensajeMax);
     expect(s.recent_messages.maxItems).toBe(12);
     expect(s.sources.maxItems).toBe(30);
     expect(s.fragments.maxItems * s.fragments.maxCharsPorItem).toBe(s.fragments.maxChars);

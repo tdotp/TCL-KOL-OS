@@ -87,7 +87,33 @@ MARGEN_DEADLINE_S = 0.5
 _RE_NOMBRE_TOOL = r"^[A-Za-z][A-Za-z0-9_]{0,63}$"
 _RE_ID_OPACO = r"^[A-Za-z0-9_.:\-]{1,64}$"
 _RE_ID_LLAMADA = re.compile(r"^[A-Za-z0-9_.:\-]{1,128}$")
-_RE_PENSAMIENTO = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+#: Bloque cerrado, o abierto sin cerrar (se descarta hasta el final del texto).
+_RE_PENSAMIENTO = re.compile(r"<think>.*?(?:</think>|\Z)", re.DOTALL | re.IGNORECASE)
+_RE_CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]")
+
+
+def sanear_para_log(valor: Any, maximo: int = 120) -> str:
+    """Neutraliza saltos de línea y controles de un valor externo antes de loguearlo."""
+    return _RE_CONTROL.sub("?", str(valor))[:maximo]
+
+
+def _rechazar_constante(nombre: str) -> Any:
+    raise ValueError(f"constante JSON no válida: {nombre}")
+
+
+def _todo_finito(valor: Any) -> bool:
+    """False si hay algún float NaN/inf. Iterativo: inmune a la recursión."""
+    pila = [valor]
+    while pila:
+        v = pila.pop()
+        if isinstance(v, float):
+            if not math.isfinite(v):
+                return False
+        elif isinstance(v, dict):
+            pila.extend(v.values())
+        elif isinstance(v, list):
+            pila.extend(v)
+    return True
 
 
 # --- Errores tipificados ----------------------------------------------------------
@@ -288,13 +314,17 @@ def parsear_entrada(cuerpo: bytes) -> TurnoEntrada:
             message="El cuerpo de la petición excede el tamaño máximo.",
         )
     try:
-        crudo = json.loads(cuerpo)
-    except ValueError as exc:
+        crudo = json.loads(cuerpo, parse_constant=_rechazar_constante)
+    except (ValueError, RecursionError) as exc:
         raise TurnoError("REQUEST_INVALID", message="El cuerpo no es JSON válido.") from exc
     if not isinstance(crudo, dict):
         raise TurnoError("REQUEST_INVALID", message="El cuerpo debe ser un objeto JSON.")
+    if not _todo_finito(crudo):
+        raise TurnoError("REQUEST_INVALID", message="El cuerpo contiene números no finitos.")
     try:
         return TurnoEntrada.model_validate(crudo)
+    except RecursionError:
+        raise TurnoError("REQUEST_INVALID", message="El cuerpo excede la profundidad permitida.") from None
     except ValidationError as exc:
         # Solo ubicación, tipo y mensaje: nunca `input`, que contendría el contenido.
         issues = [
@@ -376,10 +406,6 @@ _FINISH = {
 }
 
 
-def _rechazar_constante(nombre: str) -> Any:
-    raise ValueError(f"constante JSON no válida: {nombre}")
-
-
 def _argumentos(llamada: LlamadaHerramienta) -> Dict[str, Any]:
     """JSON roto, no-objeto, NaN/Infinity o enorme -> MODEL_BAD_RESPONSE."""
     crudo = llamada.argumentos.strip()
@@ -393,6 +419,8 @@ def _argumentos(llamada: LlamadaHerramienta) -> Dict[str, Any]:
         raise _respuesta_invalida("argumentos de tool call no son JSON válido") from None
     if not isinstance(valor, dict):
         raise _respuesta_invalida("los argumentos de una tool call deben ser un objeto JSON")
+    if not _todo_finito(valor):
+        raise _respuesta_invalida("argumentos de tool call con números no finitos")
     return valor
 
 
@@ -553,8 +581,8 @@ def registrar_metadatos(
         len(req.messages) if req else None,
         len(req.tools) if req else None,
         (salida or {}).get("kind"),
-        (salida or {}).get("model"),
-        (salida or {}).get("provider"),
+        sanear_para_log((salida or {}).get("model")),
+        sanear_para_log((salida or {}).get("provider")),
         (salida or {}).get("finish_reason"),
         uso.get("prompt_tokens"),
         uso.get("completion_tokens"),

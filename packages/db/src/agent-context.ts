@@ -751,15 +751,20 @@ export async function ensamblarContexto(
         aliases: [aliasS],
         confiable: `Adjunto ${aliasS}: ${describirPreparacion(prep)}${marcaDedup.has(sourceId) ? ' (ya estaba cargado en la campaña)' : ''}.`,
         texto: '',
-        sobre: {
-          kind: 'attachment',
-          ref: aliasS,
-          meta: {
-            filename: fila.filename,
-            tipo: fila.type,
-            mime: fila.mime_type ?? fila.external_provider ?? '',
-          },
-        },
+        // Una fuente restringida (`sensible`) o de nivel desconocido es, para el agente, INEXISTENTE
+        // (las tools así la tratan): ni su nombre ni su tipo/mime llegan al modelo (QA-04).
+        sobre:
+          prep === 'restricted' || prep === 'unknown'
+            ? { kind: 'attachment', ref: aliasS }
+            : {
+                kind: 'attachment',
+                ref: aliasS,
+                meta: {
+                  filename: fila.filename,
+                  tipo: fila.type,
+                  mime: fila.mime_type ?? fila.external_provider ?? '',
+                },
+              },
       });
       if (prep !== 'ready') continue;
       const fr = await getFragments(actor, sourceId, MAX_FRAGMENTOS_POR_ADJUNTO);

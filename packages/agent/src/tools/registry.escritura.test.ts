@@ -12,7 +12,7 @@ import {
   eliminarCampanaDePrueba,
 } from '@tcl-kol-os/db/test-utils';
 import type { ToolExecution } from '../contracts.ts';
-import { abrirTurno, auditoriaDe, clave, json, llamar, registro } from './test-support.ts';
+import { abrirTurno, auditoriaDe, clave, json, llamar, nonceDePrueba, registro } from './test-support.ts';
 
 let e: EscenarioDeChat;
 const r = registro();
@@ -60,10 +60,11 @@ describe('campaign_update_metadata', () => {
     });
     expect(x.status).toBe('succeeded');
     expect(x.riskClass).toBe('write');
-    expect(json(x)).toMatchObject({
-      changed: true,
-      after: { name: 'Lanzamiento Verano', endDate: '2027-06-30' },
-    });
+    expect(json(x)).toMatchObject({ changed: true, after: { endDate: '2027-06-30' } });
+    // el nombre (texto libre) vuelve dentro de un sobre no confiable, no como campo suelto (QA-25)
+    expect(json(x)['after']).not.toHaveProperty('name');
+    expect(json(x)['names'] as string).toContain('Lanzamiento Verano');
+    expect(json(x)['names'] as string).toContain(`<<<NC:${nonceDePrueba(t.runId)} kind=campaign_names`);
     const [c] = await query<{ name: string }>(`SELECT name FROM campaigns WHERE id = $1`, [e.campanaId]);
     expect(c!.name).toBe('Lanzamiento Verano');
     const ev = (await auditoriaDe(e.campanaId)).filter((a) => a.action === 'campaign.update');

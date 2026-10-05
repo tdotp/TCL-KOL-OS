@@ -248,27 +248,53 @@ async def modelo_de_turno(
                 details={"limit_bytes": modelo_turno.MAX_BYTES_CUERPO},
                 message="El cuerpo de la petición excede el tamaño máximo.",
             )
-        req = modelo_turno.parsear_entrada(await request.body())
+        req = modelo_turno.parsear_entrada(await _leer_cuerpo_acotado(request))
         # El proveedor se llama en un hilo (urllib es bloqueante); el plazo total
         # se acota aquí aunque el socket gotee datos sin llegar a su timeout.
         salida = await asyncio.wait_for(
             run_in_threadpool(modelo_turno.ejecutar_turno, req, transporte),
             timeout=req.timeout_s + modelo_turno.MARGEN_DEADLINE_S,
         )
-    except asyncio.TimeoutError:  # noqa: UP041 — en 3.9 no es TimeoutError
-        error = modelo_turno.TurnoError("MODEL_TIMEOUT")
-        return _error_de_turno(req, error, inicio)
+        # Serializar aquí (dentro del try) para que un valor no serializable sea un error tipificado.
+        respuesta = JSONResponse(salida)
+    except asyncio.TimeoutError:  # noqa: UP041
+        return _error_de_turno(req, modelo_turno.TurnoError("MODEL_TIMEOUT"), inicio)
     except modelo_turno.TurnoError as error:
         return _error_de_turno(req, error, inicio)
-    except Exception as exc:  # noqa: BLE001 — frontera: nada interno sale sin tipificar
-        # Solo el tipo: el texto de la excepción podría contener contenido recibido.
+    except ValueError:
+        return _error_de_turno(
+            req,
+            modelo_turno.TurnoError(
+                "MODEL_BAD_RESPONSE", details={"reason": "respuesta no serializable"}
+            ),
+            inicio,
+        )
+    except Exception as exc:  # noqa: BLE001
         logger.error("modelo_turno error inesperado tipo=%s", type(exc).__name__)
         return _error_de_turno(req, modelo_turno.TurnoError("INTERNAL_ERROR"), inicio)
 
     modelo_turno.registrar_metadatos(
         req, resultado="ok", salida=salida, duracion_ms=int((time.monotonic() - inicio) * 1000)
     )
-    return JSONResponse(salida)
+    return respuesta
+
+
+async def _leer_cuerpo_acotado(request: Request) -> bytes:
+    """Lee el cuerpo por flujo y corta al superar el tope (no acumula 40 MB antes de rechazar)."""
+    tope = modelo_turno.MAX_BYTES_CUERPO
+    partes: list[bytes] = []
+    total = 0
+    async for trozo in request.stream():
+        total += len(trozo)
+        if total > tope:
+            raise modelo_turno.TurnoError(
+                "REQUEST_INVALID",
+                status=413,
+                details={"limit_bytes": tope},
+                message="El cuerpo de la petición excede el tamaño máximo.",
+            )
+        partes.append(trozo)
+    return b"".join(partes)
 
 
 def _error_de_turno(

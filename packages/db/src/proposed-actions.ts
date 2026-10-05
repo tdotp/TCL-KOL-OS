@@ -50,7 +50,7 @@ import {
 import { recordAudit, resolveOrigin } from './audit.ts';
 import { type ContextoDeAuditoria, exigirPersona } from './audit-context.ts';
 import { getPool, transaction } from './client.ts';
-import { canonico, handlerDe, sha256 } from './proposed-action-handlers.ts';
+import { canonico, conCupoDeEjecucionExterna, handlerDe, sha256 } from './proposed-action-handlers.ts';
 
 const TTL_POR_DEFECTO_SEGUNDOS = 24 * 60 * 60;
 
@@ -450,6 +450,26 @@ export async function confirmarAccion(
  *    acción queda `confirmed` y reintentar reconcilia sin duplicar.
  */
 export async function ejecutarAccion(
+  actor: User | 'system',
+  id: string,
+  input: { readonly canal: AuditOrigin },
+): Promise<Result<ProposedAction>> {
+  // Las ejecuciones `idempotent_external` retienen la conexión de la fila mientras el caso de uso pide otras del
+  // mismo pool: se limita cuántas corren a la vez, tomando el cupo ANTES de abrir la transacción (QA-26).
+  const tipo = UUID.test(id)
+    ? (
+        await getPool().query<{ action_type: string }>(
+          `SELECT action_type FROM proposed_actions WHERE id = $1`,
+          [id],
+        )
+      ).rows[0]?.action_type
+    : undefined;
+  const modo = tipo === undefined ? undefined : handlerDe(tipo)?.modo;
+  const correr = (): Promise<Result<ProposedAction>> => ejecutarAccionBloqueada(actor, id, input);
+  return modo === 'idempotent_external' ? conCupoDeEjecucionExterna(correr) : correr();
+}
+
+async function ejecutarAccionBloqueada(
   actor: User | 'system',
   id: string,
   input: { readonly canal: AuditOrigin },

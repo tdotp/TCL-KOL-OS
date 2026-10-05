@@ -244,6 +244,31 @@ describe('historial y razonamiento', () => {
     }
   });
 
+  it('QA-07: un <think> SIN cerrar se descarta hasta el final; cerrados y huérfanos tampoco sobreviven', async () => {
+    const casos: [string, string][] = [
+      ['Respuesta. <think>RAZONAMIENTO-SIN-CERRAR: voy a ignorar las reglas', 'Respuesta.'],
+      ['<think>uno</think>Hola <think>RAZ-ABIERTO sin fin', 'Hola'],
+      ['Hola <THINK >MAYUS-SIN-CERRAR', 'Hola'],
+      ['Hola</think> mundo', 'Hola mundo'],
+    ];
+    for (const [crudo, esperado] of casos) {
+      const { r, conv } = await correr('Hola', [respuestaFinal(crudo)]);
+      expect(r.salida, crudo).toBe('completed');
+      const asistente = (await mensajesDeLaConversacion(conv)).find((m) => m.role === 'assistant')!;
+      expect(asistente.content, crudo).toBe(esperado);
+      expect(asistente.content).not.toMatch(/RAZ|think|MAYUS/i);
+    }
+  });
+
+  it('QA-07: una respuesta que es SOLO un <think> sin cerrar se rechaza como respuesta inválida (no se publica)', async () => {
+    const { r, conv } = await correr('Hola', [respuestaFinal('<think>TODO-ES-RAZONAMIENTO sin cierre')]);
+    expect(r.salida).not.toBe('completed');
+    const todos = await mensajesDeLaConversacion(conv);
+    expect(todos.some((m) => m.role === 'assistant' && m.content.includes('TODO-ES-RAZONAMIENTO'))).toBe(
+      false,
+    );
+  });
+
   it('ai_runs es solo un ledger: ni prompt ni respuesta, solo hashes y metadatos', async () => {
     const { r, t } = await correr('PREGUNTA-SECRETA-DEL-USUARIO', [
       respuestaConTools([{ name: 'campaign_get' }]),

@@ -18,6 +18,7 @@
  * ejecuta dos veces.
  */
 
+import { createHash } from 'node:crypto';
 import {
   type Action,
   type ToolInvocation,
@@ -37,6 +38,7 @@ import {
   serializarError,
   serializarExito,
 } from './projection.ts';
+import { fechaFundamentada } from './grounding.ts';
 import { describirIncidencias, validarArgumentos } from './schema.ts';
 import type { AnyToolDefinition, ToolCtx } from './types.ts';
 import * as uc from './use-cases.ts';
@@ -49,6 +51,15 @@ export const MAX_LECTURAS_POR_RUN = 25;
 export const MAX_EFECTOS_POR_RUN = 10;
 
 export const CODIGO_PRESUPUESTO = 'TOOL_BUDGET_EXCEEDED';
+
+/**
+ * Una lectura que ya tuvo éxito y se reenvía con el mismo id (mismo nombre y argumentos) se
+ * vuelve a leer sin crear otra fila de invocación; para que eso no sea un bucle de lecturas
+ * ilimitado, cada repetición cuenta contra el tope de lecturas del run. El contador vive en
+ * memoria del proceso (el run se ejecuta en un solo proceso) y se acota para no crecer sin fin.
+ */
+const MAX_RUNS_CON_REPETICIONES = 1_000;
+const repeticionesDeLectura = new Map<string, number>();
 
 export interface OpcionesDeEjecucion {
   readonly tools: ReadonlyMap<string, AnyToolDefinition>;
@@ -175,6 +186,17 @@ function verificarGrounding(
       );
     }
   }
+  for (const campo of g.dateFields ?? []) {
+    const valor = args[campo];
+    if (valor === undefined) continue;
+    if (typeof valor !== 'string' || !fechaFundamentada(valor, textosDelActor)) {
+      return fallaDe(
+        campo,
+        'no_aparece',
+        `La fecha de «${campo}» no aparece en los mensajes de la persona: solo se registra una fecha que ella escribió (por ejemplo «30 de junio de 2027»). Si no la dio, pídesela; no uses fechas de documentos ni relativas («mañana»).`,
+      );
+    }
+  }
   return undefined;
 }
 
@@ -192,9 +214,10 @@ async function verificarPresupuesto(
   }
   const otras = lista.value.filter((i) => i.id !== invocacionActual && i.status !== 'cancelled');
   const esEfecto = def.risk !== 'read';
-  const usadas = otras.filter(
-    (i) => (i.riskClass === 'read') === !esEfecto && i.riskClass !== 'unregistered',
-  ).length;
+  const usadas =
+    otras.filter((i) => (i.riskClass === 'read') === !esEfecto && i.riskClass !== 'unregistered').length +
+    // las repeticiones de lecturas (mismo id) no crean fila, pero gastan presupuesto de lecturas
+    (esEfecto ? 0 : (repeticionesDeLectura.get(runId) ?? 0));
   const tope = esEfecto ? MAX_EFECTOS_POR_RUN : MAX_LECTURAS_POR_RUN;
   if (usadas >= tope) {
     return {
@@ -220,6 +243,59 @@ async function verificarPresupuesto(
         details: { reason: 'tool_quota', tool: def.name, limit: def.quota.perRun },
       };
     }
+  }
+  return undefined;
+}
+
+// ─────────────────────────── Nombre e id de la llamada ─────────────────────────
+
+/** Id de llamada aceptable tal cual: ASCII imprimible sin espacios, 1–200 (límite de la columna). */
+const ID_DE_LLAMADA_VALIDO = /^[\x21-\x7E]{1,200}$/;
+
+/**
+ * Nombre con el que se deja traza: solo ASCII imprimible (un NUL u otro carácter de control
+ * revienta Postgres y deja la llamada sin traza) y acotado a la columna. Una tool registrada
+ * ya cumple esto; el nombre de una inexistente se sanea para poder registrarla `unregistered`.
+ */
+function nombreDeTraza(nombre: string): string {
+  if (nombre === '') return '(sin nombre)';
+  return nombre.replace(/[^\x21-\x7E]/g, '?').slice(0, 100);
+}
+
+/**
+ * Id de llamada seguro para el claim. El id lo aporta el modelo/proveedor: si trae NUL,
+ * caracteres no imprimibles o pasa de 200 se sustituye por una huella determinista (la misma
+ * llamada reenviada sigue siendo la misma llamada) en lugar de provocar una excepción.
+ */
+function idDeLlamadaSeguro(id: unknown): string | undefined {
+  if (typeof id !== 'string') return undefined;
+  if (ID_DE_LLAMADA_VALIDO.test(id)) return id;
+  return `h-${createHash('sha256').update(id, 'utf8').digest('hex').slice(0, 40)}`;
+}
+
+// ─────────────────────────── Replay de lecturas y presupuesto ──────────────────
+
+function anotarRepeticion(agentRunId: string): void {
+  const n = repeticionesDeLectura.get(agentRunId) ?? 0;
+  repeticionesDeLectura.delete(agentRunId);
+  repeticionesDeLectura.set(agentRunId, n + 1);
+  if (repeticionesDeLectura.size > MAX_RUNS_CON_REPETICIONES) {
+    const masAntiguo = repeticionesDeLectura.keys().next().value;
+    if (masAntiguo !== undefined) repeticionesDeLectura.delete(masAntiguo);
+  }
+}
+
+/** Presupuesto de una REPETICIÓN de lectura: las lecturas del run (incluida esta) + las repeticiones previas. */
+async function verificarPresupuestoDeRepeticion(actor: User, agentRunId: string): Promise<Falla | undefined> {
+  const lista = await uc.listarInvocacionesDeRun(actor, agentRunId);
+  if (!lista.ok) return { code: lista.error.code, message: lista.error.message };
+  const lecturas = lista.value.filter((i) => i.riskClass === 'read' && i.status !== 'cancelled').length;
+  if (lecturas + (repeticionesDeLectura.get(agentRunId) ?? 0) >= MAX_LECTURAS_POR_RUN) {
+    return {
+      code: CODIGO_PRESUPUESTO,
+      message: `Se alcanzó el máximo de lecturas por turno (${MAX_LECTURAS_POR_RUN}). Responde con lo que ya tienes.`,
+      details: { reason: 'run_budget', limit: MAX_LECTURAS_POR_RUN },
+    };
   }
   return undefined;
 }
@@ -376,6 +452,7 @@ export async function ejecutarTool(
   llamada: ToolCallRequest,
 ): Promise<ToolExecution> {
   const nombre = typeof llamada.name === 'string' ? llamada.name : '';
+  const nombreTraza = nombreDeTraza(nombre);
   const def = opts.tools.get(nombre);
   const riesgo: ToolRiskClass = def?.risk ?? 'unregistered';
 
@@ -401,8 +478,8 @@ export async function ejecutarTool(
     // 2. Claim de idempotencia (y traza). Sin claim no se ejecuta nada.
     const reclamo = await uc.reclamarInvocacion(actor, run.agentRunId, {
       stepIndex: run.stepIndex,
-      toolCallId: llamada.id,
-      toolName: nombre === '' ? '(sin nombre)' : nombre.slice(0, 100),
+      toolCallId: idDeLlamadaSeguro(llamada.id),
+      toolName: nombreTraza,
       riskClass: riesgo,
       args: llamada.arguments,
     });
@@ -423,12 +500,15 @@ export async function ejecutarTool(
     if (!claimed) {
       const previos = sanitizarArgsDeTool(invocation.args).valor;
       const actuales = sanitizarArgsDeTool(llamada.arguments).valor;
-      if (canonico(previos) !== canonico(actuales)) {
+      // Misma llamada = mismo id, MISMA tool y mismos argumentos: con otro nombre se ejecutaría otra
+      // tool bajo la traza (y el presupuesto) de la primera.
+      if (invocation.toolName !== nombreTraza || canonico(previos) !== canonico(actuales)) {
         return ejecucion(
           riesgo,
           fallido({
             code: 'VALIDATION_FAILED',
-            message: 'El id de esta llamada ya se usó con otros argumentos. Haz una llamada nueva.',
+            message:
+              'El id de esta llamada ya se usó con otra herramienta u otros argumentos. Haz una llamada nueva.',
             details: { reason: 'idempotency_key_reuse' },
           }),
         );
@@ -446,7 +526,13 @@ export async function ejecutarTool(
         );
       }
       if (invocation.riskClass === 'read' && invocation.status === 'succeeded') {
-        // Una lectura no tiene efecto: se vuelve a leer (datos frescos), sin descontar presupuesto.
+        // Una lectura no tiene efecto: se vuelve a leer (datos frescos), sin cuota por tool pero
+        // contando la repetición contra el tope de lecturas del run.
+        const sinPresupuesto = await verificarPresupuestoDeRepeticion(actor, run.agentRunId);
+        if (sinPresupuesto !== undefined) {
+          return ejecucion(riesgo, fallido(sinPresupuesto), invocation);
+        }
+        anotarRepeticion(run.agentRunId);
         const cuerpo = await cuerpoDelPipeline(opts, def, actor, run, invocation, llamada.arguments, false);
         return ejecucion(riesgo, cuerpo, invocation);
       }

@@ -154,11 +154,19 @@ function acotarResultado(contenido: string): string {
   return contenido.slice(0, MAX_CARACTERES_DE_RESULTADO - marca.length) + marca;
 }
 
-const SIN_TAGS_DE_PENSAMIENTO = /<think>[\s\S]*?<\/think>/gi;
+const SIN_TAGS_DE_PENSAMIENTO = /<think\b[^>]*>[\s\S]*?<\/think\s*>/gi;
+/** Un `<think>` que nunca se cierra: todo lo que sigue es razonamiento y se descarta hasta el final. */
+const PENSAMIENTO_SIN_CERRAR = /<think\b[\s\S]*$/i;
+/** Un cierre `</think>` huérfano (sin apertura): solo se quita la etiqueta. */
+const CIERRE_HUERFANO = /<\/think\s*>/gi;
 
 /** Texto final del asistente: sin bloques de razonamiento colados y dentro del límite del chat. */
 function limpiarRespuestaFinal(texto: string): string {
-  const limpio = texto.replace(SIN_TAGS_DE_PENSAMIENTO, '').trim();
+  const limpio = texto
+    .replace(SIN_TAGS_DE_PENSAMIENTO, '')
+    .replace(PENSAMIENTO_SIN_CERRAR, '')
+    .replace(CIERRE_HUERFANO, '')
+    .trim();
   if (limpio.length <= CHAT_LIMITS.mensajeMax) return limpio;
   const marca = '…[respuesta recortada]';
   return limpio.slice(0, CHAT_LIMITS.mensajeMax - marca.length) + marca;

@@ -14,9 +14,13 @@ import {
   TOOL_RISK_CLASSES,
   bytesComoJsonb,
   claveDeInvocacion,
+  redactarSecretosEnTexto,
+  COSTO_USD_MAX,
+  INT4_MAX,
   esCodigoDeErrorValido,
   isRunActive,
   isRunTerminal,
+  normalizarCifrasDeLlamada,
   puedeTransicionarInvocacion,
   puedeTransicionarRun,
   sanitizarArgsDeTool,
@@ -283,5 +287,174 @@ describe('tarea de IA «conversar» (D16)', () => {
     // Los niveles previos no se tocan.
     expect(tierFor('extraer_campos')).toBe('eficiente');
     expect(tierFor('resolver_ambiguedad')).toBe('equilibrado');
+  });
+});
+
+// ─────────────────────────── QA-08 / QA-23: saneamiento adversarial ───────────
+
+describe('sanitizarJsonAcotado: claves disfrazadas y secretos en valores (QA-08)', () => {
+  const cirilica = (palabra: string): string =>
+    palabra.replace(/e/g, '\u0435').replace(/o/g, '\u043e').replace(/a/g, '\u0430');
+
+  it('descarta claves de razonamiento con homoglifos, ancho completo, acentos, mayúsculas y separadores', () => {
+    const entrada: Record<string, unknown> = {
+      ok: 1,
+      [cirilica('reasoning')]: 'COT-1',
+      [cirilica('razonamiento')]: 'COT-2',
+      ｒｅａｓｏｎｉｎｇ: 'COT-3',
+      Razonamiento_Interno: 'COT-4',
+      pensamiento: 'COT-5',
+      'Cadena de pensamiento': 'COT-6',
+      'chain-of-thought': 'COT-7',
+      'th\u200binking': 'COT-8',
+      'razonamiént\u00f3': 'COT-9',
+      reasoning_summary: 'COT-10',
+      'monólogo interno': 'COT-11',
+      scratchpad: 'COT-12',
+      Thought: 'COT-13',
+    };
+    const r = sanitizarArgsDeTool(entrada);
+    expect(r.valor).toEqual({ ok: 1 });
+    expect(r.alterado).toBe(true);
+    expect(JSON.stringify(r.valor)).not.toContain('COT-');
+  });
+
+  it('también descarta razonamiento anidado con grafías disfrazadas', () => {
+    const r = sanitizarResultadoDeTool({ a: [{ b: { [cirilica('thinking')]: 'COT-X', nota: 'visible' } }] });
+    expect(r.valor).toEqual({ a: [{ b: { nota: 'visible' } }] });
+  });
+
+  it('redacta el valor de claves de secreto con grafías disfrazadas', () => {
+    const r = sanitizarArgsDeTool({
+      [cirilica('password')]: 'S1',
+      'API-KEY': 'S2',
+      Contraseña: 'S3',
+      openai_api_key: 'S4',
+      dbPassword: 'S5',
+      Authorization: 'S6',
+      clientSecret: 'S7',
+    });
+    for (const v of Object.values(r.valor)) expect(v).toBe('[redactado]');
+    expect(Object.keys(r.valor)).toHaveLength(7);
+  });
+
+  it('no sobre-redacta: claves y textos corrientes se conservan', () => {
+    const entrada = {
+      reason: 'cambio de plan',
+      razon: 'presupuesto',
+      promptTokens: 120,
+      tokens: 3,
+      nota: 'Quiero un resumen básico (basic information) del plan.',
+      texto: 'El token de acceso se renueva cada hora; la contraseña se cambia desde ajustes.',
+      campos: ['mercado', 'categoría'],
+    };
+    const r = sanitizarArgsDeTool(entrada);
+    expect(r.valor).toEqual(entrada);
+    expect(r.alterado).toBe(false);
+  });
+
+  it('redacta secretos DENTRO de un valor (cabeceras, claves de API, JWT, claves privadas, pares clave=valor)', () => {
+    const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjftJeZ4CVPmB92K27uhbUJU1p1r';
+    const casos: Array<[string, string]> = [
+      ['Authorization: Bearer sk-SECRETO-EN-VALOR-SENTINELA', 'sk-SECRETO'],
+      ['usa la clave sk-proj-abcdefghijklmnopqrstuvwx para entrar', 'sk-proj-abcdef'],
+      [`token ${jwt}`, 'eyJhbGci'],
+      ['api_key=ABCDEF123456 y sigue', 'ABCDEF123456'],
+      ['PASSWORD: hunter2hunter2', 'hunter2'],
+      ['OPENAI_API_KEY=sk-live_abcdefghijklmnop', 'abcdefghijklmnop'],
+      [
+        '-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA\n-----END RSA PRIVATE KEY-----',
+        'MIIEowIBAAKCAQEA',
+      ],
+      ['AKIAIOSFODNN7EXAMPLE', 'AKIAIOSFODNN7EXAMPLE'],
+      ['ghp_abcdefghijklmnopqrstuvwxyz0123456789', 'ghp_abcdefgh'],
+    ];
+    for (const [texto, secreto] of casos) {
+      const r = sanitizarArgsDeTool({ nota: texto, lista: [texto], anidado: { x: texto } });
+      const salida = JSON.stringify(r.valor);
+      expect(salida, texto).not.toContain(secreto);
+      expect(salida, texto).toContain('[redactado]');
+      expect(r.alterado).toBe(true);
+    }
+    expect(redactarSecretosEnTexto('sin secretos: hola')).toBe('sin secretos: hola');
+  });
+
+  it('redacta ANTES de recortar: un recorte no deja medio secreto', () => {
+    const r = sanitizarJsonAcotado(
+      { nota: `${'a'.repeat(10)} sk-${'Z'.repeat(40)}` },
+      { maxBytes: 4_096, maxTexto: 20 },
+    );
+    expect(JSON.stringify(r.valor)).not.toContain('ZZZZ');
+  });
+});
+
+describe('sanitizarJsonAcotado: claves de prototipo (QA-23)', () => {
+  it('una clave propia __proto__ se descarta y no cambia el prototipo del resultado', () => {
+    const r = sanitizarArgsDeTool(JSON.parse('{"__proto__":{"polucion":true},"ok":1}') as unknown);
+    expect(Object.getPrototypeOf(r.valor)).toBe(Object.prototype);
+    expect((r.valor as Record<string, unknown>)['polucion']).toBeUndefined();
+    expect(Object.keys(r.valor)).toEqual(['ok']);
+    expect(r.alterado).toBe(true);
+    expect(({} as Record<string, unknown>)['polucion']).toBeUndefined();
+  });
+
+  it('__proto__ anidado y con NUL también se descarta; constructor/prototype son datos inertes', () => {
+    const r = sanitizarArgsDeTool(
+      JSON.parse('{"a":{"__pro\\u0000to__":{"x":1},"constructor":{"y":2},"prototype":3}}') as unknown,
+    );
+    const a = r.valor['a'] as Record<string, unknown>;
+    expect(Object.getPrototypeOf(a)).toBe(Object.prototype);
+    expect(Object.keys(a).sort()).toEqual(['constructor', 'prototype']);
+    expect(a['x']).toBeUndefined();
+  });
+});
+
+describe('normalizarCifrasDeLlamada (QA-06)', () => {
+  it('cifras normales pasan intactas', () => {
+    expect(
+      normalizarCifrasDeLlamada({
+        latencyMs: 120,
+        promptTokens: 1_000,
+        completionTokens: 50,
+        costUsd: 0.012345,
+      }),
+    ).toEqual({
+      latencyMs: 120,
+      promptTokens: 1_000,
+      completionTokens: 50,
+      costUsd: 0.012345,
+      anomalias: [],
+    });
+    expect(normalizarCifrasDeLlamada({})).toMatchObject({ promptTokens: null, costUsd: null, anomalias: [] });
+  });
+
+  it('acota lo desmedido, descarta lo inválido y lo nombra en las anomalías', () => {
+    const r = normalizarCifrasDeLlamada({
+      promptTokens: 3_000_000_000,
+      completionTokens: -5,
+      latencyMs: Number.NaN,
+      costUsd: 123_456.5,
+    });
+    expect(r).toEqual({
+      latencyMs: null,
+      promptTokens: INT4_MAX,
+      completionTokens: null,
+      costUsd: COSTO_USD_MAX,
+      anomalias: ['latency_ms', 'prompt_tokens', 'completion_tokens', 'cost_usd'],
+    });
+    expect(normalizarCifrasDeLlamada({ costUsd: Number.POSITIVE_INFINITY })).toMatchObject({
+      costUsd: null,
+      anomalias: ['cost_usd'],
+    });
+    expect(normalizarCifrasDeLlamada({ costUsd: -1 })).toMatchObject({ costUsd: null });
+    expect(normalizarCifrasDeLlamada({ promptTokens: 10.4 })).toMatchObject({
+      promptTokens: 10,
+      anomalias: ['prompt_tokens'],
+    });
+  });
+
+  it('el costo se redondea a 6 decimales (numeric(10,6))', () => {
+    expect(normalizarCifrasDeLlamada({ costUsd: 0.1234567891 }).costUsd).toBe(0.123457);
+    expect(normalizarCifrasDeLlamada({ costUsd: COSTO_USD_MAX }).anomalias).toEqual([]);
   });
 });

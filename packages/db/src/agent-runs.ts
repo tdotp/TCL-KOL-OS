@@ -36,10 +36,12 @@ import {
   AGENT_RUN_QUEUED_TIMEOUT_MINUTES,
   CHAT_CONFLICT_REASONS,
   CHAT_LIMITS,
+  INT4_MAX,
   RUN_ABANDONED,
   TOOL_ABANDONED,
   err,
   esCodigoDeErrorValido,
+  normalizarCifrasDeLlamada,
   ok,
   sanitizarManifiestoDeContexto,
   sanitizarMensajeDeError,
@@ -823,16 +825,24 @@ export interface LlamadaDeModelo {
   readonly error?: string | undefined;
 }
 
+/** Texto apto para una columna `text` de Postgres (sin NUL) y acotado. */
+const textoDeLedger = (v: string, max: number): string => v.replaceAll('\u0000', '').slice(0, max);
+
 /**
  * Registra UNA llamada al proveedor del turno en `ai_runs` (tarea `conversar`),
  * enlazada al run. Nunca guarda el prompt ni la respuesta: solo hashes y metadatos.
+ *
+ * El ledger es observabilidad, no parte de la respuesta: las cifras del proveedor se NORMALIZAN al rango de
+ * las columnas (`integer`, `numeric(10,6)`) y la anomalía queda en `output_status` (`<estado>_cifras_acotadas`)
+ * y en `error` (qué cifras se acotaron); y un fallo de la inserción vuelve como `err`, nunca como excepción
+ * que mate un turno ya respondido (QA-06).
  */
 export async function registrarLlamadaDeModelo(
   actor: User,
   runId: string,
   llamada: LlamadaDeModelo,
 ): Promise<Result<{ aiRunId: string }>> {
-  if (!Number.isInteger(llamada.stepIndex) || llamada.stepIndex < 0) {
+  if (!Number.isInteger(llamada.stepIndex) || llamada.stepIndex < 0 || llamada.stepIndex > INT4_MAX) {
     return err({
       code: 'VALIDATION_FAILED',
       message: 'La vuelta del modelo no es válida.',
@@ -842,33 +852,47 @@ export async function registrarLlamadaDeModelo(
   const cargado = await cargarRunAutorizado(getPool(), actor, 'chat:write', runId);
   if (!cargado.ok) return cargado;
   const run = cargado.value;
-  const { rows } = await getPool().query<{ id: string }>(
-    `INSERT INTO ai_runs
-       (organization_id, campaign_id, task, tier, provider, model, prompt_version, input_hash,
-        output_status, latency_ms, prompt_tokens, completion_tokens, cost_usd, generation_id, error,
-        agent_run_id, step_index)
-     VALUES ($1, $2, 'conversar', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-     RETURNING id`,
-    [
-      run.organizationId,
-      run.campaignId,
-      llamada.tier,
-      llamada.provider,
-      llamada.model,
-      llamada.promptVersion,
-      llamada.inputHash,
-      llamada.outputStatus,
-      llamada.latencyMs ?? null,
-      llamada.promptTokens ?? null,
-      llamada.completionTokens ?? null,
-      llamada.costUsd ?? null,
-      llamada.generationId ?? null,
-      sanitizarMensajeDeError(llamada.error) ?? null,
-      runId,
-      llamada.stepIndex,
-    ],
-  );
-  return ok({ aiRunId: rows[0]!.id });
+  const cifras = normalizarCifrasDeLlamada(llamada);
+  const anomalia = cifras.anomalias.length > 0;
+  const estado = textoDeLedger(llamada.outputStatus, 50) + (anomalia ? '_cifras_acotadas' : '');
+  const error =
+    sanitizarMensajeDeError(llamada.error) ??
+    (anomalia ? `cifras del proveedor acotadas: ${cifras.anomalias.join(', ')}` : null);
+  try {
+    const { rows } = await getPool().query<{ id: string }>(
+      `INSERT INTO ai_runs
+         (organization_id, campaign_id, task, tier, provider, model, prompt_version, input_hash,
+          output_status, latency_ms, prompt_tokens, completion_tokens, cost_usd, generation_id, error,
+          agent_run_id, step_index)
+       VALUES ($1, $2, 'conversar', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+       RETURNING id`,
+      [
+        run.organizationId,
+        run.campaignId,
+        llamada.tier,
+        textoDeLedger(llamada.provider, 100),
+        textoDeLedger(llamada.model, 200),
+        textoDeLedger(llamada.promptVersion, 100),
+        textoDeLedger(llamada.inputHash, 128),
+        estado,
+        cifras.latencyMs,
+        cifras.promptTokens,
+        cifras.completionTokens,
+        cifras.costUsd,
+        llamada.generationId === undefined ? null : textoDeLedger(llamada.generationId, 200),
+        error,
+        runId,
+        llamada.stepIndex,
+      ],
+    );
+    return ok({ aiRunId: rows[0]!.id });
+  } catch {
+    return err({
+      code: 'VALIDATION_FAILED',
+      message: 'No se pudo registrar la llamada del modelo en el ledger.',
+      details: { reason: 'ledger_insert_failed' },
+    });
+  }
 }
 
 export interface CostoDeRun {

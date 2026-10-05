@@ -9,7 +9,14 @@
 
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { type Result, type User, PREFIJO_DE_LINEA, ok, verificarSobres } from '@tcl-kol-os/domain';
+import {
+  type Result,
+  type User,
+  CHAT_LIMITS,
+  PREFIJO_DE_LINEA,
+  ok,
+  verificarSobres,
+} from '@tcl-kol-os/domain';
 import type * as SearchModule from './search.ts';
 import { closePool, getPool, query } from './client.ts';
 import {
@@ -818,16 +825,32 @@ describe('límites y truncado explícito', () => {
     expect(c.informe.totalChars).toBeLessThanOrEqual(48_000);
   });
 
-  it('el mensaje de la persona nunca se trunca: demasiado largo = CONTEXT_BUDGET_EXCEEDED', async () => {
+  it('el mensaje de la persona nunca se trunca: más largo que el límite de admisión = CONTEXT_BUDGET_EXCEEDED', async () => {
     const r = await ensamblarContexto(
       admin,
-      entrada({ mensajeActual: { texto: 'q'.repeat(8_001), adjuntos: [] } }),
+      entrada({ mensajeActual: { texto: 'q'.repeat(CHAT_LIMITS.mensajeMax + 1), adjuntos: [] } }),
     );
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.error.details).toMatchObject({ reason: 'CONTEXT_BUDGET_EXCEEDED', section: 'current_message' });
-    const justo = await ctx(admin, { mensajeActual: { texto: 'q'.repeat(8_000), adjuntos: [] } });
-    expect(justo.texto.mensajeActual).toBe('q'.repeat(8_000));
+    const justo = await ctx(admin, {
+      mensajeActual: { texto: 'q'.repeat(CHAT_LIMITS.mensajeMax), adjuntos: [] },
+    });
+    expect(justo.texto.mensajeActual).toBe('q'.repeat(CHAT_LIMITS.mensajeMax));
+  });
+
+  it('QA-09: un mensaje admitido (≤ CHAT_LIMITS.mensajeMax) siempre cabe, también con el resto del contexto', async () => {
+    for (const largo of [8_001, 12_345, CHAT_LIMITS.mensajeMax]) {
+      const c = await ctx(admin, {
+        mensajeActual: { texto: 'q'.repeat(largo), adjuntos: [] },
+        ventana: [
+          { id: 'm1', role: 'actor', authorId: admin.id, texto: 'hola '.repeat(300) },
+          { id: 'm2', role: 'asistente', texto: 'respuesta '.repeat(150) },
+        ],
+      });
+      expect(c.texto.mensajeActual).toBe('q'.repeat(largo));
+      expect(c.informe.totalChars).toBeLessThanOrEqual(48_000);
+    }
   });
 
   it('un presupuesto global mínimo no deja pasar lo obligatorio', async () => {
@@ -1018,6 +1041,24 @@ describe('adjuntos del mensaje', () => {
     expect(s.texto).toContain('aún sin sincronizar');
     expect(todo(c)).not.toContain('CANARIO-SENSIBLE-9');
     expect(todo(c)).not.toContain('CLAVE-SECRETA-DOCS-555');
+  });
+
+  it('QA-04: una fuente restringida adjunta no revela ni su nombre, ni su tipo, ni su mime', async () => {
+    const c = await ctx(admin, {
+      mensajeActual: { texto: 'mira', adjuntos: [{ sourceId: ids['sensible']! }] },
+    });
+    const s = c.secciones.find((x) => x.id === 'turn_attachments')!;
+    expect(s.texto).toContain('restringida: no disponible para la IA');
+    // El sobre existe (la referencia sirve para hablar de él) pero sin metadatos de la fuente.
+    expect(s.texto).toMatch(/kind=attachment ref=S\d+/);
+    expect(todo(c)).not.toContain('Cédulas sensibles');
+    expect(todo(c)).not.toContain('Cédulas');
+    expect(todo(c)).not.toContain('meta:');
+    // Una fuente normal sigue exponiendo su nombre (lo necesita el modelo para hablar del adjunto).
+    const normal = await ctx(admin, {
+      mensajeActual: { texto: 'mira', adjuntos: [{ sourceId: ids['ready']! }] },
+    });
+    expect(todo(normal)).toContain('"filename"');
   });
 
   it('un adjunto de otra campaña u otra organización no entra: ni nombre ni contenido', async () => {

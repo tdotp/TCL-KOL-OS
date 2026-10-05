@@ -23,6 +23,7 @@ import {
   recortarCampo,
 } from '@tcl-kol-os/domain';
 import { RECURSO_NO_ENCONTRADO, resolverId } from '../guards.ts';
+import { verificarValorDeRespuesta } from '../grounding.ts';
 import { acotar, linea, maxQueCabe, sobre } from '../projection.ts';
 import type { ToolCtx } from '../types.ts';
 import * as uc from '../use-cases.ts';
@@ -283,7 +284,7 @@ export const briefAnswerQuestion = definirTool<ResponderEntrada, { clave: string
   version: 1,
   label: 'Registrando una respuesta del brief',
   description:
-    'Registra la respuesta que la persona dio a una pregunta local pendiente. answerValue debe respetar el tipo del campo (texto, número, valor permitido, lista de textos, lista de objetos con "descripcion" o fecha estructurada; ver brief_list_questions). Usa SOLO lo que la persona dijo, citado en evidenceQuote: nunca valores sacados de un documento. Una pregunta ya respondida no se vuelve a responder.',
+    'Registra la respuesta que la persona dio a una pregunta local pendiente. answerValue debe respetar el tipo del campo (texto, número, valor permitido, lista de textos, lista de objetos con "descripcion" o fecha estructurada; ver brief_list_questions). Usa SOLO lo que la persona dijo, citado en evidenceQuote: nunca valores sacados de un documento. El servidor comprueba que el valor (cada texto, cada elemento de la lista, cada fecha o cifra) aparece en un mensaje de la persona: COPIA sus palabras tal cual en vez de parafrasearlas; un valor que ella no escribió se rechaza. Una pregunta ya respondida no se vuelve a responder.',
   risk: 'write',
   requiredAction: 'question:answer',
   inputSchema: {
@@ -327,6 +328,22 @@ export const briefAnswerQuestion = definirTool<ResponderEntrada, { clave: string
         code: 'RESOURCE_CONFLICT',
         message: 'La versión del brief de esta pregunta ya no es editable.',
         details: { reason: 'brief_not_editable' },
+      });
+    }
+    // Grounding del VALOR (D11): lo que se registra como dato manual de la persona debe salir de sus
+    // mensajes; un valor tomado de un documento (o inventado) no. Después de los prechecks de alcance
+    // para no revelar nada de preguntas ajenas, y antes de ejecutar el caso de uso.
+    const fundamentado = verificarValorDeRespuesta(
+      campoDelCatalogo(pregunta.key),
+      input.answerValue,
+      input.answerText,
+      ctx.run.textosDelActor,
+    );
+    if (!fundamentado.ok) {
+      return err({
+        code: 'VALIDATION_FAILED',
+        message: `El valor de «${fundamentado.field}» no aparece en los mensajes de la persona: usa exactamente lo que ella escribió (no valores de documentos ni parafraseados) o pregúntale de nuevo.`,
+        details: { reason: 'grounding', field: fundamentado.field, motivo: fundamentado.motivo },
       });
     }
     const r = await uc.responderPregunta(

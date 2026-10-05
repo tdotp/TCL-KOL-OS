@@ -463,24 +463,130 @@ export function claveDeInvocacion(entrada: {
 export type JsonLimpio =
   null | boolean | number | string | readonly JsonLimpio[] | { readonly [clave: string]: JsonLimpio };
 
+/**
+ * Letras de otros alfabetos que se confunden a simple vista con una latina (homoglifos cirílicos, griegos y
+ * variantes latinas): `rеasoning` con «е» cirílica debe leerse como `reasoning`. No pretende ser la tabla
+ * completa de «confusables» de Unicode: cubre las que sirven para disfrazar una clave en inglés o español.
+ */
+const HOMOGLIFOS: Readonly<Record<string, string>> = {
+  // cirílico
+  а: 'a',
+  в: 'b',
+  с: 'c',
+  ԁ: 'd',
+  е: 'e',
+  ё: 'e',
+  һ: 'h',
+  н: 'h',
+  і: 'i',
+  ї: 'i',
+  ј: 'j',
+  к: 'k',
+  ӏ: 'l',
+  м: 'm',
+  о: 'o',
+  р: 'p',
+  ԛ: 'q',
+  ѕ: 's',
+  т: 't',
+  ѵ: 'v',
+  ԝ: 'w',
+  х: 'x',
+  у: 'y',
+  // griego
+  α: 'a',
+  β: 'b',
+  γ: 'y',
+  ε: 'e',
+  ζ: 'z',
+  η: 'n',
+  ι: 'i',
+  κ: 'k',
+  μ: 'u',
+  ν: 'v',
+  ο: 'o',
+  ρ: 'p',
+  σ: 'o',
+  τ: 't',
+  υ: 'u',
+  χ: 'x',
+  ω: 'w',
+  // latinas especiales
+  ı: 'i',
+  ſ: 's',
+  ƒ: 'f',
+  ɡ: 'g',
+  ɑ: 'a',
+  ɩ: 'i',
+  ɋ: 'q',
+  ø: 'o',
+  đ: 'd',
+  ł: 'l',
+  ß: 'ss',
+  æ: 'ae',
+  œ: 'oe',
+};
+
+/**
+ * Forma comparable de una clave: NFKC (ancho completo, ligaduras, matemáticas), sin acentos ni marcas
+ * combinantes, en minúsculas, con los homoglifos mapeados a su letra latina y SIN separadores ni invisibles.
+ */
 function normalizarClave(clave: string): string {
-  return clave.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const base = clave
+    .normalize('NFKC')
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '')
+    .toLowerCase();
+  let latina = '';
+  for (const c of base) latina += HOMOGLIFOS[c] ?? c;
+  return latina.replace(/[^a-z0-9]/g, '');
 }
 
 /** Claves que nunca se guardan (secretos y datos personales sensibles): el valor se redacta. */
 const CLAVES_SENSIBLES: ReadonlySet<string> = new Set([
   'password',
+  'passwd',
+  'pwd',
+  'pass',
+  'contrasena',
   'token',
   'accesstoken',
   'refreshtoken',
+  'idtoken',
+  'authtoken',
+  'bearertoken',
+  'sessiontoken',
   'apikey',
+  'apitoken',
   'secret',
+  'secretkey',
+  'clientsecret',
+  'privatekey',
+  'accesskey',
   'authorization',
   'cookie',
+  'setcookie',
   'cedula',
   'telefono',
   'direccion',
 ]);
+
+/** Fragmentos que delatan una clave de secreto aunque lleve prefijos o sufijos (`openai_api_key`, `dbPassword`). */
+const FRAGMENTOS_SENSIBLES: readonly string[] = [
+  'password',
+  'passwd',
+  'contrasena',
+  'secret',
+  'apikey',
+  'privatekey',
+  'authorization',
+  'credential',
+  'credencial',
+];
+
+function esClaveSensible(norma: string): boolean {
+  return CLAVES_SENSIBLES.has(norma) || FRAGMENTOS_SENSIBLES.some((f) => norma.includes(f));
+}
 
 /**
  * Claves de razonamiento interno del modelo: se DESCARTAN por completo. Nada de
@@ -497,7 +603,60 @@ const CLAVES_DE_RAZONAMIENTO: ReadonlySet<string> = new Set([
   'cot',
   'scratchpad',
   'internalmonologue',
+  'razonamiento',
+  'razonamientos',
+  'pensamiento',
+  'pensamientos',
+  'cadenadepensamiento',
+  'cadenadepensamientos',
+  'cadenaderazonamiento',
+  'monologointerno',
+  'reflexion',
 ]);
+
+/** Fragmentos que delatan razonamiento aunque la clave lleve más texto (`reasoning_summary`, `razonamientoInterno`). */
+const FRAGMENTOS_DE_RAZONAMIENTO: readonly string[] = [
+  'reasoning',
+  'razonamiento',
+  'thinking',
+  'pensamiento',
+  'chainofthought',
+  'cadenadepensamiento',
+  'scratchpad',
+  'monologo',
+  'monologue',
+  'internalthought',
+];
+
+function esClaveDeRazonamiento(norma: string): boolean {
+  return CLAVES_DE_RAZONAMIENTO.has(norma) || FRAGMENTOS_DE_RAZONAMIENTO.some((f) => norma.includes(f));
+}
+
+/**
+ * Secretos que viajan DENTRO de un valor (cabeceras pegadas, claves de API, JWT, claves privadas): se
+ * redacta solo el tramo, no el texto entero. Conservador a propósito: patrones con formato reconocible.
+ */
+const PATRONES_DE_SECRETO_EN_VALOR: readonly RegExp[] = [
+  /(?:api[_-]?key|secret|password|passwd|pwd|access[_-]?token|refresh[_-]?token|client[_-]?secret|authorization)\s*[:=]\s*(?:bearer\s+)?["']?[^\s"',;]{4,}/gi,
+  /\bbearer\s+[A-Za-z0-9._~+/=-]{12,}/gi,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g,
+  /\bsk-[A-Za-z0-9_-]{16,}/g,
+  /\b[sr]k_(?:live|test)_[A-Za-z0-9]{10,}/g,
+  /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}/g,
+  /\bAKIA[0-9A-Z]{16}\b/g,
+  /\bgh[pousr]_[A-Za-z0-9]{30,}/g,
+  /\bxox[abpr]-[A-Za-z0-9-]{10,}/g,
+  /\bAIza[0-9A-Za-z_-]{30,}/g,
+];
+
+const REDACTADO = '[redactado]';
+
+/** Redacta los secretos con formato reconocible dentro de un texto. */
+export function redactarSecretosEnTexto(texto: string): string {
+  let r = texto;
+  for (const patron of PATRONES_DE_SECRETO_EN_VALOR) r = r.replace(patron, REDACTADO);
+  return r;
+}
 
 export interface OpcionesDeSaneamiento {
   /** Tope de bytes del JSON resultante (con el formato de `jsonb::text` de Postgres). */
@@ -584,11 +743,14 @@ export function sanitizarJsonAcotado(entrada: unknown, opciones: OpcionesDeSanea
       case 'string': {
         const sinNul = valor.includes('\u0000') ? valor.replace(/\u0000/g, '') : valor;
         if (sinNul !== valor) alterado = true;
-        if (sinNul.length > maxTexto) {
+        // Los secretos se redactan ANTES de recortar: un recorte no puede dejar la mitad de uno.
+        const sinSecretos = redactarSecretosEnTexto(sinNul);
+        if (sinSecretos !== sinNul) alterado = true;
+        if (sinSecretos.length > maxTexto) {
           alterado = true;
-          return `${sinNul.slice(0, maxTexto - 1)}…`;
+          return `${sinSecretos.slice(0, maxTexto - 1)}…`;
         }
-        return sinNul;
+        return sinSecretos;
       }
       default:
         break;
@@ -619,7 +781,7 @@ export function sanitizarJsonAcotado(entrada: unknown, opciones: OpcionesDeSanea
       let claves = 0;
       for (const [clave, v] of Object.entries(objeto as Record<string, unknown>)) {
         const norma = normalizarClave(clave);
-        if (CLAVES_DE_RAZONAMIENTO.has(norma)) {
+        if (esClaveDeRazonamiento(norma)) {
           alterado = true;
           continue;
         }
@@ -628,7 +790,12 @@ export function sanitizarJsonAcotado(entrada: unknown, opciones: OpcionesDeSanea
           break;
         }
         const claveLimpia = clave.replace(/\u0000/g, '').slice(0, 200);
-        if (CLAVES_SENSIBLES.has(norma)) {
+        // Una clave propia `__proto__` (JSON.parse la crea) cambiaría el prototipo del resultado al asignarla.
+        if (claveLimpia === '__proto__') {
+          alterado = true;
+          continue;
+        }
+        if (esClaveSensible(norma)) {
           resultado[claveLimpia] = '[redactado]';
           alterado = true;
           claves += 1;
@@ -673,4 +840,68 @@ export function sanitizarResultadoDeTool(resultado: unknown): JsonSaneado {
 /** Atajo: manifiesto de contexto de un run (≤ 32 KB; solo ids y conteos). */
 export function sanitizarManifiestoDeContexto(manifiesto: unknown): JsonSaneado {
   return sanitizarJsonAcotado(manifiesto, { maxBytes: CHAT_LIMITS.contextManifestMaxBytes });
+}
+
+// ─────────────────────────── Cifras del proveedor (ledger `ai_runs`) ────────────
+
+/** Máximo de un `integer` de Postgres. */
+export const INT4_MAX = 2_147_483_647;
+/** Máximo de `cost_usd numeric(10,6)`. */
+export const COSTO_USD_MAX = 9_999.999999;
+
+export interface CifrasDeLlamada {
+  readonly latencyMs?: number | undefined;
+  readonly promptTokens?: number | undefined;
+  readonly completionTokens?: number | undefined;
+  readonly costUsd?: number | undefined;
+}
+
+export interface CifrasNormalizadas {
+  readonly latencyMs: number | null;
+  readonly promptTokens: number | null;
+  readonly completionTokens: number | null;
+  readonly costUsd: number | null;
+  /** Nombres de las cifras que hubo que acotar o descartar (vacío = el proveedor las informó bien). */
+  readonly anomalias: readonly string[];
+}
+
+function enteroNoNegativo(valor: number | undefined, nombre: string, anomalias: string[]): number | null {
+  if (valor === undefined || valor === null) return null;
+  if (typeof valor !== 'number' || !Number.isFinite(valor) || valor < 0) {
+    anomalias.push(nombre);
+    return null;
+  }
+  const entero = Math.round(valor);
+  if (entero > INT4_MAX) {
+    anomalias.push(nombre);
+    return INT4_MAX;
+  }
+  if (entero !== valor) anomalias.push(nombre);
+  return entero;
+}
+
+/**
+ * Cifras del proveedor aptas para `ai_runs` (columnas `integer` y `numeric(10,6)`): enteros no negativos
+ * dentro de rango y un costo con 6 decimales como máximo `COSTO_USD_MAX`. Lo inválido (NaN, infinito,
+ * negativo, de otro tipo) se descarta (`null`) y lo desmedido se acota; ambos casos quedan listados en
+ * `anomalias`. Una cifra rara del proveedor nunca debe impedir registrar la llamada.
+ */
+export function normalizarCifrasDeLlamada(cifras: CifrasDeLlamada): CifrasNormalizadas {
+  const anomalias: string[] = [];
+  const latencyMs = enteroNoNegativo(cifras.latencyMs, 'latency_ms', anomalias);
+  const promptTokens = enteroNoNegativo(cifras.promptTokens, 'prompt_tokens', anomalias);
+  const completionTokens = enteroNoNegativo(cifras.completionTokens, 'completion_tokens', anomalias);
+  let costUsd: number | null = null;
+  const c = cifras.costUsd;
+  if (c !== undefined && c !== null) {
+    if (typeof c !== 'number' || !Number.isFinite(c) || c < 0) {
+      anomalias.push('cost_usd');
+    } else if (c > COSTO_USD_MAX) {
+      anomalias.push('cost_usd');
+      costUsd = COSTO_USD_MAX;
+    } else {
+      costUsd = Math.round(c * 1_000_000) / 1_000_000;
+    }
+  }
+  return { latencyMs, promptTokens, completionTokens, costUsd, anomalias };
 }

@@ -35,13 +35,17 @@ export const campaignGet = definirTool<Record<string, never>, uc.CampaignWithPro
     return {
       data: {
         campaign: {
-          name: linea(c.name, 200),
-          market: linea(c.market, 80),
-          category: c.category === null ? null : linea(c.category, 80),
           status: c.status,
           startDate: fechaIso(c.start_date),
           endDate: fechaIso(c.end_date),
-          owner: linea(c.owner_name, 120),
+          // Nombre, mercado, categoría y responsable son texto libre editable (también por el propio
+          // agente): van en un sobre no confiable, como en el contexto del run.
+          details: sobre(ctx.nonce, 'campaign_fields', [
+            `nombre: ${JSON.stringify(linea(c.name, 200))}`,
+            `mercado: ${JSON.stringify(linea(c.market, 80))}`,
+            ...(c.category === null ? [] : [`categoría: ${JSON.stringify(linea(c.category, 80))}`]),
+            `responsable: ${JSON.stringify(linea(c.owner_name, 120))}`,
+          ]),
         },
         products: sobre(ctx.nonce, 'product_list', lineas),
         ...(valor.avisoPresupuesto === undefined ? {} : { budgetNote: linea(valor.avisoPresupuesto, 300) }),
@@ -63,7 +67,7 @@ export const campaignUpdateMetadata = definirTool<ActualizarEntrada, uc.CampanaA
   version: 1,
   label: 'Actualizando nombre o fechas de la campaña',
   description:
-    'Cambia el nombre y/o las fechas de inicio y fin de la campaña (formato AAAA-MM-DD; convierte tú las fechas en lenguaje natural). Solo si la persona lo pidió expresamente en esta conversación: cita su petición en evidenceQuote. No cambia estado, visibilidad, responsable ni productos.',
+    'Cambia el nombre y/o las fechas de inicio y fin de la campaña (formato AAAA-MM-DD; conviertes a ese formato la fecha que la persona escribió en lenguaje natural). Solo si la persona lo pidió expresamente en esta conversación: cita su petición en evidenceQuote. El nombre y las fechas deben ser los que ella escribió (las fechas con día, mes y año o al menos día y mes, p. ej. «30 de junio de 2027»): nunca los saques de un documento ni uses fechas relativas; si no te dio la fecha concreta, pídesela. No cambia estado, visibilidad, responsable ni productos.',
   risk: 'write',
   requiredAction: 'campaign:update',
   inputSchema: {
@@ -78,7 +82,11 @@ export const campaignUpdateMetadata = definirTool<ActualizarEntrada, uc.CampanaA
     additionalProperties: false,
   },
   campaignStatus: 'activa',
-  grounding: { quoteField: 'evidenceQuote', literalFields: [{ field: 'name', minChars: 1 }] },
+  grounding: {
+    quoteField: 'evidenceQuote',
+    literalFields: [{ field: 'name', minChars: 1 }],
+    dateFields: ['startDate', 'endDate'],
+  },
   reuses: ['actualizarCampana'],
   reuseNote:
     'NUEVO y mínimo: no existía ningún caso de uso para editar la campaña (solo archivarla). Capacidad campaign:update (ya definida y concedida, sin uso), campaña activa, coherencia de fechas y audita campaign.update con antes/después y origin=chat.',
@@ -94,9 +102,9 @@ export const campaignUpdateMetadata = definirTool<ActualizarEntrada, uc.CampanaA
       ctx.contexto,
     );
   },
-  project(valor) {
-    const vista = (x: { name: string; startDate: string | null; endDate: string | null }) => ({
-      name: linea(x.name, 200),
+  project(valor, ctx) {
+    // El nombre (texto libre) va en un sobre no confiable; las fechas son valores `AAAA-MM-DD` del código.
+    const vista = (x: { startDate: string | null; endDate: string | null }) => ({
       startDate: x.startDate,
       endDate: x.endDate,
     });
@@ -106,6 +114,10 @@ export const campaignUpdateMetadata = definirTool<ActualizarEntrada, uc.CampanaA
         changes: valor.cambios,
         before: vista(valor.antes),
         after: vista(valor.despues),
+        names: sobre(ctx.nonce, 'campaign_names', [
+          `antes: ${JSON.stringify(linea(valor.antes.name, 200))}`,
+          `después: ${JSON.stringify(linea(valor.despues.name, 200))}`,
+        ]),
         ...(valor.cambios.length === 0
           ? { note: 'No había nada que cambiar: los valores ya eran esos.' }
           : {}),

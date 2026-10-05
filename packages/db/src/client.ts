@@ -19,7 +19,9 @@ export function getPool(): pg.Pool {
     throw new Error('Falta DATABASE_URL. Consulte .env.example en la raíz del repositorio.');
   }
 
-  pool = new Pool({ connectionString, max: 10 });
+  // Sin `connectionTimeoutMillis` un pool agotado deja las peticiones colgadas para siempre; con él falla limpio
+  // (y el resultado es un error, no un cuelgue). 30 s sobra para una espera normal de turno.
+  pool = new Pool({ connectionString, max: 10, connectionTimeoutMillis: 30_000 });
   return pool;
 }
 

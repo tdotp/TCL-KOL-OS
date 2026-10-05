@@ -25,6 +25,7 @@
  */
 
 import { type Action, actionsFor, roleCan } from './permissions';
+import { CHAT_LIMITS } from './chat';
 import { type SourceLocator, describirLocalizador } from './source-locator';
 import { type Result, err, ok } from './errors';
 import type { BriefWorkspace } from './workspace';
@@ -237,12 +238,17 @@ export const PRESUPUESTO_POR_DEFECTO: ConfiguracionDePresupuesto = {
     policy: { prioridad: 0, requerida: true, maxChars: 4_000, maxItems: 1, maxCharsPorItem: 4_000 },
     actor: { prioridad: 0, requerida: true, maxChars: 1_200, maxItems: 1, maxCharsPorItem: 1_200 },
     campaign: { prioridad: 0, requerida: true, maxChars: 1_200, maxItems: 1, maxCharsPorItem: 1_200 },
+    // El mensaje actual es OBLIGATORIO y no se trunca: su tope tiene que alcanzar el límite de admisión del chat
+    // (`CHAT_LIMITS.mensajeMax`), o un mensaje admitido haría fallar siempre el run (QA-09). El tope global
+    // NO sube: lo obligatorio (política 4 000 + actor
+    // 1 200 + campaña 1 200 + mensaje) cabe holgado en 48 000; con un mensaje máximo solo quedan menos
+    // caracteres para las secciones opcionales, que se omiten con aviso por prioridad.
     current_message: {
       prioridad: 0,
       requerida: true,
-      maxChars: 8_000,
+      maxChars: CHAT_LIMITS.mensajeMax,
       maxItems: 1,
-      maxCharsPorItem: 8_000,
+      maxCharsPorItem: CHAT_LIMITS.mensajeMax,
     },
     recent_messages: {
       prioridad: 1,

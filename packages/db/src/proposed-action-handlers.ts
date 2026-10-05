@@ -36,6 +36,9 @@
  *    reintentar `ejecutarAccion` reconcilia sin duplicar (aplicar es idempotente;
  *    resolver deduplica por la correlación de la acción). Entre medias puede
  *    existir un efecto de dominio ya aplicado con la acción aún `confirmed`.
+ *    Como retiene la conexión de la fila mientras el caso de uso pide otras del
+ *    mismo pool, `ejecutarAccion` limita cuántas corren a la vez
+ *    (`MAX_EJECUCIONES_EXTERNAS_SIMULTANEAS`) para no interbloquear el pool.
  */
 
 import { createHash } from 'node:crypto';
@@ -77,6 +80,49 @@ export function sha256(texto: string): string {
 }
 
 const huella = (valor: unknown): string => sha256(canonico(valor));
+
+// ─────────────────────────── Cupo de ejecuciones externas ──────────────────────
+
+/**
+ * Máximo de ejecuciones `idempotent_external` SIMULTÁNEAS por proceso.
+ *
+ * Una ejecución de este modo retiene la conexión de la transacción que bloquea la fila de la acción y, mientras
+ * tanto, el caso de uso de la Fase 5 pide otras del MISMO pool (el bloqueo del plan, la transacción de cada
+ * registro, lecturas): hasta 4 conexiones por ejecución. Con el pool en 10 y sin tope, 10 ejecuciones
+ * simultáneas retienen una conexión cada una esperando otra y el pool se interbloquea (también para el resto
+ * del servicio; QA-26). El cupo se toma ANTES de abrir la transacción, así que quien espera no retiene nada:
+ * 2 ejecuciones × 4 conexiones = 8, y quedan 2 para el chat, los runs y las lecturas. La garantía (ejecución
+ * única por bloqueo de fila; recuperación por reintento idempotente) no cambia: solo se serializa el acceso.
+ */
+export const MAX_EJECUCIONES_EXTERNAS_SIMULTANEAS = 2;
+
+let ejecucionesExternasActivas = 0;
+const colaDeEjecucionesExternas: Array<() => void> = [];
+
+async function tomarCupoExterno(): Promise<void> {
+  if (ejecucionesExternasActivas < MAX_EJECUCIONES_EXTERNAS_SIMULTANEAS) {
+    ejecucionesExternasActivas += 1;
+    return;
+  }
+  // El cupo pasa de mano en mano (sin liberar y retomar): el contador no cambia al despertar al siguiente.
+  await new Promise<void>((resolve) => colaDeEjecucionesExternas.push(resolve));
+}
+
+function soltarCupoExterno(): void {
+  const siguiente = colaDeEjecucionesExternas.shift();
+  if (siguiente !== undefined) siguiente();
+  else ejecucionesExternasActivas -= 1;
+}
+
+/** Corre `fn` dentro del cupo de ejecuciones externas (FIFO). */
+export async function conCupoDeEjecucionExterna<T>(fn: () => Promise<T>): Promise<T> {
+  await tomarCupoExterno();
+  try {
+    return await fn();
+  } finally {
+    soltarCupoExterno();
+  }
+}
 
 // ─────────────────────────── Contrato del handler ──────────────────────────────
 

@@ -36,6 +36,11 @@ export interface GroundingDeTool {
   readonly urlField?: string;
   /** Campos de texto que deben aparecer (normalizados) dentro de un mensaje de la persona. */
   readonly literalFields?: readonly { readonly field: string; readonly minChars?: number }[];
+  /**
+   * Campos `AAAA-MM-DD` que la persona debe haber escrito (en cualquier formato habitual:
+   * `2027-03-01`, `1 de marzo de 2027`, `01/03/2027`…). Ver `fechaFundamentada`.
+   */
+  readonly dateFields?: readonly string[];
 }
 
 /** Contexto que el executor entrega a una tool, ya verificado. */

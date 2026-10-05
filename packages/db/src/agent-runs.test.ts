@@ -274,7 +274,8 @@ describe('ciclo de vida del run', () => {
         },
       }),
     );
-    expect(run.contextManifest).toEqual({ fuentes: 1, razonamiento: 'ok', apiKey: '[redactado]' });
+    // `razonamiento` (español) también es razonamiento: se descarta como `reasoning` (QA-08).
+    expect(run.contextManifest).toEqual({ fuentes: 1, apiKey: '[redactado]' });
   });
 
   it('rechaza una huella de contexto inválida', async () => {
@@ -295,6 +296,31 @@ describe('ciclo de vida del run', () => {
   it('el latido de un run que ya no corre avisa al runtime', async () => {
     const p = valor(await publicar(await conversacion()));
     expect(razon(await latidoRun(e.consultor, p.run.id))).toBe('run_not_running');
+  });
+
+  it('QA-08: el claim guarda los args SANEADOS: sin razonamiento disfrazado ni secretos, y sin __proto__', async () => {
+    const { run } = await turnoEnEjecucion();
+    const args = JSON.parse(
+      '{"__proto__":{"polucion":true},"nota":"Authorization: Bearer sk-SECRETO-EN-VALOR-SENTINELA","ok":1}',
+    ) as Record<string, unknown>;
+    args['r\u0435asoning'] = 'COT-HOMOGLIFO-SENTINELA';
+    args['razonamiento'] = 'COT-ESPANOL-SENTINELA';
+    const claim = valor(
+      await reclamarInvocacion(e.consultor, run.id, {
+        stepIndex: 0,
+        toolName: 'campaign_get',
+        riskClass: 'read',
+        args,
+      }),
+    );
+    const [fila] = await query<{ args: string }>(
+      `SELECT args::text AS args FROM agent_tool_invocations WHERE id = $1`,
+      [claim.invocation.id],
+    );
+    expect(fila!.args).not.toContain('COT-');
+    expect(fila!.args).not.toContain('sk-SECRETO');
+    expect(fila!.args).not.toContain('polucion');
+    expect(fila!.args).toContain('"ok": 1');
   });
 
   it('fallarRun cierra el run y sus invocaciones abiertas; el código debe ser un identificador', async () => {
@@ -791,6 +817,112 @@ describe('costo por run (ai_runs)', () => {
       { task: 'conversar', agent_run_id: run.id, step_index: 0, campaign_id: e.campanaId },
       { task: 'conversar', agent_run_id: run.id, step_index: 1, campaign_id: e.campanaId },
     ]);
+  });
+
+  it('QA-06: cifras fuera de rango del proveedor se acotan y el ledger registra la anomalía, sin fallar', async () => {
+    const { run } = await turnoEnEjecucion();
+    const r = valor(
+      await registrarLlamadaDeModelo(e.consultor, run.id, {
+        stepIndex: 0,
+        tier: 'equilibrado',
+        provider: 'prueba',
+        model: 'modelo\u0000-de-prueba',
+        promptVersion: 'prompt-prueba-1',
+        inputHash: HASH,
+        outputStatus: 'ok',
+        latencyMs: 9_999_999_999,
+        promptTokens: 3_000_000_000,
+        completionTokens: -1,
+        costUsd: 123_456.5,
+        generationId: 'gen\u0000-1',
+      }),
+    );
+    const [fila] = await query<{
+      output_status: string;
+      latency_ms: number;
+      prompt_tokens: number;
+      completion_tokens: number | null;
+      cost_usd: string;
+      error: string | null;
+      model: string;
+      generation_id: string;
+      input_hash: string;
+    }>(
+      `SELECT output_status, latency_ms, prompt_tokens, completion_tokens, cost_usd::text AS cost_usd, error,
+              model, generation_id, input_hash
+         FROM ai_runs WHERE id = $1`,
+      [r.aiRunId],
+    );
+    expect(fila).toMatchObject({
+      output_status: 'ok_cifras_acotadas',
+      latency_ms: 2_147_483_647,
+      prompt_tokens: 2_147_483_647,
+      completion_tokens: null,
+      cost_usd: '9999.999999',
+      model: 'modelo-de-prueba',
+      generation_id: 'gen-1',
+      input_hash: HASH,
+    });
+    expect(fila!.error).toBe(
+      'cifras del proveedor acotadas: latency_ms, prompt_tokens, completion_tokens, cost_usd',
+    );
+    // El costo del turno sigue siendo calculable.
+    expect(valor(await costoDeRun(e.consultor, run.id)).llamadas).toBe(1);
+  });
+
+  it('una llamada con cifras normales no cambia su estado ni lleva anomalía', async () => {
+    const { run } = await turnoEnEjecucion();
+    const r = valor(
+      await registrarLlamadaDeModelo(e.consultor, run.id, {
+        stepIndex: 0,
+        tier: 'equilibrado',
+        provider: 'p',
+        model: 'm',
+        promptVersion: 'v',
+        inputHash: HASH,
+        outputStatus: 'ok',
+        promptTokens: 10,
+        costUsd: 0.5,
+      }),
+    );
+    const [fila] = await query<{ output_status: string; error: string | null }>(
+      `SELECT output_status, error FROM ai_runs WHERE id = $1`,
+      [r.aiRunId],
+    );
+    expect(fila).toEqual({ output_status: 'ok', error: null });
+  });
+
+  it('un fallo de la inserción vuelve como error con motivo, nunca como excepción', async () => {
+    const { run } = await turnoEnEjecucion();
+    // Fallo real de base de datos, solo para este modelo (las demás pruebas comparten la base).
+    await query(`
+      CREATE OR REPLACE FUNCTION test_fallo_ledger_qa06() RETURNS trigger AS $$
+      BEGIN
+        IF NEW.model = 'modelo-falla-ledger-qa06' THEN
+          RAISE EXCEPTION 'fallo inyectado: ledger';
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql`);
+    await query(
+      `CREATE TRIGGER test_fallo_ledger_qa06 BEFORE INSERT ON ai_runs
+         FOR EACH ROW EXECUTE FUNCTION test_fallo_ledger_qa06()`,
+    );
+    try {
+      const r = await registrarLlamadaDeModelo(e.consultor, run.id, {
+        stepIndex: 0,
+        tier: 'equilibrado',
+        provider: 'p',
+        model: 'modelo-falla-ledger-qa06',
+        promptVersion: 'v',
+        inputHash: HASH,
+        outputStatus: 'ok',
+      });
+      expect(codigo(r)).toBe('VALIDATION_FAILED');
+      expect(razon(r)).toBe('ledger_insert_failed');
+    } finally {
+      await query(`DROP TRIGGER IF EXISTS test_fallo_ledger_qa06 ON ai_runs`);
+    }
   });
 
   it('otra persona no registra costo en un run ajeno', async () => {

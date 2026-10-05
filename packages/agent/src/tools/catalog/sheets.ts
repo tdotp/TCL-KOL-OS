@@ -171,6 +171,12 @@ function aliasDePlan(ctx: ToolCtx, plan: uc.ImportPlanDetail['plan']): string {
 
 const ESTADOS_BLOQUEANTES: ReadonlySet<string> = new Set(['blocked', 'invalid', 'review']);
 
+/** Código estable de un pendiente (`<codigo>:<detalle de la celda>`): la parte anterior a los dos puntos, si es un identificador. */
+function codigoDePendiente(pendiente: string): string {
+  const codigo = pendiente.split(':', 1)[0]!.trim();
+  return /^[a-z][a-z0-9_]{0,59}$/.test(codigo) ? codigo : 'pending_item';
+}
+
 function lineaDeRegistro(n: number, r: uc.ImportRecordView): string {
   const cuentas = r.accounts
     .slice(0, 4)
@@ -186,6 +192,9 @@ function lineaDeRegistro(n: number, r: uc.ImportRecordView): string {
     r.displayName === undefined ? null : `nombre: ${JSON.stringify(recortarCampo(r.displayName, 80))}`,
     cuentas === '' ? null : `cuentas: ${JSON.stringify(cuentas)}`,
     productos === '' ? null : `productos: ${JSON.stringify(productos)}`,
+    r.pending.length === 0
+      ? null
+      : `pendiente: ${JSON.stringify(r.pending.slice(0, 5).map((p) => recortarCampo(p, 80)))}`,
     r.problems.length === 0
       ? null
       : `problemas: ${JSON.stringify(
@@ -276,7 +285,9 @@ export const sheetGetImportPlan = definirTool<PlanEntrada, PlanLeido>({
       identity: r.identity.outcome,
       candidateInfluencerIds: r.identity.candidates.slice(0, 5),
       productOutcomes: r.productOutcomes.slice(0, 5).map((p) => p.outcome),
-      pending: r.pending.slice(0, 5).map((p) => linea(p, 80)),
+      // Solo el código estable (`product_unresolved`…): el resto de cada pendiente puede traer texto de una
+      // celda del Sheet y va, completo, dentro del sobre no confiable.
+      pending: r.pending.slice(0, 5).map(codigoDePendiente),
       resolved: r.resolutions.length,
     }));
     const lineas = pagina.map(({ r, n }) => lineaDeRegistro(n, r));
