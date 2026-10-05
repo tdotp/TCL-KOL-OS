@@ -32,7 +32,13 @@ export interface AuditInput {
   readonly correlation?: AuditCorrelation | undefined;
 }
 
-const CLAVES_DE_CORRELACION = ['conversationId', 'messageId', 'agentRunId', 'proposedActionId'] as const;
+const CLAVES_DE_CORRELACION = [
+  'conversationId',
+  'messageId',
+  'agentRunId',
+  'toolInvocationId',
+  'proposedActionId',
+] as const;
 
 /** Solo las claves conocidas y con valor de texto; nada más llega a la base. */
 export function sanitizeCorrelation(
@@ -45,6 +51,18 @@ export function sanitizeCorrelation(
     if (typeof valor === 'string' && valor !== '') limpio[clave] = valor;
   }
   return Object.keys(limpio).length === 0 ? null : limpio;
+}
+
+/**
+ * Una invocación de tool (`toolInvocationId`, V2 · Fase 6) solo existe dentro del
+ * agente: lo que lleva esa correlación se registra con origen `chat`. (Las
+ * confirmaciones y ejecuciones humanas usan `ui` con `proposedActionId`.)
+ */
+export function validarCorrelacion(origin: AuditOrigin, correlation: AuditCorrelation | undefined): void {
+  const herramienta = sanitizeCorrelation(correlation)?.['toolInvocationId'];
+  if (herramienta !== undefined && origin !== 'chat') {
+    throw new Error('recordAudit: una correlación con toolInvocationId solo se registra con origen chat.');
+  }
 }
 
 /** Origen efectivo de un evento, validando que sea coherente con el actor. */
@@ -104,6 +122,7 @@ export async function recordAudit(client: pg.PoolClient, input: AuditInput): Pro
   }
   const actorId = input.actor === 'system' ? null : input.actor.id;
   const origin = resolveOrigin(input.actor, input.origin);
+  validarCorrelacion(origin, input.correlation);
   const correlation = sanitizeCorrelation(input.correlation);
 
   await client.query(

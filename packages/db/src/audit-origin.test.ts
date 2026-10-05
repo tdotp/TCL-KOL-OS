@@ -91,6 +91,65 @@ describe('origen registrado en eventos nuevos', () => {
   });
 });
 
+describe('toolInvocationId en la correlación (V2 · Fase 6)', () => {
+  it('se guarda con origen chat junto al resto de la cadena', async () => {
+    await transaction(async (client) => {
+      await recordAudit(client, {
+        actor: admin,
+        action: 'test.chat_herramienta',
+        entityType: 'source_document',
+        entityId: fuenteId,
+        origin: 'chat',
+        correlation: {
+          conversationId: 'conv-2',
+          messageId: 'msg-3',
+          agentRunId: 'run-4',
+          toolInvocationId: 'tool-5',
+        },
+      });
+    });
+    const evento = await ultimoEvento(fuenteId, 'test.chat_herramienta');
+    expect(evento.origin).toBe('chat');
+    expect(evento.correlation).toEqual({
+      conversationId: 'conv-2',
+      messageId: 'msg-3',
+      agentRunId: 'run-4',
+      toolInvocationId: 'tool-5',
+    });
+  });
+
+  it('una invocación de tool solo existe en el chat: con origen ui o system se rechaza', async () => {
+    await expect(
+      transaction((client) =>
+        recordAudit(client, {
+          actor: admin,
+          action: 'test.herramienta_ui',
+          entityType: 'source_document',
+          entityId: fuenteId,
+          correlation: { toolInvocationId: 'tool-1' },
+        }),
+      ),
+    ).rejects.toThrow(/toolInvocationId solo se registra con origen chat/);
+    await expect(
+      transaction((client) =>
+        recordAudit(client, {
+          actor: 'system',
+          organizationId: admin.organizationId,
+          action: 'test.herramienta_system',
+          entityType: 'source_document',
+          entityId: fuenteId,
+          correlation: { toolInvocationId: 'tool-1' },
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(
+      await query(`SELECT 1 FROM audit_events WHERE entity_id = $1 AND action LIKE 'test.herramienta_%'`, [
+        fuenteId,
+      ]),
+    ).toHaveLength(0);
+  });
+});
+
 describe('coherencia entre actor y origen', () => {
   it('una persona no puede quedar registrada como system, ni el sistema como ui/chat', () => {
     expect(() => resolveOrigin(admin, 'system')).toThrow();
@@ -107,6 +166,7 @@ describe('coherencia entre actor y origen', () => {
     expect(sanitizeCorrelation({ messageId: 'm', extra: 'x', conversationId: 5 } as never)).toEqual({
       messageId: 'm',
     });
+    expect(sanitizeCorrelation({ toolInvocationId: 't', agentRunId: '' })).toEqual({ toolInvocationId: 't' });
   });
 
   it('la base rechaza un origen inválido', async () => {

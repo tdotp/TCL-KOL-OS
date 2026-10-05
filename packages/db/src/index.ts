@@ -28,4 +28,60 @@ export * from './influencers.ts';
 export * from './campaign-influencers.ts';
 export * from './source-sync.ts';
 export * from './influencer-import.ts';
+export {
+  crearConversacion,
+  obtenerConversacion,
+  listarConversaciones,
+  archivarConversacion,
+} from './chat-conversations.ts';
+export type { CrearConversacionInput, ListarConversacionesOpciones } from './chat-conversations.ts';
+export { publicarMensaje, listarMensajes, obtenerMensaje } from './chat-messages.ts';
+export type { PublicarMensajeInput, MensajePublicado, ListarMensajesOpciones } from './chat-messages.ts';
+export {
+  obtenerRun,
+  listarRunsDeConversacion,
+  iniciarRun,
+  latidoRun,
+  cancelarRun,
+  confirmarCancelacionDeRun,
+  fallarRun,
+  completarRun,
+  reintentarRun,
+  abandonarRunsCaducados,
+  registrarLlamadaDeModelo,
+  costoDeRun,
+} from './agent-runs.ts';
+export type {
+  IniciarRunInput,
+  LatidoDeRun,
+  CancelacionDeRun,
+  FallarRunInput,
+  CitaDeRespuesta,
+  CompletarRunInput,
+  RunCompletado,
+  LlamadaDeModelo,
+  CostoDeRun,
+  OpcionesDeBarrido,
+} from './agent-runs.ts';
+export {
+  reclamarInvocacion,
+  cerrarInvocacion,
+  listarInvocacionesDeRun,
+  obtenerInvocacion,
+} from './agent-tool-invocations.ts';
+export type {
+  ReclamarInvocacionInput,
+  InvocacionReclamada,
+  CerrarInvocacionInput,
+} from './agent-tool-invocations.ts';
+export { trazaDeConversacion, trazaDeRun, trazaDeInvocacion, trazaDeAccionPropuesta } from './chat-trace.ts';
+export type {
+  TrazaDeConversacion,
+  TrazaDeTurno,
+  TrazaDeRun,
+  TrazaDeInvocacion,
+  TrazaCompletaDeInvocacion,
+  EfectoDeAuditoria,
+  OpcionesDeTraza,
+} from './chat-trace.ts';
 export { migrate } from './migrate.ts';

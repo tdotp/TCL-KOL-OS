@@ -24,7 +24,9 @@ export type AITask =
   | 'redactar_brief'
   | 'buscar_evidencia'
   | 'resolver_ambiguedad'
-  | 'generar_embedding';
+  | 'generar_embedding'
+  // V2 · Fase 6 (D16): turno conversacional del agente de Cuenta.
+  | 'conversar';
 
 export interface AITaskSpec {
   readonly task: AITask;
@@ -102,6 +104,20 @@ const CATALOGO: Readonly<Record<AITask, AITaskSpec>> = {
     control: 'No aplica: no produce texto para revisar.',
     salidaEstructurada: false,
     generativa: false,
+  },
+  conversar: {
+    task: 'conversar',
+    // V2 · Fase 6 (D16): el turno del agente de Cuenta. Nivel `equilibrado` (el de
+    // `resolver_ambiguedad`): decide qué tool usar y redacta la respuesta, pero no
+    // necesita el nivel `avanzado`. Qué modelo concreto responde a este nivel es
+    // configuración (`AI_MODEL_*`); aquí solo hay tarea y nivel.
+    tier: 'equilibrado',
+    control:
+      'El agente propone; nunca aprueba, confirma ni ejecuta una acción crítica. Toda escritura ' +
+      'es un caso de uso con el permiso de la persona y queda auditada con origen chat.',
+    // La salida es texto conversacional + llamadas a tools validadas por esquema.
+    salidaEstructurada: false,
+    generativa: true,
   },
 };
 

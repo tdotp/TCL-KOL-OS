@@ -323,3 +323,58 @@ describe('authorizeInternalResource (recursos internos sin visibilidad hacia TCL
     expect(authorizeInternalResource(inactivo, 'influencer:read', 'org-smartpr').ok).toBe(false);
   });
 });
+
+// ─────────────────────────── Chat del agente (V2 · Fase 6) ─────────────────────
+
+describe('chat del agente de Cuenta (D4)', () => {
+  const ACCIONES = ['chat:read', 'chat:write'] as const;
+
+  it('Cuenta (admin, director, consultor) lee y escribe en el chat', () => {
+    for (const rol of ['admin', 'director', 'consultor'] as const) {
+      for (const accion of ACCIONES) expect(roleCan(rol, accion), `${rol} ${accion}`).toBe(true);
+    }
+  });
+
+  it('operativo, analista, legal y cliente no reciben ninguna capacidad de chat', () => {
+    for (const rol of ['operativo', 'analista', 'legal', 'cliente'] as const) {
+      for (const accion of ACCIONES) expect(roleCan(rol, accion), `${rol} ${accion}`).toBe(false);
+    }
+  });
+
+  it('no hay capacidades de chat más amplias (sin chat:read_all ni permisos de tools)', () => {
+    const todas = ROLES.flatMap((rol) => [...actionsFor(rol)]) as string[];
+    expect(
+      [
+        ...new Set(
+          todas.filter((a) => a.startsWith('chat') || a.startsWith('tool') || a.startsWith('agent')),
+        ),
+      ].sort(),
+    ).toEqual(['chat:read', 'chat:write']);
+  });
+
+  it('el chat es interno: un rol con la capacidad en otra organización recibe RESOURCE_NOT_FOUND', () => {
+    const r = authorizeInternalResource(user('consultor'), 'chat:read', 'org-otra');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe('RESOURCE_NOT_FOUND');
+    expect(authorizeInternalResource(user('consultor'), 'chat:write', 'org-smartpr').ok).toBe(true);
+    const sin = authorizeInternalResource(user('operativo'), 'chat:read', 'org-smartpr');
+    expect(sin.ok).toBe(false);
+    if (!sin.ok) expect(sin.error.code).toBe('FORBIDDEN_ROLE');
+  });
+
+  it('la matriz exacta de los demás roles no cambió (operativo y cliente conservan su lista)', () => {
+    expect([...actionsFor('operativo')].sort()).toEqual([
+      'brief:read',
+      'campaign:read',
+      'campaign_influencer:read',
+      'influencer:read',
+      'source:read',
+    ]);
+    expect([...actionsFor('cliente')].sort()).toEqual([
+      'brief:export',
+      'brief:read',
+      'campaign:read',
+      'source:read_shared',
+    ]);
+  });
+});

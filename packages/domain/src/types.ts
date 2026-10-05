@@ -300,12 +300,18 @@ export const AUDIT_ORIGINS: readonly AuditOrigin[] = ['ui', 'chat', 'system'] as
 
 /**
  * Correlación opcional de un evento con el contexto que lo originó. Es
- * deliberadamente genérica (sin FK): conversación, mensaje y ejecución del
- * agente todavía no existen como entidades.
+ * deliberadamente genérica (sin FK, D5): una cadena usuario → conversación →
+ * mensaje → run → invocación de tool → efecto se reconstruye uniendo por estos
+ * ids (índices de expresión de la migración 021), no por claves foráneas.
+ *
+ * `toolInvocationId` (V2 · Fase 6) es `agent_tool_invocations.id`: distingue dos
+ * llamadas del mismo run al mismo caso de uso, y solo tiene sentido con origen
+ * `chat`.
  */
 export interface AuditCorrelation {
   readonly conversationId?: string | undefined;
   readonly messageId?: string | undefined;
   readonly agentRunId?: string | undefined;
+  readonly toolInvocationId?: string | undefined;
   readonly proposedActionId?: string | undefined;
 }

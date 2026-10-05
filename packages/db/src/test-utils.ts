@@ -42,6 +42,17 @@ export async function eliminarCampanaDePrueba(idOids: string | readonly string[]
     // `source_documents` se borra, ya no hay ninguna `evidence` que lo
     // referencie.
     for (const id of ids) {
+      // V2 · Fase 6: el chat cuelga (RESTRICT) de la campaña, de sus fuentes y de sus
+      // acciones propuestas. Orden: citas → adjuntos → invocaciones → mensajes del
+      // asistente (apuntan al run) → runs (apuntan al mensaje de usuario) → mensajes →
+      // conversaciones. `ai_runs.agent_run_id` es ON DELETE SET NULL.
+      await client.query(`DELETE FROM chat_message_references WHERE campaign_id = $1`, [id]);
+      await client.query(`DELETE FROM chat_message_attachments WHERE campaign_id = $1`, [id]);
+      await client.query(`DELETE FROM agent_tool_invocations WHERE campaign_id = $1`, [id]);
+      await client.query(`DELETE FROM chat_messages WHERE campaign_id = $1 AND role = 'assistant'`, [id]);
+      await client.query(`DELETE FROM agent_runs WHERE campaign_id = $1`, [id]);
+      await client.query(`DELETE FROM chat_messages WHERE campaign_id = $1`, [id]);
+      await client.query(`DELETE FROM chat_conversations WHERE campaign_id = $1`, [id]);
       // V2 · Fase 5: la importación de influencers cuelga (RESTRICT) de la
       // participación, la fuente y el snapshot: se limpia primero, hechos
       // históricos incluidos, con el bypass restringido a bases `_test`.
@@ -115,4 +126,149 @@ export async function asegurarUsuarioDePrueba(
     role: fila!.role,
     status: 'activo',
   };
+}
+
+// ─────────────────────────── Escenario del chat (V2 · Fase 6) ──────────────────
+
+/** Configuración de run válida para las pruebas del chat. */
+export const CONFIG_DE_RUN_DE_PRUEBA = {
+  provider: 'prueba',
+  model: 'modelo-de-prueba',
+  tier: 'equilibrado',
+  promptVersion: 'prompt-prueba-1',
+  contextVersion: 'contexto-prueba-1',
+} as const;
+
+export interface EscenarioDeChat {
+  readonly admin: User;
+  readonly director: User;
+  readonly consultor: User;
+  readonly operativo: User;
+  readonly analista: User;
+  readonly legal: User;
+  /** Usuario TCL (otra organización: la del cliente). */
+  readonly cliente: User;
+  /** Admin de otra agencia (otra organización). */
+  readonly ajeno: User;
+  /** Campaña de la agencia (activa). */
+  readonly campanaId: string;
+  /** Segunda campaña de la misma agencia (para probar el alcance por campaña). */
+  readonly otraCampanaId: string;
+  /** Campaña de la otra agencia. */
+  readonly campanaAjenaId: string;
+  /** Todas las campañas creadas, para limpiar. */
+  readonly campanas: string[];
+  readonly sufijo: string;
+}
+
+/**
+ * Crea (o reutiliza) los usuarios de prueba de cada rol y tres campañas
+ * desechables: dos de la agencia y una de otra agencia. Quien lo usa limpia con
+ * `eliminarCampanaDePrueba(escenario.campanas)` en su `afterAll`.
+ */
+export async function crearEscenarioDeChat(nombre: string): Promise<EscenarioDeChat> {
+  const sufijo = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const buscar = async (email: string): Promise<User> => {
+    const [fila] = await query<{ id: string; organization_id: string; role: Role; name: string }>(
+      `SELECT id, organization_id, role, name FROM users WHERE email = $1`,
+      [email],
+    );
+    if (fila === undefined) throw new Error(`Falta el usuario sembrado ${email}: ejecute el seed.`);
+    return {
+      id: fila.id,
+      email,
+      name: fila.name,
+      organizationId: fila.organization_id,
+      role: fila.role,
+      status: 'activo',
+    };
+  };
+  const admin = await buscar('gerardo@smartpr.co');
+  const director = await buscar('director@smartpr.co');
+  const consultor = await buscar('consultor@smartpr.co');
+  const cliente = await buscar('marena@tcl.com');
+  const ajeno = await buscar('ajeno@otraagencia.co');
+  const operativo = await asegurarUsuarioDePrueba(
+    'operativo@smartpr.co',
+    'Usuario Operativo',
+    'operativo',
+    admin.organizationId,
+  );
+  const analista = await asegurarUsuarioDePrueba(
+    'analista-f3@smartpr.co',
+    'Analista de pruebas',
+    'analista',
+    admin.organizationId,
+  );
+  const legal = await asegurarUsuarioDePrueba(
+    'legal-f3@smartpr.co',
+    'Legal de pruebas',
+    'legal',
+    admin.organizationId,
+  );
+
+  const campanas: string[] = [];
+  const nueva = async (dueno: User, etiqueta: string): Promise<string> => {
+    const [c] = await query<{ id: string }>(
+      `INSERT INTO campaigns (organization_id, name, owner_id, created_by)
+       VALUES ($1, $2, $3, $3) RETURNING id`,
+      [dueno.organizationId, `${nombre} · ${etiqueta} · ${sufijo}`, dueno.id],
+    );
+    campanas.push(c!.id);
+    return c!.id;
+  };
+  const campanaId = await nueva(admin, 'A');
+  const otraCampanaId = await nueva(admin, 'B');
+  const campanaAjenaId = await nueva(ajeno, 'ajena');
+  return {
+    admin,
+    director,
+    consultor,
+    operativo,
+    analista,
+    legal,
+    cliente,
+    ajeno,
+    campanaId,
+    otraCampanaId,
+    campanaAjenaId,
+    campanas,
+    sufijo,
+  };
+}
+
+/** Fuente-archivo mínima (procesada) en una campaña. Solo para pruebas. */
+export async function crearFuenteDePrueba(
+  campaignId: string,
+  dueno: User,
+  etiqueta: string,
+): Promise<string> {
+  const [f] = await query<{ id: string }>(
+    `INSERT INTO source_documents
+       (campaign_id, organization_id, type, filename, file_id, mime_type, size_bytes, hash, status, created_by)
+     VALUES ($1, $2, 'otro', $3, $4, 'text/markdown', 10, $5, 'procesado', $6) RETURNING id`,
+    [
+      campaignId,
+      dueno.organizationId,
+      `${etiqueta}.md`,
+      `test/${etiqueta}.md`,
+      `hash-${etiqueta}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      dueno.id,
+    ],
+  );
+  return f!.id;
+}
+
+/** Fragmento de una fuente-archivo (localizador derivado de la página). Solo para pruebas. */
+export async function crearFragmentoDePrueba(
+  sourceId: string,
+  ordinal: number,
+  texto: string,
+  pagina = 1,
+): Promise<string> {
+  const [f] = await query<{ id: string }>(
+    `INSERT INTO source_fragments (source_id, ordinal, page, text) VALUES ($1, $2, $3, $4) RETURNING id`,
+    [sourceId, ordinal, pagina, texto],
+  );
+  return f!.id;
 }

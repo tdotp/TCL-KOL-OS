@@ -59,6 +59,12 @@ export type Action =
   | 'comment:client_visible'
   | 'audit:read'
   | 'airun:read'
+  // V2 · Fase 6 (D4): el chat del agente es de Cuenta. `chat:read` lista y lee las
+  // conversaciones PROPIAS (owner-scoped); `chat:write` las crea/archiva, publica
+  // mensajes y cancela/reintenta runs. Las tools del agente NO tienen permisos de
+  // chat propios: cada caso de uso exige la capacidad de la persona.
+  | 'chat:read'
+  | 'chat:write'
   | 'admin:users'
   | 'admin:integrations'
   | 'admin:ai_flag';
@@ -97,6 +103,8 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'comment:client_visible',
     'audit:read',
     'airun:read',
+    'chat:read',
+    'chat:write',
     'admin:users',
     'admin:integrations',
     'admin:ai_flag',
@@ -134,6 +142,8 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'comment:client_visible',
     'audit:read',
     'airun:read',
+    'chat:read',
+    'chat:write',
   ],
   consultor: [
     'campaign:create',
@@ -165,6 +175,8 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'glossary:propose',
     'comment:internal',
     'comment:client_visible',
+    'chat:read',
+    'chat:write',
   ],
   analista: [
     'campaign:read',

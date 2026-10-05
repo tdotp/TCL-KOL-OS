@@ -16,8 +16,6 @@
 
 import type pg from 'pg';
 import {
-  type AuditCorrelation,
-  type AuditOrigin,
   type Influencer,
   type InfluencerAccount,
   type InfluencerWithAccounts,
@@ -32,51 +30,21 @@ import {
   ok,
 } from '@tcl-kol-os/domain';
 import { assertCapability } from './authz.ts';
-import { type AuditInput, recordAudit, resolveOrigin } from './audit.ts';
+import { recordAudit } from './audit.ts';
+import { type ContextoDeAuditoria, auditoriaDe, exigirPersona } from './audit-context.ts';
 import { getPool } from './client.ts';
 import { Abortar, transaccionConResultado } from './tx-result.ts';
 
 // ─────────────────────────── Compartido con campaign-influencers ───────────────
 
-/** Canal y correlación de la acción (V2 · Fase 1C). Por defecto: `ui`. */
-export interface ContextoDeAuditoria {
-  readonly origin?: AuditOrigin | undefined;
-  readonly correlation?: AuditCorrelation | undefined;
-}
+// `ContextoDeAuditoria`, `exigirPersona` y `auditoriaDe` viven en `audit-context.ts`
+// (Fase 6); se reexportan aquí para no romper las importaciones existentes.
+export { type ContextoDeAuditoria, auditoriaDe, exigirPersona } from './audit-context.ts';
 
 export const NO_ENCONTRADO = {
   code: 'RESOURCE_NOT_FOUND',
   message: 'El recurso no existe o no está disponible.',
 } as const;
-
-/**
- * Solo una persona muta. Un `'system'` (o cualquier valor que no sea un
- * usuario) que llegue por el borde de tipos se rechaza en ejecución.
- */
-export function exigirPersona(actor: unknown, contexto: ContextoDeAuditoria | undefined): Result<User> {
-  if (typeof actor !== 'object' || actor === null) {
-    return err({
-      code: 'FORBIDDEN_ROLE',
-      message: 'Esta operación la ejecuta una persona autorizada, no el sistema.',
-    });
-  }
-  const persona = actor as User;
-  try {
-    resolveOrigin(persona, contexto?.origin);
-  } catch (error) {
-    return err({ code: 'FORBIDDEN_ROLE', message: (error as Error).message });
-  }
-  return ok(persona);
-}
-
-/** Campos comunes de auditoría de una persona con su contexto. */
-export function auditoriaDe(
-  actor: User,
-  contexto: ContextoDeAuditoria | undefined,
-  evento: Pick<AuditInput, 'action' | 'entityType' | 'entityId' | 'metadata'>,
-): AuditInput {
-  return { actor, origin: contexto?.origin, correlation: contexto?.correlation, ...evento };
-}
 
 // ─────────────────────────── Filas y mapeo ─────────────────────────────────────
 
