@@ -342,13 +342,33 @@ export async function obtenerCampaignInfluencer(
 export interface ListarParticipantesOpciones {
   /** Por defecto solo los activos; `true` incluye los retirados (historia). */
   readonly incluirRetirados?: boolean | undefined;
+  /**
+   * Paginación opcional (V2 · Fase 6): sin `limite` se devuelven todos, como
+   * siempre. Con `limite` se acota (1–500) y `desde` es el desplazamiento.
+   */
+  readonly limite?: number | undefined;
+  readonly desde?: number | undefined;
 }
 
-export async function listarInfluencersDeCampana(
+/** Tope duro de una página de participantes. */
+const LIMITE_MAXIMO_PARTICIPANTES = 500;
+
+/** Una página de participantes con el total real (aditivo, V2 · Fase 6). */
+export interface PaginaDeParticipantes {
+  readonly items: CampaignInfluencerDetail[];
+  /** Total que cumple el filtro (con o sin retirados), independiente de la página. */
+  readonly total: number;
+  readonly activos: number;
+  readonly retirados: number;
+  readonly limite: number | undefined;
+  readonly desde: number;
+}
+
+async function paginaDeParticipantes(
   actor: User,
   campaignId: string,
-  opciones: ListarParticipantesOpciones = {},
-): Promise<Result<CampaignInfluencerDetail[]>> {
+  opciones: ListarParticipantesOpciones,
+): Promise<Result<PaginaDeParticipantes>> {
   const { rows: campanas } = await getPool().query<{ organization_id: string }>(
     `SELECT organization_id FROM campaigns WHERE id = $1`,
     [campaignId],
@@ -357,13 +377,60 @@ export async function listarInfluencersDeCampana(
   const permitido = autorizarLectura(actor, campanas[0].organization_id);
   if (!permitido.ok) return permitido;
 
-  const { rows } = await getPool().query<CampaignInfluencerRow>(
-    `${SELECT_PARTICIPACION}
-      WHERE campaign_id = $1 ${opciones.incluirRetirados === true ? '' : `AND status = 'activo'`}
-      ORDER BY created_at, id`,
+  const incluirRetirados = opciones.incluirRetirados === true;
+  const limite =
+    opciones.limite === undefined
+      ? undefined
+      : Math.min(Math.max(Math.trunc(opciones.limite), 1), LIMITE_MAXIMO_PARTICIPANTES);
+  const desde = Math.max(Math.trunc(opciones.desde ?? 0), 0);
+
+  const { rows: conteos } = await getPool().query<{ activos: number; retirados: number }>(
+    `SELECT count(*) FILTER (WHERE status = 'activo')::int AS activos,
+            count(*) FILTER (WHERE status = 'retirado')::int AS retirados
+       FROM campaign_influencers WHERE campaign_id = $1`,
     [campaignId],
   );
-  return ok(await detallesDe(getPool(), rows));
+  const activos = conteos[0]?.activos ?? 0;
+  const retirados = conteos[0]?.retirados ?? 0;
+
+  const { rows } = await getPool().query<CampaignInfluencerRow>(
+    `${SELECT_PARTICIPACION}
+      WHERE campaign_id = $1 ${incluirRetirados ? '' : `AND status = 'activo'`}
+      ORDER BY created_at, id
+      ${limite === undefined ? '' : 'LIMIT $2 OFFSET $3'}`,
+    limite === undefined ? [campaignId] : [campaignId, limite, desde],
+  );
+  return ok({
+    items: await detallesDe(getPool(), rows),
+    total: incluirRetirados ? activos + retirados : activos,
+    activos,
+    retirados,
+    limite,
+    desde,
+  });
+}
+
+export async function listarInfluencersDeCampana(
+  actor: User,
+  campaignId: string,
+  opciones: ListarParticipantesOpciones = {},
+): Promise<Result<CampaignInfluencerDetail[]>> {
+  const pagina = await paginaDeParticipantes(actor, campaignId, opciones);
+  if (!pagina.ok) return pagina;
+  return ok(pagina.value.items);
+}
+
+/**
+ * Misma lectura y mismo alcance que `listarInfluencersDeCampana`, pero devuelve
+ * además el conteo total (activos/retirados): lo que necesita quien solo puede
+ * mostrar una página y debe decir cuántos quedaron fuera (V2 · Fase 6).
+ */
+export async function listarInfluencersDeCampanaConConteo(
+  actor: User,
+  campaignId: string,
+  opciones: ListarParticipantesOpciones = {},
+): Promise<Result<PaginaDeParticipantes>> {
+  return paginaDeParticipantes(actor, campaignId, opciones);
 }
 
 async function detallesDe(

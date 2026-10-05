@@ -39,6 +39,8 @@ export interface EvidenceHit {
   readonly locator: SourceLocator | undefined;
   /** 0 = idéntico, 2 = opuesto. Distancia coseno, tal como la da pgvector. */
   readonly distancia: number;
+  /** Snapshot del que sale el fragmento (V2 · Fase 6); `null` en fuentes-archivo. */
+  readonly snapshotId: string | null;
 }
 
 export interface BusquedaOpciones {
@@ -81,6 +83,7 @@ interface Fila {
   linea: number | null;
   locator: unknown;
   distancia: string;
+  snapshot_id: string | null;
 }
 
 export async function buscarEvidencia(opciones: BusquedaOpciones): Promise<EvidenceHit[]> {
@@ -107,7 +110,7 @@ export async function buscarEvidencia(opciones: BusquedaOpciones): Promise<Evide
             s.filename,
             s.type::text    AS source_type,
             f.text,
-            f.page, f.slide, f.section, f.linea, f.locator,
+            f.page, f.slide, f.section, f.linea, f.locator, f.snapshot_id,
             (f.embedding <=> $3::vector) AS distancia
        FROM source_fragments f
        JOIN source_documents s ON s.id = f.source_id
@@ -136,6 +139,7 @@ export async function buscarEvidencia(opciones: BusquedaOpciones): Promise<Evide
     linea: f.linea,
     locator: localizadorDeFila(f),
     distancia: Number(f.distancia),
+    snapshotId: f.snapshot_id,
   }));
 }
 
@@ -200,6 +204,8 @@ export interface TextoHit {
   readonly filename: string;
   readonly text: string;
   readonly locator: SourceLocator | undefined;
+  /** Snapshot del que sale el fragmento (V2 · Fase 6); `null` en fuentes-archivo. */
+  readonly snapshotId: string | null;
 }
 
 /** Escapa `%`, `_` y `\` para que el texto buscado se compare literalmente. */
@@ -232,7 +238,7 @@ export async function buscarTextoEnFuentes(
   const limite = Math.min(Math.max(Math.trunc(opciones.limite ?? 20), 1), LIMITE_MAXIMO);
   const filas = await query<Fila & { text: string }>(
     `SELECT f.id AS fragment_id, s.id AS source_id, s.filename, s.type::text AS source_type, f.text,
-            f.page, f.slide, f.section, f.linea, f.locator, '0' AS distancia
+            f.page, f.slide, f.section, f.linea, f.locator, f.snapshot_id, '0' AS distancia
        FROM source_fragments f
        JOIN source_documents s ON s.id = f.source_id
       WHERE s.organization_id = $1
@@ -259,6 +265,7 @@ export async function buscarTextoEnFuentes(
       filename: f.filename,
       text: f.text,
       locator: localizadorDeFila(f),
+      snapshotId: f.snapshot_id,
     })),
   );
 }

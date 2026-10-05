@@ -20,6 +20,7 @@ import {
   asociarProductoAInfluencer,
   desasociarProducto,
   listarInfluencersDeCampana,
+  listarInfluencersDeCampanaConConteo,
   obtenerCampaignInfluencer,
   reactivarInfluencerEnCampana,
   retirarInfluencerDeCampana,
@@ -718,5 +719,53 @@ describe('limpieza de datos de prueba', () => {
     ).toHaveLength(0);
     // El influencer (identidad) sigue existiendo.
     expect(await query(`SELECT 1 FROM influencers WHERE id = $1`, [influencerId])).toHaveLength(1);
+  });
+});
+
+describe('listarInfluencersDeCampanaConConteo · paginación aditiva (V2 · Fase 6)', () => {
+  it('sin límite devuelve todo (igual que listarInfluencersDeCampana); con límite pagina y cuenta el total', async () => {
+    const c = await crearCampana(admin, 'F6 Paginación', ['P80']);
+    const creados: string[] = [];
+    for (let i = 0; i < 5; i++) creados.push(await nuevoInfluencer(admin, `Paginado ${i}`));
+    const participaciones: string[] = [];
+    for (const id of creados) {
+      participaciones.push(
+        valor(await asociarInfluencerACampana(admin, { campaignId: c.id, influencerId: id })).id,
+      );
+    }
+    valor(await retirarInfluencerDeCampana(admin, participaciones[4]!));
+
+    const todos = valor(await listarInfluencersDeCampana(admin, c.id));
+    expect(todos).toHaveLength(4);
+    const sinLimite = valor(await listarInfluencersDeCampanaConConteo(admin, c.id));
+    expect(sinLimite.items).toEqual(todos);
+    expect(sinLimite).toMatchObject({ total: 4, activos: 4, retirados: 1, limite: undefined, desde: 0 });
+
+    const p1 = valor(await listarInfluencersDeCampanaConConteo(admin, c.id, { limite: 3 }));
+    const p2 = valor(await listarInfluencersDeCampanaConConteo(admin, c.id, { limite: 3, desde: 3 }));
+    expect(p1.items.map((d) => d.campaignInfluencer.id)).toEqual(
+      todos.slice(0, 3).map((d) => d.campaignInfluencer.id),
+    );
+    expect(p2.items.map((d) => d.campaignInfluencer.id)).toEqual(
+      todos.slice(3).map((d) => d.campaignInfluencer.id),
+    );
+    expect(p1.total).toBe(4);
+
+    const conRetirados = valor(
+      await listarInfluencersDeCampanaConConteo(admin, c.id, { incluirRetirados: true, limite: 2 }),
+    );
+    expect(conRetirados.total).toBe(5);
+    expect(conRetirados.items).toHaveLength(2);
+
+    // Las opciones también funcionan en la lectura original, y el límite se acota.
+    expect(valor(await listarInfluencersDeCampana(admin, c.id, { limite: 1 }))).toHaveLength(1);
+    expect(valor(await listarInfluencersDeCampanaConConteo(admin, c.id, { limite: 0 })).items).toHaveLength(
+      1,
+    );
+  });
+
+  it('mismo alcance: el cliente y el usuario de otra organización no leen nada', async () => {
+    expect(codigo(await listarInfluencersDeCampanaConConteo(cliente, campanaA))).toBe('RESOURCE_NOT_FOUND');
+    expect(codigo(await listarInfluencersDeCampanaConConteo(ajeno, campanaA))).toBe('RESOURCE_NOT_FOUND');
   });
 });

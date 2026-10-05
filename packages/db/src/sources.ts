@@ -14,6 +14,7 @@ import {
   isTclVisible,
   roleCan,
   validarArchivo,
+  type ConfidentialityLevel,
   type Result,
   type SourceLocator,
   type User,
@@ -24,7 +25,7 @@ import {
 import { assertCapability } from './authz.ts';
 import { getPool, transaction } from './client.ts';
 import { recordAudit } from './audit.ts';
-import { type ContextoDeAuditoria, auditoriaDe, exigirPersona } from './influencers.ts';
+import { type ContextoDeAuditoria, auditoriaDe, exigirPersona } from './audit-context.ts';
 import { SQL_FRAGMENTO_VIGENTE_SIN_ALIAS } from './fragment-scope.ts';
 import { localizadorDeFila } from './locators.ts';
 import { guardarOriginal, rutaAbsoluta } from './storage.ts';
@@ -57,6 +58,11 @@ export interface SourceRow {
   /** Solo enlaces sincronizados: el snapshot vigente (V2 · Fase 5). */
   readonly current_snapshot_id: string | null;
   readonly status: SourceStatus;
+  /**
+   * Clasificación de la fuente (V2 · Fase 6). La necesita la política de lectura
+   * para IA (`fuenteLegibleParaIA`): una fuente `sensible` nunca llega a un modelo.
+   */
+  readonly confidentiality_level: ConfidentialityLevel;
   readonly created_at: Date;
   readonly fragmentos: number;
   readonly job_status: string | null;
@@ -76,6 +82,11 @@ export interface FragmentRow {
   readonly locator: SourceLocator | undefined;
   readonly text: string;
   readonly metadata: Record<string, unknown>;
+  /**
+   * Snapshot del que sale el fragmento (V2 · Fase 6); `null` en fuentes-archivo.
+   * Permite anclar una cita a la lectura concreta (los snapshots son inmutables).
+   */
+  readonly snapshotId: string | null;
 }
 
 /** Comprueba que la campaña pertenece a la organización del actor. */
@@ -158,7 +169,8 @@ export async function resolverAlcanceDeFuentes(
 const SELECT_SOURCES = `
   SELECT s.id, s.campaign_id, s.type, s.filename, s.origin::text AS origin, s.mime_type,
          s.size_bytes::text AS size_bytes, s.hash,
-         s.external_provider, s.external_url, s.canonical_url, s.current_snapshot_id, s.status, s.created_at,
+         s.external_provider, s.external_url, s.canonical_url, s.current_snapshot_id, s.status,
+         s.confidentiality_level::text AS confidentiality_level, s.created_at,
          (SELECT count(*)::int FROM source_fragments f
            WHERE f.source_id = s.id
              AND (f.snapshot_id IS NULL OR f.snapshot_id = s.current_snapshot_id)) AS fragmentos,
@@ -271,7 +283,7 @@ export async function getFragments(
   if (!alcance.ok) return err({ code: alcance.error.code, message: alcance.error.message });
 
   const { rows } = await getPool().query<FilaDeFragmento>(
-    `SELECT id, ordinal, page, slide, section, linea, locator, text, metadata
+    `SELECT id, ordinal, page, slide, section, linea, locator, text, metadata, snapshot_id AS "snapshotId"
        FROM source_fragments WHERE source_id = $1 AND ${SQL_FRAGMENTO_VIGENTE_SIN_ALIAS}
       ORDER BY ordinal LIMIT $2`,
     [sourceId, limite],
@@ -367,7 +379,7 @@ export async function obtenerRepresentacionNormalizada(
     [sourceId],
   );
   const { rows: fragmentos } = await getPool().query<FilaDeFragmento>(
-    `SELECT id, ordinal, page, slide, section, linea, locator, text, metadata
+    `SELECT id, ordinal, page, slide, section, linea, locator, text, metadata, snapshot_id AS "snapshotId"
        FROM source_fragments
       WHERE source_id = $1 AND ordinal >= $2 AND ${SQL_FRAGMENTO_VIGENTE_SIN_ALIAS}
       ORDER BY ordinal LIMIT $3`,
@@ -469,6 +481,12 @@ export interface UploadInput {
   readonly contenido: Uint8Array;
   readonly tipoDeclarado?: string | undefined;
   readonly type?: SourceType | undefined;
+  /**
+   * Opt-in (V2 · Fase 6, adjuntos del chat): si el mismo contenido ya está en la
+   * campaña, en vez de `SOURCE_ALREADY_EXISTS` se devuelve la fuente existente con
+   * `deduplicated: true`. Por defecto `false`: el comportamiento de siempre.
+   */
+  readonly vincularSiDuplicado?: boolean | undefined;
 }
 
 export interface UploadResultado {
@@ -476,6 +494,8 @@ export interface UploadResultado {
   readonly mimeType: string;
   readonly encolado: boolean;
   readonly aviso?: string | undefined;
+  /** `true` solo con `vincularSiDuplicado`: se vinculó la fuente existente, no se creó otra. */
+  readonly deduplicated?: boolean | undefined;
 }
 
 function maxBytes(): number {
@@ -491,7 +511,13 @@ function maxBytes(): number {
  * 25 MB tarda ~6 s en procesarse; bloquear la interfaz ese tiempo sería
  * inaceptable (criterio de la Épica E4).
  */
-export async function uploadSource(actor: User, input: UploadInput): Promise<Result<UploadResultado>> {
+export async function uploadSource(
+  actor: User,
+  input: UploadInput,
+  contexto?: ContextoDeAuditoria,
+): Promise<Result<UploadResultado>> {
+  const persona = exigirPersona(actor, contexto);
+  if (!persona.ok) return persona;
   const permitido = assertCapability(actor, 'source:upload');
   if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
 
@@ -526,6 +552,9 @@ export async function uploadSource(actor: User, input: UploadInput): Promise<Res
     [input.campaignId, almacenado.hash],
   );
   const duplicado = existentes[0];
+  if (duplicado !== undefined && input.vincularSiDuplicado === true) {
+    return ok({ id: duplicado.id, mimeType, encolado: false, deduplicated: true });
+  }
   if (duplicado !== undefined) {
     return err({
       code: 'SOURCE_ALREADY_EXISTS',
@@ -566,19 +595,21 @@ export async function uploadSource(actor: User, input: UploadInput): Promise<Res
         await client.query(`INSERT INTO processing_jobs (source_id) VALUES ($1)`, [sourceId]);
       }
 
-      await recordAudit(client, {
-        actor,
-        action: 'source.upload',
-        entityType: 'source_document',
-        entityId: sourceId,
-        metadata: {
-          filename: input.filename,
-          mimeType,
-          sizeBytes: almacenado.sizeBytes,
-          encolado: conExtraccion,
-          hojaDeCalculo: esHojaDeCalculo(mimeType),
-        },
-      });
+      await recordAudit(
+        client,
+        auditoriaDe(actor, contexto, {
+          action: 'source.upload',
+          entityType: 'source_document',
+          entityId: sourceId,
+          metadata: {
+            filename: input.filename,
+            mimeType,
+            sizeBytes: almacenado.sizeBytes,
+            encolado: conExtraccion,
+            hojaDeCalculo: esHojaDeCalculo(mimeType),
+          },
+        }),
+      );
 
       return sourceId;
     },

@@ -312,3 +312,27 @@ describe('los resultados sirven para abrir la fuente', () => {
     expect(hits.length).toBeLessThanOrEqual(50);
   });
 });
+
+describe('snapshotId en los aciertos (aditivo, V2 · Fase 6)', () => {
+  it('los fragmentos de fuentes-archivo traen snapshotId: null', async () => {
+    const hits = await buscarEvidencia({
+      organizationId: orgPropia,
+      campaignId: campanaPropia,
+      vector: vectorConocido,
+    });
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.every((h) => h.snapshotId === null)).toBe(true);
+  });
+
+  it('la búsqueda literal también lo trae', async () => {
+    const { buscarTextoEnFuentes } = await import('./search.ts');
+    const { findUserByEmail } = await import('./users.ts');
+    const admin = (await findUserByEmail('gerardo@smartpr.co'))!;
+    const r = await buscarTextoEnFuentes(admin, { campaignId: campanaPropia, texto: 'Fragmento propio' });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.length).toBeGreaterThan(0);
+      expect(r.value.every((h) => h.snapshotId === null)).toBe(true);
+    }
+  });
+});

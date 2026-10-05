@@ -29,6 +29,25 @@ export * from './campaign-influencers.ts';
 export * from './source-sync.ts';
 export * from './influencer-import.ts';
 export {
+  ensamblarContexto,
+  derivarNonce,
+  hashDeTexto,
+  preparacionDeFuente,
+  esLegibleParaIA,
+  registrarAdjuntoDeArchivo,
+  registrarAdjuntoDeEnlace,
+} from './agent-context.ts';
+export type {
+  EntradaDeEnsamblado,
+  ContextoEnsamblado,
+  InformeDeEnsamblado,
+  SeccionDeInforme,
+  DegradacionDeContexto,
+  MensajeDeVentana,
+  Recuperacion,
+  AdjuntoRegistrado,
+} from './agent-context.ts';
+export {
   crearConversacion,
   obtenerConversacion,
   listarConversaciones,

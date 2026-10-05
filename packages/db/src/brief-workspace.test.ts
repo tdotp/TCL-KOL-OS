@@ -588,3 +588,32 @@ describe('obtenerBriefWorkspace', () => {
     expect(actual?.isCurrent).toBe(true);
   });
 });
+
+describe('obtenerBriefWorkspace · incluirActividad (aditivo, V2 · Fase 6)', () => {
+  it('por defecto igual que siempre; con `incluirActividad: false` omite la actividad y conserva el resto', async () => {
+    const campaignId = await nuevaCampanaPropia('sin-actividad');
+    await agregarProductos(campaignId, 1);
+    const creado = await crearBriefManual(admin, campaignId);
+    if (!creado.ok) throw new Error(creado.error.message);
+    const [campo] = await query<{ id: string; revision: number }>(
+      `SELECT id, revision FROM brief_fields
+        WHERE brief_version_id = $1 AND campaign_product_id IS NULL AND key = 'objetivo.negocio'`,
+      [creado.value.versionId],
+    );
+    const r = await corregirCampo(admin, creado.value.versionId, campo!.id, {
+      value: 'vender más',
+      revisionEsperada: campo!.revision,
+    });
+    expect(r.ok).toBe(true);
+
+    const completo = await obtenerBriefWorkspace(admin, campaignId);
+    const porDefecto = await obtenerBriefWorkspace(admin, campaignId, {});
+    const sinActividad = await obtenerBriefWorkspace(admin, campaignId, { incluirActividad: false });
+    if (!completo.ok || !porDefecto.ok || !sinActividad.ok) throw new Error('lectura fallida');
+
+    expect(completo.value.activity.length).toBeGreaterThan(0);
+    expect(porDefecto.value).toEqual(completo.value);
+    expect(sinActividad.value.activity).toEqual([]);
+    expect({ ...sinActividad.value, activity: [] }).toEqual({ ...completo.value, activity: [] });
+  });
+});

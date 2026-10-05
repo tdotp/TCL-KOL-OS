@@ -102,10 +102,22 @@ function siguienteResponsable(status: BriefStatus): Role | undefined {
   }
 }
 
+export interface OpcionesDeBriefWorkspace {
+  /**
+   * `false` omite la línea de actividad (auditoría genérica, comentarios y
+   * revisiones de campo): `activity` queda vacía y se ahorran 3 lecturas SIN
+   * tope. Los conteos (`progress.commentsOpen`) se conservan. Por defecto `true`
+   * (comportamiento de siempre). Lo usa el ensamblado de contexto del agente.
+   */
+  readonly incluirActividad?: boolean | undefined;
+}
+
 export async function obtenerBriefWorkspace(
   actor: User,
   campaignId: string,
+  opciones: OpcionesDeBriefWorkspace = {},
 ): Promise<Result<BriefWorkspace>> {
+  const incluirActividad = opciones.incluirActividad !== false;
   const campania = await getCampaign(actor, campaignId);
   if (!campania.ok) return err({ code: campania.error.code, message: campania.error.message });
 
@@ -130,12 +142,9 @@ export async function obtenerBriefWorkspace(
   // más rica más abajo (campos, comentarios) — nunca se filtran por
   // organización aparte: `listBriefActivity` ya solo trae lo de esta
   // campaña.
-  const eventosCrudos = await listBriefActivity(
-    getPool(),
-    campania.value.campaign.organization_id,
-    campaignId,
-    40,
-  );
+  const eventosCrudos = incluirActividad
+    ? await listBriefActivity(getPool(), campania.value.campaign.organization_id, campaignId, 40)
+    : [];
   const eventosGenericos: WorkspaceActivityItem[] = eventosCrudos
     .filter((e) => !ACCIONES_CON_FUENTE_MAS_RICA.has(e.action))
     .filter((e) => actor.role !== 'cliente' || e.entity_type !== 'field_comment')
@@ -199,12 +208,12 @@ export async function obtenerBriefWorkspace(
   if (actor.role !== 'cliente') {
     const [conteosResultado, comentariosResultado, revisionesResultado] = await Promise.all([
       contarConversacionesAbiertas(actor, ultima.id),
-      listarComentariosDeVersion(actor, ultima.id),
-      listBriefFieldRevisions(actor, ultima.id),
+      incluirActividad ? listarComentariosDeVersion(actor, ultima.id) : Promise.resolve(undefined),
+      incluirActividad ? listBriefFieldRevisions(actor, ultima.id) : Promise.resolve(undefined),
     ]);
     if (conteosResultado.ok) conteosComentarios = conteosResultado.value;
 
-    if (comentariosResultado.ok) {
+    if (comentariosResultado?.ok) {
       comentariosActividad = comentariosResultado.value.map((c) => {
         const catalogo = campoDelCatalogo(c.fieldKey);
         return {
@@ -221,7 +230,7 @@ export async function obtenerBriefWorkspace(
       });
     }
 
-    if (revisionesResultado.ok) {
+    if (revisionesResultado?.ok) {
       revisionesActividad = revisionesResultado.value.map((r) => {
         const catalogo = campoDelCatalogo(r.fieldKey);
         return {
