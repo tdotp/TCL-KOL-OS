@@ -11,15 +11,19 @@ Lo que este servicio NO hace (ADR-008 y D0-09 §3.1):
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional  # noqa: UP035 — Pydantic evalúa las anotaciones en 3.9
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
-from . import embeddings, extraction, parsers
+from . import embeddings, extraction, modelo_turno, parsers
 from .ai.router import RouterError
 from .config import ConfigError, Settings, load_settings
 
@@ -214,6 +218,67 @@ async def extraccion(peticion: ExtraccionEntrada) -> dict[str, object]:
             for c in resultado.campos
         ],
     }
+
+
+@app.post("/modelo/turno", response_model=None)
+async def modelo_de_turno(
+    request: Request,
+    transporte: modelo_turno.Transporte = Depends(modelo_turno.transporte_por_defecto),  # noqa: B008
+) -> JSONResponse:
+    """UNA llamada de modelo con tool calling (Fase 6, arquitectura D1/D8/D16).
+
+    Sin estado y sin autoridad: no ejecuta tools, no conoce actor/organización/
+    campaña, no guarda nada y no registra contenido. Recibe mensajes y tools ya
+    ensamblados por el runtime (Node) y devuelve texto final o tool calls
+    validadas. Errores tipificados con `retryable`; ver `app/modelo_turno.py`.
+
+    Se lee el cuerpo crudo (no un modelo Pydantic en la firma) para que los
+    errores de validación nunca reflejen el contenido recibido.
+    """
+    inicio = time.monotonic()
+    req: modelo_turno.TurnoEntrada | None = None
+    try:
+        if not modelo_turno.ia_activa():
+            raise modelo_turno.TurnoError("AI_DISABLED")
+        declarado = request.headers.get("content-length")
+        if declarado is not None and declarado.isdigit() and int(declarado) > modelo_turno.MAX_BYTES_CUERPO:
+            raise modelo_turno.TurnoError(
+                "REQUEST_INVALID",
+                status=413,
+                details={"limit_bytes": modelo_turno.MAX_BYTES_CUERPO},
+                message="El cuerpo de la petición excede el tamaño máximo.",
+            )
+        req = modelo_turno.parsear_entrada(await request.body())
+        # El proveedor se llama en un hilo (urllib es bloqueante); el plazo total
+        # se acota aquí aunque el socket gotee datos sin llegar a su timeout.
+        salida = await asyncio.wait_for(
+            run_in_threadpool(modelo_turno.ejecutar_turno, req, transporte),
+            timeout=req.timeout_s + modelo_turno.MARGEN_DEADLINE_S,
+        )
+    except asyncio.TimeoutError:  # noqa: UP041 — en 3.9 no es TimeoutError
+        error = modelo_turno.TurnoError("MODEL_TIMEOUT")
+        return _error_de_turno(req, error, inicio)
+    except modelo_turno.TurnoError as error:
+        return _error_de_turno(req, error, inicio)
+    except Exception as exc:  # noqa: BLE001 — frontera: nada interno sale sin tipificar
+        # Solo el tipo: el texto de la excepción podría contener contenido recibido.
+        logger.error("modelo_turno error inesperado tipo=%s", type(exc).__name__)
+        return _error_de_turno(req, modelo_turno.TurnoError("INTERNAL_ERROR"), inicio)
+
+    modelo_turno.registrar_metadatos(
+        req, resultado="ok", salida=salida, duracion_ms=int((time.monotonic() - inicio) * 1000)
+    )
+    return JSONResponse(salida)
+
+
+def _error_de_turno(
+    req: modelo_turno.TurnoEntrada | None, error: modelo_turno.TurnoError, inicio: float
+) -> JSONResponse:
+    modelo_turno.registrar_metadatos(
+        req, resultado=error.code, duracion_ms=int((time.monotonic() - inicio) * 1000)
+    )
+    cabeceras = {"Retry-After": str(error.retry_after_s)} if error.retry_after_s is not None else None
+    return JSONResponse(error.cuerpo(), status_code=error.status, headers=cabeceras)
 
 
 @app.get("/ready")

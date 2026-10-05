@@ -373,7 +373,7 @@ export async function ensamblarContexto(
           id: 'actor',
           obligatorio: true,
           texto: [
-            `Persona que escribe: userId=${actor.id}; rol=${actor.role}.`,
+            `Persona que escribe: rol=${actor.role}.`,
             `Capacidades de su rol: ${capacidadesRelevantes(actor.role).join(', ')}.`,
             `Fecha y hora del servidor: ${leidoEn}.`,
           ].join('\n'),

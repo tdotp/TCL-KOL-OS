@@ -567,7 +567,8 @@ describe('contenido del contexto de un consultor', () => {
   it('trae organización/persona, campaña, Brief, preguntas, fuentes, productos e influencers', async () => {
     const c = await ctx(consultor);
     const texto = todo(c);
-    expect(texto).toContain(`userId=${consultor.id}; rol=consultor`);
+    expect(texto).toContain('rol=consultor');
+    expect(texto).not.toContain(consultor.id);
     expect(texto).toContain('Capacidades de su rol:');
     expect(texto).not.toContain('admin:users');
     expect(todo(await ctx(admin))).not.toContain('admin:users');

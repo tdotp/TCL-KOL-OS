@@ -25,7 +25,7 @@ import json
 import re
 from typing import Any
 
-from .openrouter import Respuesta, Uso
+from .openrouter import LlamadaHerramienta, Respuesta, RespuestaHerramientas, Uso
 
 
 def _primer_fragmento(prompt: str) -> tuple[str, str] | None:
@@ -88,6 +88,48 @@ def completar(
         latencia_ms=1,
         generacion_id="fake-generacion",
         metadata={"finish_reason": "stop", "fake": True},
+    )
+
+
+#: Marcador para pedir una tool call al proveedor falso:
+#: `[[fake:tool nombre {"arg": 1}]]` en el último mensaje de usuario.
+_MARCA_TOOL = re.compile(r"\[\[fake:tool ([A-Za-z0-9_]+)(?: (\{.*?\}))?\]\]", re.DOTALL)
+
+
+def completar_con_herramientas(
+    modelo: str,
+    mensajes: list[dict[str, Any]],
+    herramientas: list[dict[str, Any]],
+    *,
+    tool_choice: str = "auto",
+    temperatura: float = 0.2,
+    max_tokens: int | None = None,
+    timeout: int = 45,
+) -> RespuestaHerramientas:
+    """Determinístico para CI: sin red ni clave.
+
+    Último mensaje `user` con `[[fake:tool nombre {json}]]` -> una tool call
+    (solo si `nombre` está declarada y `tool_choice != "none"`). Si el último
+    mensaje es un resultado de tool, o no hay marcador, responde texto fijo.
+    No refleja el contenido recibido.
+    """
+    ultimo = mensajes[-1] if mensajes else {}
+    llamadas: list[LlamadaHerramienta] = []
+    if ultimo.get("role") == "user" and tool_choice != "none":
+        declaradas = {h["function"]["name"] for h in herramientas}
+        m = _MARCA_TOOL.search(str(ultimo.get("content") or ""))
+        if m is not None and m.group(1) in declaradas:
+            llamadas.append(
+                LlamadaHerramienta(id="fake-call-1", nombre=m.group(1), argumentos=m.group(2) or "{}")
+            )
+    return RespuestaHerramientas(
+        contenido=None if llamadas else "Respuesta determinista del proveedor falso.",
+        llamadas=llamadas,
+        finish_reason="tool_calls" if llamadas else "stop",
+        modelo="fake/determinista-1",
+        uso=Uso(prompt_tokens=0, completion_tokens=0, total_tokens=0, costo_usd=0.0),
+        latencia_ms=1,
+        generacion_id="fake-generacion",
     )
 
 

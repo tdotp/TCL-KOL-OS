@@ -29,6 +29,8 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import re
+import socket
 import time
 import urllib.error
 import urllib.request
@@ -40,12 +42,48 @@ logger = logging.getLogger("ai-worker.openrouter")
 BASE_URL = "https://openrouter.ai/api/v1"
 
 
+#: Categorías estables de fallo del proveedor. Las usa `/modelo/turno` para
+#: traducirlas a su taxonomía tipificada; la extracción las ignora.
+CAT_NO_CONFIGURADO = "no_configurado"
+CAT_AUTENTICACION = "autenticacion"
+CAT_TIMEOUT = "timeout"
+CAT_LIMITE = "limite_de_tasa"
+CAT_CONTEXTO = "contexto_excedido"
+CAT_RESPUESTA = "respuesta_invalida"
+CAT_UPSTREAM = "upstream"
+
+#: Fragmentos del detalle de un 400 que indican contexto excedido.
+_PATRON_CONTEXTO = re.compile(
+    r"context[ _-]?(length|window)|maximum context|too many tokens|prompt is too long|"
+    r"exceeds? the (maximum|max)|input is too long|reduce the length",
+    re.IGNORECASE,
+)
+
+
 class AIError(RuntimeError):
     """Fallo al llamar al modelo.
 
     El mensaje llega a la interfaz, así que describe qué pasó sin exponer la
     clave, el prompt ni trazas internas (§11.6).
+
+    Los atributos son aditivos y opcionales: `AIError("texto")` sigue siendo
+    válido. Permiten clasificar el fallo sin parsear el mensaje.
     """
+
+    def __init__(
+        self,
+        mensaje: str,
+        *,
+        categoria: str = CAT_UPSTREAM,
+        status: int | None = None,
+        retryable: bool = False,
+        retry_after_s: int | None = None,
+    ) -> None:
+        super().__init__(mensaje)
+        self.categoria = categoria
+        self.status = status
+        self.retryable = retryable
+        self.retry_after_s = retry_after_s
 
 
 @dataclass(frozen=True)
@@ -70,6 +108,32 @@ class Respuesta:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class LlamadaHerramienta:
+    """Una tool call tal como la devolvió el proveedor, SIN validar.
+
+    `argumentos` es el texto JSON crudo: que sea JSON válido y un objeto lo
+    comprueba `app/modelo_turno.py`, no el adaptador.
+    """
+
+    id: str
+    nombre: str
+    argumentos: str
+
+
+@dataclass(frozen=True)
+class RespuestaHerramientas:
+    """Salida de una llamada con tool calling. Sin campos de razonamiento."""
+
+    contenido: str | None
+    llamadas: list[LlamadaHerramienta]
+    finish_reason: str | None
+    modelo: str
+    uso: Uso
+    latencia_ms: int
+    generacion_id: str | None = None
+
+
 def _clave() -> str:
     import os
 
@@ -77,7 +141,8 @@ def _clave() -> str:
     if not valor:
         raise AIError(
             "Falta la clave de OpenRouter. Defina AI_API_KEY en el archivo .env "
-            "(nunca en el repositorio)."
+            "(nunca en el repositorio).",
+            categoria=CAT_NO_CONFIGURADO,
         )
     return valor
 
@@ -128,22 +193,67 @@ def _post(ruta: str, cuerpo: dict[str, Any], timeout: int) -> dict[str, Any]:
             detalle = json.loads(exc.read().decode("utf-8")).get("error", {}).get("message", "")
 
         if exc.code == 401:
-            raise AIError("La clave de OpenRouter no es válida o expiró.") from exc
+            raise AIError(
+                "La clave de OpenRouter no es válida o expiró.",
+                categoria=CAT_AUTENTICACION,
+                status=401,
+            ) from exc
         if exc.code == 402:
-            raise AIError("La cuenta de OpenRouter no tiene saldo suficiente.") from exc
+            raise AIError(
+                "La cuenta de OpenRouter no tiene saldo suficiente.", status=402
+            ) from exc
         if exc.code == 429:
-            raise AIError("OpenRouter está limitando las peticiones. Se reintentará.") from exc
+            raise AIError(
+                "OpenRouter está limitando las peticiones. Se reintentará.",
+                categoria=CAT_LIMITE,
+                status=429,
+                retryable=True,
+                retry_after_s=_retry_after(exc),
+            ) from exc
         if exc.code >= 500:
-            raise AIError("OpenRouter no está disponible en este momento.") from exc
+            raise AIError(
+                "OpenRouter no está disponible en este momento.",
+                status=exc.code,
+                retryable=True,
+            ) from exc
+
+        if exc.code == 413 or (exc.code == 400 and _PATRON_CONTEXTO.search(detalle)):
+            raise AIError(
+                "La entrada supera el contexto máximo del modelo.",
+                categoria=CAT_CONTEXTO,
+                status=exc.code,
+            ) from exc
 
         # El detalle del proveedor puede ser útil y no contiene secretos.
-        raise AIError(f"OpenRouter rechazó la petición ({exc.code}): {detalle[:200]}") from exc
+        raise AIError(
+            f"OpenRouter rechazó la petición ({exc.code}): {detalle[:200]}", status=exc.code
+        ) from exc
 
     except urllib.error.URLError as exc:
-        raise AIError("No hay conexión con OpenRouter.") from exc
+        # Un timeout de conexión llega envuelto en URLError.
+        if isinstance(exc.reason, (TimeoutError, socket.timeout)):  # noqa: UP038, UP041
+            raise AIError(
+                f"OpenRouter no respondió en {timeout} s.", categoria=CAT_TIMEOUT, retryable=True
+            ) from exc
+        raise AIError("No hay conexión con OpenRouter.", retryable=True) from exc
 
-    except TimeoutError as exc:
-        raise AIError(f"OpenRouter no respondió en {timeout} s.") from exc
+    # En Python < 3.10 `socket.timeout` no es `TimeoutError`; el contenedor usa
+    # 3.11, pero las pruebas locales corren en 3.9.
+    except (TimeoutError, socket.timeout) as exc:  # noqa: UP041
+        raise AIError(
+            f"OpenRouter no respondió en {timeout} s.", categoria=CAT_TIMEOUT, retryable=True
+        ) from exc
+
+
+def _retry_after(exc: urllib.error.HTTPError) -> int | None:
+    """Segundos de `Retry-After` si vienen como entero; acotado a 0–300."""
+    crudo = exc.headers.get("Retry-After") if exc.headers is not None else None
+    if crudo is None:
+        return None
+    try:
+        return max(0, min(300, int(str(crudo).strip())))
+    except ValueError:
+        return None
 
 
 def _uso_de(payload: dict[str, Any]) -> Uso:
@@ -204,6 +314,93 @@ def completar(
         latencia_ms=latencia,
         generacion_id=payload.get("id"),
         metadata={"finish_reason": opciones[0].get("finish_reason")},
+    )
+
+
+def completar_con_herramientas(
+    modelo: str,
+    mensajes: list[dict[str, Any]],
+    herramientas: list[dict[str, Any]],
+    *,
+    tool_choice: str = "auto",
+    temperatura: float = 0.2,
+    max_tokens: int | None = None,
+    timeout: int = 45,
+) -> RespuestaHerramientas:
+    """UNA llamada de chat con tool calling (`/modelo/turno`, Fase 6).
+
+    Aditiva: `completar` de la extracción no cambia. No ejecuta ninguna tool ni
+    reintenta: devuelve lo que el modelo pidió y quien orquesta decide.
+
+    `message.reasoning` / `reasoning_details` nunca se leen: el razonamiento del
+    proveedor no se propaga, no se devuelve y no se registra.
+
+    `require_parameters: true` pide a OpenRouter enrutar solo a proveedores que
+    soportan `tools`; se combina con `data_collection: deny` (DEC-019).
+    """
+    cuerpo: dict[str, Any] = {
+        "model": modelo,
+        "messages": mensajes,
+        "temperature": temperatura,
+        "provider": {**_politica_de_proveedor(), "require_parameters": True},
+        "usage": {"include": True},
+    }
+    if herramientas:
+        cuerpo["tools"] = herramientas
+        cuerpo["tool_choice"] = tool_choice
+        cuerpo["parallel_tool_calls"] = False
+    if max_tokens is not None:
+        cuerpo["max_tokens"] = max_tokens
+
+    inicio = time.monotonic()
+    try:
+        payload = _post("/chat/completions", cuerpo, timeout)
+    except ValueError as exc:  # JSONDecodeError: cuerpo 200 que no es JSON
+        raise AIError(
+            "OpenRouter devolvió un cuerpo que no es JSON.", categoria=CAT_RESPUESTA, retryable=True
+        ) from exc
+    latencia = int((time.monotonic() - inicio) * 1000)
+
+    try:
+        opciones = payload.get("choices") or []
+        if not opciones:
+            raise AIError(
+                "OpenRouter devolvió una respuesta sin contenido.",
+                categoria=CAT_RESPUESTA,
+                retryable=True,
+            )
+        opcion = opciones[0]
+        mensaje = opcion.get("message") or {}
+        crudas = mensaje.get("tool_calls") or []
+        llamadas = [_llamada_de(c) for c in crudas]
+        contenido = mensaje.get("content")
+        return RespuestaHerramientas(
+            contenido=contenido if isinstance(contenido, str) else None,
+            llamadas=llamadas,
+            finish_reason=opcion.get("finish_reason"),
+            modelo=str(payload.get("model", modelo)),
+            uso=_uso_de(payload),
+            latencia_ms=latencia,
+            generacion_id=payload.get("id"),
+        )
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise AIError(
+            "OpenRouter devolvió una respuesta con estructura inesperada.",
+            categoria=CAT_RESPUESTA,
+            retryable=True,
+        ) from exc
+
+
+def _llamada_de(cruda: Any) -> LlamadaHerramienta:
+    """Normaliza una tool call del formato OpenAI sin validar su contenido."""
+    funcion = cruda.get("function") or {}
+    argumentos = funcion.get("arguments")
+    if isinstance(argumentos, (dict, list)):  # noqa: UP038 — algunos proveedores devuelven objeto
+        argumentos = json.dumps(argumentos)
+    return LlamadaHerramienta(
+        id=str(cruda.get("id") or ""),
+        nombre=str(funcion.get("name") or ""),
+        argumentos="" if argumentos is None else str(argumentos),
     )
 
 

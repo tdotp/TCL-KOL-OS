@@ -14,9 +14,27 @@ localmente.
 from __future__ import annotations
 
 import os
+from typing import Any
 
 from . import fake_provider, openrouter
-from .openrouter import Respuesta, Uso  # re-exportados por conveniencia
+from .openrouter import (  # re-exportados por conveniencia
+    LlamadaHerramienta,
+    Respuesta,
+    RespuestaHerramientas,
+    Uso,
+)
+
+__all__ = [
+    "LlamadaHerramienta",
+    "Respuesta",
+    "RespuestaHerramientas",
+    "Uso",
+    "completar",
+    "completar_con_herramientas",
+    "disponible",
+    "embeddings",
+    "nombre_proveedor",
+]
 
 
 def _usando_proveedor_falso() -> bool:
@@ -47,6 +65,43 @@ def completar(
         temperatura=temperatura,
         max_tokens=max_tokens,
         formato_json=formato_json,
+        timeout=timeout,
+    )
+
+
+def nombre_proveedor() -> str:
+    """Etiqueta honesta del adaptador activo (`fake` solo en pruebas/CI)."""
+    return "fake" if _usando_proveedor_falso() else "openrouter"
+
+
+def completar_con_herramientas(
+    modelo: str,
+    mensajes: list[dict[str, Any]],
+    herramientas: list[dict[str, Any]],
+    *,
+    tool_choice: str = "auto",
+    temperatura: float = 0.2,
+    max_tokens: int | None = None,
+    timeout: int = 45,
+) -> RespuestaHerramientas:
+    """Una llamada con tool calling. Es el transporte por defecto de `/modelo/turno`."""
+    if _usando_proveedor_falso():
+        return fake_provider.completar_con_herramientas(
+            modelo,
+            mensajes,
+            herramientas,
+            tool_choice=tool_choice,
+            temperatura=temperatura,
+            max_tokens=max_tokens,
+            timeout=timeout,
+        )
+    return openrouter.completar_con_herramientas(
+        modelo,
+        mensajes,
+        herramientas,
+        tool_choice=tool_choice,
+        temperatura=temperatura,
+        max_tokens=max_tokens,
         timeout=timeout,
     )
 

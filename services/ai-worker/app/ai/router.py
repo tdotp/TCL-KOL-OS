@@ -30,6 +30,9 @@ TAREA_A_NIVEL: dict[str, str] = {
     "buscar_evidencia": "eficiente",
     "resolver_ambiguedad": "equilibrado",  # DEC-020: avanzado no aporta hoy
     "generar_embedding": "eficiente",
+    # Fase 6 (chat de Cuenta): nivel equilibrado por catálogo, sin cambiar el
+    # modelo por defecto (DEC-019/020). El dominio TS debe espejar esta tarea.
+    "conversar": "equilibrado",
 }
 
 
