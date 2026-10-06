@@ -53,6 +53,16 @@ export type Action =
   | 'influencer:manage'
   | 'campaign_influencer:read'
   | 'campaign_influencer:manage'
+  // V2 · Fase 7: contenido. `deliverable:read` ve las piezas y su ESTADO (el
+  // Operativo lo recibe, con una proyección sin contenido); el resto es interno
+  // de Cuenta. `script:approve` solo admin/director (mismo criterio que
+  // `brief:approve_internal`, DEC-042); el consultor prepara y propone con
+  // `script:manage`. El cliente TCL no recibe nada hasta la Fase 9.
+  | 'deliverable:read'
+  | 'deliverable:manage'
+  | 'script:read'
+  | 'script:manage'
+  | 'script:approve'
   | 'glossary:propose'
   | 'glossary:approve'
   | 'comment:internal'
@@ -97,6 +107,11 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'influencer:manage',
     'campaign_influencer:read',
     'campaign_influencer:manage',
+    'deliverable:read',
+    'deliverable:manage',
+    'script:read',
+    'script:manage',
+    'script:approve',
     'glossary:propose',
     'glossary:approve',
     'comment:internal',
@@ -136,6 +151,11 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'influencer:manage',
     'campaign_influencer:read',
     'campaign_influencer:manage',
+    'deliverable:read',
+    'deliverable:manage',
+    'script:read',
+    'script:manage',
+    'script:approve',
     'glossary:propose',
     'glossary:approve',
     'comment:internal',
@@ -172,6 +192,10 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'influencer:manage',
     'campaign_influencer:read',
     'campaign_influencer:manage',
+    'deliverable:read',
+    'deliverable:manage',
+    'script:read',
+    'script:manage',
     'glossary:propose',
     'comment:internal',
     'comment:client_visible',
@@ -195,7 +219,15 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
   // añadirán —separadas de las creativas— cuando existan esas entidades.
   // Fase 3: además LEE los influencers y su participación en la campaña (con
   // los productos asignados); no gestiona la identidad ni la participación.
-  operativo: ['campaign:read', 'source:read', 'brief:read', 'influencer:read', 'campaign_influencer:read'],
+  operativo: [
+    'campaign:read',
+    'source:read',
+    'brief:read',
+    'influencer:read',
+    'campaign_influencer:read',
+    // Fase 7: ve las piezas y su estado (proyección sin contenido ni revisión).
+    'deliverable:read',
+  ],
   // El cliente TCL es de solo lectura: consulta lo que ya tiene visible y
   // descarga el entregable (DEC-012 / ADR-004). No aprueba, no pide cambios y
   // no mueve ningún estado — esas decisiones son de SmartPR (corrección del

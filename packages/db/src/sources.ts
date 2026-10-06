@@ -28,6 +28,7 @@ import { recordAudit } from './audit.ts';
 import { type ContextoDeAuditoria, auditoriaDe, exigirPersona } from './audit-context.ts';
 import { SQL_FRAGMENTO_VIGENTE_SIN_ALIAS } from './fragment-scope.ts';
 import { localizadorDeFila } from './locators.ts';
+import { sqlFuenteSinGuionNoAprobado } from './script-scope.ts';
 import { guardarOriginal, rutaAbsoluta } from './storage.ts';
 import { Abortar, transaccionConResultado } from './tx-result.ts';
 
@@ -118,6 +119,11 @@ export interface AlcanceDeFuentes {
   /** Organización dueña de las fuentes (la de la campaña, no la del actor). */
   readonly organizationId: string;
   readonly soloVisibleParaTcl: boolean;
+  /**
+   * V2 · Fase 7: no lee las fuentes ligadas a una versión de guion NO aprobada. Lo fija el rol:
+   * quien tiene `source:read` pero no `script:read` (el Operativo) y, defensivamente, TCL.
+   */
+  readonly excluirGuionesNoAprobados: boolean;
 }
 
 export async function resolverAlcanceDeFuentes(
@@ -130,7 +136,11 @@ export async function resolverAlcanceDeFuentes(
 
   if (roleCan(actor.role, 'source:read')) {
     if (!(await campanaPropia(actor, campaignId))) return err(NO_ENCONTRADO);
-    return ok({ organizationId: actor.organizationId, soloVisibleParaTcl: false });
+    return ok({
+      organizationId: actor.organizationId,
+      soloVisibleParaTcl: false,
+      excluirGuionesNoAprobados: !roleCan(actor.role, 'script:read'),
+    });
   }
 
   if (roleCan(actor.role, 'source:read_shared')) {
@@ -154,7 +164,11 @@ export async function resolverAlcanceDeFuentes(
     ) {
       return err(NO_ENCONTRADO);
     }
-    return ok({ organizationId: campana.organization_id, soloVisibleParaTcl: true });
+    return ok({
+      organizationId: campana.organization_id,
+      soloVisibleParaTcl: true,
+      excluirGuionesNoAprobados: true,
+    });
   }
 
   return err({
@@ -194,8 +208,14 @@ export async function listSources(actor: User, campaignId: string): Promise<Resu
     `${SELECT_SOURCES}
       WHERE s.campaign_id = $1 AND s.organization_id = $2
         AND ($3::boolean = false OR s.visibility IN ('tcl', 'compartida'))
+        AND ${sqlFuenteSinGuionNoAprobado('$4')}
       ORDER BY s.created_at DESC`,
-    [campaignId, alcance.value.organizationId, alcance.value.soloVisibleParaTcl],
+    [
+      campaignId,
+      alcance.value.organizationId,
+      alcance.value.soloVisibleParaTcl,
+      alcance.value.excluirGuionesNoAprobados,
+    ],
   );
 
   // El estado técnico del procesamiento (errores, reintentos) es interno.
@@ -225,7 +245,14 @@ async function autorizarLecturaDeFuente(
     campaign_id: string;
     organization_id: string;
     visibility: Visibility;
-  }>(`SELECT campaign_id, organization_id, visibility FROM source_documents WHERE id = $1`, [sourceId]);
+    guion_no_aprobado: boolean;
+  }>(
+    `SELECT campaign_id, organization_id, visibility,
+            EXISTS (SELECT 1 FROM script_versions sv WHERE sv.source_document_id = source_documents.id
+                     AND sv.status <> 'approved') AS guion_no_aprobado
+       FROM source_documents WHERE id = $1`,
+    [sourceId],
+  );
   const fuente = fuentes[0];
 
   // Sin la capacidad, el error es de rol aunque la fuente no exista (no hay
@@ -243,6 +270,8 @@ async function autorizarLecturaDeFuente(
   if (!alcance.ok) return err(NO_ENCONTRADO);
   if (fuente.organization_id !== alcance.value.organizationId) return err(NO_ENCONTRADO);
   if (alcance.value.soloVisibleParaTcl && !isTclVisible(fuente.visibility)) return err(NO_ENCONTRADO);
+  // V2 · Fase 7: un guion no aprobado no lo lee quien no revisa guiones (Operativo).
+  if (alcance.value.excluirGuionesNoAprobados && fuente.guion_no_aprobado) return err(NO_ENCONTRADO);
 
   return ok({
     campaignId: fuente.campaign_id,
@@ -455,6 +484,23 @@ export async function setSourceVisibility(
   const fuente = rows[0];
   if (!fuente) return err(NO_ENCONTRADO);
   if (fuente.visibility === visibility) return ok({ visibility });
+
+  // V2 · Fase 7: la fuente de un guion que no es la aprobada vigente no se expone a TCL. La base
+  // lo impone (trigger 023); aquí se devuelve un error accionable antes de tocarla.
+  if (visibility !== 'interna') {
+    const { rows: guiones } = await getPool().query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM script_versions WHERE source_document_id = $1 AND status <> 'approved'`,
+      [sourceId],
+    );
+    if ((guiones[0]?.n ?? 0) > 0) {
+      return err({
+        code: 'RESOURCE_CONFLICT',
+        message:
+          'Esta fuente respalda una versión de guion que no es la aprobada vigente: no se expone a TCL.',
+        details: { reason: 'bound_to_script_version' },
+      });
+    }
+  }
 
   await transaction(async (client) => {
     await client.query(`UPDATE source_documents SET visibility = $1::visibility_level WHERE id = $2`, [
@@ -747,8 +793,16 @@ export async function retrySource(actor: User, sourceId: string): Promise<Result
   const permitido = assertCapability(actor, 'source:process');
   if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
 
-  const { rows } = await getPool().query<{ id: string; filename: string; origin: SourceOrigin }>(
-    `SELECT id, filename, origin::text AS origin FROM source_documents WHERE id = $1 AND organization_id = $2`,
+  const { rows } = await getPool().query<{
+    id: string;
+    filename: string;
+    origin: SourceOrigin;
+    status: SourceStatus;
+    ligada_a_guion: boolean;
+  }>(
+    `SELECT id, filename, origin::text AS origin, status::text AS status,
+            EXISTS (SELECT 1 FROM script_versions sv WHERE sv.source_document_id = source_documents.id) AS ligada_a_guion
+       FROM source_documents WHERE id = $1 AND organization_id = $2`,
     [sourceId, actor.organizationId],
   );
   const fuente = rows[0];
@@ -761,6 +815,18 @@ export async function retrySource(actor: User, sourceId: string): Promise<Result
       code: 'RESOURCE_CONFLICT',
       message: 'Una fuente enlazada no se reprocesa: su contenido aún no se resuelve.',
       details: { reason: 'link_not_processable' },
+    });
+  }
+
+  // V2 · Fase 7: reprocesar regenera los fragmentos de los que citan la revisión y la aprobación de
+  // un guion. Una fuente ligada a una versión de guion no se reprocesa, SALVO que su procesamiento
+  // haya fallado (no hay contenido legible que proteger: es la única vía para destrabarla).
+  if (fuente.ligada_a_guion && fuente.status !== 'fallido') {
+    return err({
+      code: 'RESOURCE_CONFLICT',
+      message:
+        'Esta fuente es un guion registrado: no se reprocesa (cambiaría el contenido sobre el que se revisó). Registre una versión nueva.',
+      details: { reason: 'bound_to_script_version' },
     });
   }
 

@@ -131,3 +131,44 @@ export type {
   OpcionesDeVistaDeChat,
 } from './chat-views.ts';
 export { migrate } from './migrate.ts';
+export {
+  crearEntregable,
+  actualizarEntregable,
+  archivarEntregable,
+  reactivarEntregable,
+  obtenerEntregable,
+  listarEntregablesDeCampana,
+  bloquearEntregable,
+} from './deliverables.ts';
+export type {
+  CrearEntregableInput,
+  ActualizarEntregableInput,
+  EntregableDeEstado,
+  EntregableDeCuenta,
+  EntregableProyectado,
+  ListarEntregablesOpciones,
+  OpcionesDeLecturaDeEntregable,
+  PaginaDeEntregables,
+  VersionResumida,
+  VersionVigenteResumida,
+} from './deliverables.ts';
+export {
+  registrarVersionDeGuion,
+  listarVersionesDeEntregable,
+  obtenerVersionDeGuion,
+  obtenerVersionVigente,
+  obtenerUltimaVersion,
+  iniciarRevisionDeVersion,
+  iniciarRevisionDeVersionEnTransaccion,
+} from './script-versions.ts';
+export type {
+  RegistrarVersionDeGuionInput,
+  RegistroDeGuion,
+  CandidatoDeParticipacion,
+  CandidatoDeEntregable,
+  VersionDeGuionDetalle,
+  OpcionesDeLecturaDeVersion,
+  ListarVersionesOpciones,
+  PaginaDeVersiones,
+  RevisionIniciada,
+} from './script-versions.ts';

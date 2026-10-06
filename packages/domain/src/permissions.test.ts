@@ -198,14 +198,17 @@ describe('usuario operativo', () => {
     expect(actionsFor('operativo')).not.toEqual(actionsFor('analista'));
   });
 
-  it('solo entra y consulta: campaña, fuentes internas, brief y (Fase 3) influencers y su participación', () => {
+  it('solo entra y consulta: campaña, fuentes internas, brief, (Fase 3) influencers y participación y (Fase 7) el ESTADO de las piezas', () => {
     // Fase 3 legitima ampliar esta lista exactamente con las dos LECTURAS de
     // influencer: el Usuario Operativo trabaja sobre los influencers de la
-    // campaña. Sigue sin ninguna capacidad de escritura.
+    // campaña. Fase 7 añade UNA lectura más, `deliverable:read` (estado de cada
+    // entregable, con una proyección sin versiones intermedias, hallazgos ni
+    // comentarios). Sigue sin ninguna capacidad de escritura ni de `script:*`.
     expect([...actionsFor('operativo')].sort()).toEqual([
       'brief:read',
       'campaign:read',
       'campaign_influencer:read',
+      'deliverable:read',
       'influencer:read',
       'source:read',
     ]);
@@ -362,11 +365,12 @@ describe('chat del agente de Cuenta (D4)', () => {
     if (!sin.ok) expect(sin.error.code).toBe('FORBIDDEN_ROLE');
   });
 
-  it('la matriz exacta de los demás roles no cambió (operativo y cliente conservan su lista)', () => {
+  it('la matriz exacta de los demás roles no cambió (operativo: solo +deliverable:read de la Fase 7; el cliente conserva su lista)', () => {
     expect([...actionsFor('operativo')].sort()).toEqual([
       'brief:read',
       'campaign:read',
       'campaign_influencer:read',
+      'deliverable:read',
       'influencer:read',
       'source:read',
     ]);
@@ -376,5 +380,59 @@ describe('chat del agente de Cuenta (D4)', () => {
       'campaign:read',
       'source:read_shared',
     ]);
+  });
+});
+
+// ─────────────────────────── Contenido: entregables y guiones (V2 · Fase 7) ────
+
+describe('contenido: entregables y versiones de guion', () => {
+  const MANAGE = ['deliverable:read', 'deliverable:manage', 'script:read', 'script:manage'] as const;
+
+  it('admin y director: todo, incluida la aprobación del guion', () => {
+    for (const rol of ['admin', 'director'] as const) {
+      for (const accion of [...MANAGE, 'script:approve'] as const) {
+        expect(roleCan(rol, accion), `${rol} ${accion}`).toBe(true);
+      }
+    }
+  });
+
+  it('el consultor prepara y propone (script:manage) pero NO aprueba (script:approve)', () => {
+    for (const accion of MANAGE) expect(roleCan('consultor', accion), accion).toBe(true);
+    expect(roleCan('consultor', 'script:approve')).toBe(false);
+  });
+
+  it('el Operativo solo ve el estado de las piezas: deliverable:read y nada de script:*', () => {
+    expect(roleCan('operativo', 'deliverable:read')).toBe(true);
+    for (const accion of ['deliverable:manage', 'script:read', 'script:manage', 'script:approve'] as const) {
+      expect(roleCan('operativo', accion), accion).toBe(false);
+    }
+  });
+
+  it('cliente, analista y legal no reciben nada (TCL verá solo lo aprobado en la Fase 9, con otra capacidad)', () => {
+    for (const rol of ['cliente', 'analista', 'legal'] as const) {
+      for (const accion of [...MANAGE, 'script:approve'] as const) {
+        expect(roleCan(rol, accion), `${rol} ${accion}`).toBe(false);
+      }
+    }
+  });
+
+  it('solo existen estas cinco capacidades de contenido (sin permisos por anticipación)', () => {
+    const todas = ROLES.flatMap((rol) => [...actionsFor(rol)]) as string[];
+    expect(
+      [...new Set(todas.filter((a) => a.startsWith('deliverable:') || a.startsWith('script:')))].sort(),
+    ).toEqual(['deliverable:manage', 'deliverable:read', 'script:approve', 'script:manage', 'script:read']);
+  });
+
+  it('el contenido es interno: otra organización recibe RESOURCE_NOT_FOUND; sin capacidad, FORBIDDEN_ROLE', () => {
+    const ajeno = authorizeInternalResource(user('admin'), 'script:read', 'org-otra');
+    expect(ajeno.ok).toBe(false);
+    if (!ajeno.ok) expect(ajeno.error.code).toBe('RESOURCE_NOT_FOUND');
+    const cliente = authorizeInternalResource(user('cliente'), 'deliverable:read', 'org-smartpr');
+    expect(cliente.ok).toBe(false);
+    if (!cliente.ok) expect(cliente.error.code).toBe('RESOURCE_NOT_FOUND');
+    const operativo = authorizeInternalResource(user('operativo'), 'script:read', 'org-smartpr');
+    expect(operativo.ok).toBe(false);
+    if (!operativo.ok) expect(operativo.error.code).toBe('FORBIDDEN_ROLE');
+    expect(authorizeInternalResource(user('operativo'), 'deliverable:read', 'org-smartpr').ok).toBe(true);
   });
 });

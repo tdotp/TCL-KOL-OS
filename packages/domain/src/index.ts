@@ -29,3 +29,4 @@ export * from './influencer-import';
 export * from './agent-context';
 export * from './chat';
 export { LOCATOR_CASOS_INVALIDOS, LOCATOR_CASOS_VALIDOS } from './source-locator.fixtures';
+export * from './content';

@@ -69,6 +69,18 @@ export type DomainErrorCode =
   | 'SPREADSHEET_PARSE_FAILED'
   /** La IA está apagada (`AI_ENABLED`): el agente no admite ni continúa runs (V2 · Fase 6). */
   | 'AI_DISABLED'
+  /** No existe un Brief aprobado que haga de documento rector del análisis (V2 · Fase 7). */
+  | 'BRIEF_NOT_APPROVED'
+  /** La fuente del guion no está lista para analizarse (procesando, fallida, sin texto, restringida) (V2 · Fase 7). */
+  | 'SCRIPT_SOURCE_NOT_READY'
+  /** El guion o el Brief no caben en el presupuesto de contexto del análisis; nunca se trunca en silencio (V2 · Fase 7). */
+  | 'SCRIPT_CONTEXT_TOO_LARGE'
+  /** El análisis asistido no pudo completarse (proveedor, salida inválida). La IA nunca es requisito (V2 · Fase 7). */
+  | 'AI_ANALYSIS_FAILED'
+  /** La transición de estado de una versión de guion no es válida (V2 · Fase 7). */
+  | 'SCRIPT_INVALID_TRANSITION'
+  /** Aprobar exige una revisión CURRENT contra el Brief aprobado vigente; `details.reason`: none | stale | brief_missing (V2 · Fase 7). */
+  | 'SCRIPT_REVIEW_REQUIRED'
   /** El modelo no está disponible (proveedor caído, timeout, límite de tasa) (V2 · Fase 6). */
   | 'AGENT_MODEL_UNAVAILABLE'
   /** El modelo pidió una tool inexistente, prohibida o con argumentos inválidos (V2 · Fase 6). */

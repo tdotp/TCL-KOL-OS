@@ -20,8 +20,12 @@
  * la active quien la active.
  */
 
-import type { Role, User } from '@tcl-kol-os/domain';
+import { createHash } from 'node:crypto';
+import type { Result, Role, User } from '@tcl-kol-os/domain';
+import { asociarInfluencerACampana, asociarProductoAInfluencer } from './campaign-influencers.ts';
 import { query, transaction } from './client.ts';
+import { crearEntregable } from './deliverables.ts';
+import { crearInfluencer } from './influencers.ts';
 
 export async function eliminarCampanaDePrueba(idOids: string | readonly string[]): Promise<void> {
   const ids = Array.isArray(idOids) ? idOids : [idOids];
@@ -42,6 +46,12 @@ export async function eliminarCampanaDePrueba(idOids: string | readonly string[]
     // `source_documents` se borra, ya no hay ninguna `evidence` que lo
     // referencie.
     for (const id of ids) {
+      // V2 · Fase 7: comentarios de revisión → versiones de guion → entregables. Primero: los
+      // comentarios apuntan a los mensajes del chat, y las versiones a las fuentes y a las
+      // acciones propuestas (todo RESTRICT); el entregable cuelga de la participación.
+      await client.query(`DELETE FROM script_review_comments WHERE campaign_id = $1`, [id]);
+      await client.query(`DELETE FROM script_versions WHERE campaign_id = $1`, [id]);
+      await client.query(`DELETE FROM deliverables WHERE campaign_id = $1`, [id]);
       // V2 · Fase 6: el chat cuelga (RESTRICT) de la campaña, de sus fuentes y de sus
       // acciones propuestas. Orden: citas → adjuntos → invocaciones → mensajes del
       // asistente (apuntan al run) → runs (apuntan al mensaje de usuario) → mensajes →
@@ -271,4 +281,172 @@ export async function crearFragmentoDePrueba(
     [sourceId, ordinal, pagina, texto],
   );
   return f!.id;
+}
+
+// ─────────────────────────── Escenario de contenido (V2 · Fase 7) ──────────────
+
+export type EstadoDeFuenteDePrueba = 'procesada' | 'en_cola' | 'sensible' | 'fallida';
+
+/**
+ * Fuente-archivo de GUION sintética (hash SHA-256 real, único por llamada):
+ *   procesada  procesada con un fragmento de texto (legible para la IA);
+ *   en_cola    pendiente, sin fragmentos;
+ *   sensible   procesada pero con confidencialidad `sensible` (restringida para la IA);
+ *   fallida    el procesamiento falló.
+ * Visibilidad `interna`. Solo para pruebas.
+ */
+export async function crearFuenteDeGuionDePrueba(
+  campaignId: string,
+  dueno: User,
+  etiqueta: string,
+  estado: EstadoDeFuenteDePrueba = 'procesada',
+): Promise<string> {
+  const unico = `${etiqueta}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const hash = createHash('sha256').update(unico).digest('hex');
+  const [f] = await query<{ id: string }>(
+    `INSERT INTO source_documents
+       (campaign_id, organization_id, type, filename, file_id, mime_type, size_bytes, hash, status,
+        confidentiality_level, created_by)
+     VALUES ($1, $2, 'otro', $3, $4, 'text/markdown', 10, $5, $6::source_status, $7::confidentiality_level, $8)
+     RETURNING id`,
+    [
+      campaignId,
+      dueno.organizationId,
+      `${etiqueta}.md`,
+      `test/${unico}.md`,
+      hash,
+      estado === 'en_cola' ? 'pendiente' : estado === 'fallida' ? 'fallido' : 'procesado',
+      estado === 'sensible' ? 'sensible' : 'interna',
+      dueno.id,
+    ],
+  );
+  if (estado === 'procesada' || estado === 'sensible') {
+    await crearFragmentoDePrueba(f!.id, 1, `Texto sintético del guion ${etiqueta}.`);
+  }
+  return f!.id;
+}
+
+export interface EscenarioDeContenido extends EscenarioDeChat {
+  /** Participaciones (CampaignInfluencer) de la campaña activa. Dos comparten el nombre de pila. */
+  readonly participaciones: {
+    readonly valentinaRios: string;
+    readonly valentinaGomez: string;
+    readonly diego: string;
+  };
+  /** `campaign_products.id` de la campaña: P80 (asignado a Valentina Ríos) y P80 Pro (a Valentina Gómez). */
+  readonly productos: { readonly p80: string; readonly pro: string };
+  /** Entregables activos ya creados (sin versiones). */
+  readonly entregables: {
+    readonly reelRios: string;
+    readonly storyRios: string;
+    readonly reelGomez: string;
+    readonly reelDiego: string;
+  };
+  /** Fuentes de guion sintéticas de la campaña (internas). */
+  readonly fuentes: {
+    readonly procesada: string;
+    readonly procesada2: string;
+    readonly procesada3: string;
+    readonly enCola: string;
+    readonly sensible: string;
+    readonly fallida: string;
+  };
+  /** Identidades creadas (para `limpiarEscenarioDeContenido`). */
+  readonly influencerIds: string[];
+}
+
+function exito<T>(r: Result<T>): T {
+  if (!r.ok) throw new Error(`crearEscenarioDeContenido: ${r.error.code}: ${r.error.message}`);
+  return r.value;
+}
+
+/**
+ * Escenario de contenido sobre `crearEscenarioDeChat`: campaña ACTIVA con dos productos, tres
+ * participaciones (dos «Valentina»: Ríos y Gómez; y Diego Peña), productos asignados, cuatro
+ * entregables y fuentes de guion sintéticas (procesadas, en cola, sensible, fallida). Sin Brief
+ * aprobado ni análisis (los añade quien los necesita). Limpiar con `limpiarEscenarioDeContenido`.
+ */
+export async function crearEscenarioDeContenido(nombre: string): Promise<EscenarioDeContenido> {
+  const base = await crearEscenarioDeChat(nombre);
+  const { admin, consultor, sufijo, campanaId } = base;
+  const influencerIds: string[] = [];
+
+  const productoDeCatalogo = async (modelo: string): Promise<string> => {
+    const [fila] = await query<{ id: string }>(`SELECT id FROM products WHERE model = $1`, [modelo]);
+    if (fila === undefined) throw new Error(`Falta el producto sembrado ${modelo}: ejecute el seed.`);
+    return fila.id;
+  };
+  const productoDeCampana = async (modelo: string, prioridad: number): Promise<string> => {
+    const [cp] = await query<{ id: string }>(
+      `INSERT INTO campaign_products (campaign_id, product_id, rol, prioridad, participacion_presupuesto)
+       VALUES ($1, $2, 'secundario', $3, 0.5) RETURNING id`,
+      [campanaId, await productoDeCatalogo(modelo), prioridad],
+    );
+    return cp!.id;
+  };
+  const p80 = await productoDeCampana('P80', 1);
+  const pro = await productoDeCampana('P80 Pro', 2);
+
+  const participante = async (displayName: string, handle: string): Promise<string> => {
+    const creado = exito(
+      await crearInfluencer(admin, {
+        displayName,
+        cuentas: [{ platform: 'instagram', handle: `${handle}.${sufijo}` }],
+      }),
+    );
+    influencerIds.push(creado.influencer.id);
+    const ci = exito(
+      await asociarInfluencerACampana(admin, { campaignId: campanaId, influencerId: creado.influencer.id }),
+    );
+    return ci.id;
+  };
+  const valentinaRios = await participante('Valentina Ríos', 'valentina.rios');
+  const valentinaGomez = await participante('Valentina Gómez', 'valentina.gomez');
+  const diego = await participante('Diego Peña', 'diego.pena');
+  exito(
+    await asociarProductoAInfluencer(admin, { campaignInfluencerId: valentinaRios, campaignProductId: p80 }),
+  );
+  exito(
+    await asociarProductoAInfluencer(admin, { campaignInfluencerId: valentinaGomez, campaignProductId: pro }),
+  );
+
+  const entregable = async (ci: string, label: string, producto?: string): Promise<string> =>
+    exito(
+      await crearEntregable(consultor, {
+        campaignInfluencerId: ci,
+        label,
+        platform: 'instagram',
+        campaignProductId: producto,
+      }),
+    ).id;
+  const entregables = {
+    reelRios: await entregable(valentinaRios, 'Reel principal', p80),
+    storyRios: await entregable(valentinaRios, 'Story de lanzamiento'),
+    reelGomez: await entregable(valentinaGomez, 'Reel principal', pro),
+    reelDiego: await entregable(diego, 'Reel principal'),
+  };
+
+  const fuentes = {
+    procesada: await crearFuenteDeGuionDePrueba(campanaId, admin, 'guion-procesada', 'procesada'),
+    procesada2: await crearFuenteDeGuionDePrueba(campanaId, admin, 'guion-procesada-2', 'procesada'),
+    procesada3: await crearFuenteDeGuionDePrueba(campanaId, admin, 'guion-procesada-3', 'procesada'),
+    enCola: await crearFuenteDeGuionDePrueba(campanaId, admin, 'guion-en-cola', 'en_cola'),
+    sensible: await crearFuenteDeGuionDePrueba(campanaId, admin, 'guion-sensible', 'sensible'),
+    fallida: await crearFuenteDeGuionDePrueba(campanaId, admin, 'guion-fallida', 'fallida'),
+  };
+
+  return {
+    ...base,
+    participaciones: { valentinaRios, valentinaGomez, diego },
+    productos: { p80, pro },
+    entregables,
+    fuentes,
+    influencerIds,
+  };
+}
+
+/** Limpia un `EscenarioDeContenido`: campañas (con todo lo que cuelga) y luego las identidades. */
+export async function limpiarEscenarioDeContenido(e: EscenarioDeContenido): Promise<void> {
+  await eliminarCampanaDePrueba(e.campanas);
+  await eliminarInfluencersDePrueba(e.influencerIds);
 }

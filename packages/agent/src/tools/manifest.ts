@@ -277,6 +277,27 @@ export const MANIFIESTO_DE_DB: Readonly<Record<string, ClasificacionDeExport>> =
   estadoDeAdjuntos: UI,
   cargarVistaDeChat: UI,
   migrate: UI,
+
+  // ── Fase 7 · deliverables.ts / script-versions.ts ── (contenido: entregables y guiones)
+  // Lecturas con alcance de actor (el cerco de campaña lo pasa la tool en `alcance`).
+  listarEntregablesDeCampana: R,
+  obtenerEntregable: R,
+  listarVersionesDeEntregable: R,
+  obtenerVersionDeGuion: R,
+  obtenerVersionVigente: R,
+  obtenerUltimaVersion: R,
+  // Escrituras dentro de los permisos de la persona (`deliverable_create`, `script_version_register`).
+  crearEntregable: W,
+  registrarVersionDeGuion: W,
+  // Sin tool en F7: renombrar es de la UI; el primer acto de revisión lo hacen los casos de uso.
+  actualizarEntregable: UI,
+  iniciarRevisionDeVersion: UI,
+  // Prohibidas: archivar/reactivar es decisión de la persona; el resto recibe un cliente de BD
+  // (sin pasar por la transacción del caso de uso) o es el mutex interno.
+  archivarEntregable: X,
+  reactivarEntregable: X,
+  iniciarRevisionDeVersionEnTransaccion: X, // recibe un cliente de BD
+  bloquearEntregable: X, // mutex interno; SQL directo
 };
 
 /** Clasificación de un export (`prohibited` si no está clasificado). */

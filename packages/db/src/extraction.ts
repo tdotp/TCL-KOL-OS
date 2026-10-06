@@ -42,6 +42,7 @@ import { query, transaction } from './client.ts';
 import { obtenerOCrearVersionDeTrabajo } from './brief-version.ts';
 import { SQL_FRAGMENTO_VIGENTE } from './fragment-scope.ts';
 import { SQL_LOCALIZADOR_DE_EVIDENCIA } from './locators.ts';
+import { SQL_FUENTE_SIN_GUION } from './script-scope.ts';
 import { transicionarBrief } from './transitions.ts';
 
 export interface EvidenciaExtraida {
@@ -139,6 +140,7 @@ export async function extraerCampos(
         AND s.status          = 'procesado'
         AND s.confidentiality_level <> 'sensible'
         AND ${SQL_FRAGMENTO_VIGENTE}
+        AND ${SQL_FUENTE_SIN_GUION}
       ORDER BY s.filename, f.ordinal`,
     [organizationId, campaignId],
   );

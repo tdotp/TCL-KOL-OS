@@ -1,6 +1,10 @@
 /**
  * Búsqueda de evidencia sobre el índice vectorial (Épica E5-2).
  *
+ * V2 · Fase 7: la búsqueda de EVIDENCIA nunca devuelve fragmentos de una fuente ligada a una
+ * versión de guion (un guion no es insumo del Brief: `script-scope.ts`); la búsqueda textual
+ * solo oculta al Operativo los guiones no aprobados.
+ *
  * La regla que gobierna este archivo es §10.3, regla 7: **el filtro por
  * organización y campaña va dentro de la consulta**, nunca después.
  *
@@ -21,6 +25,7 @@ import { err, ok } from '@tcl-kol-os/domain';
 import { query } from './client.ts';
 import { SQL_FRAGMENTO_VIGENTE } from './fragment-scope.ts';
 import { localizadorDeFila } from './locators.ts';
+import { SQL_FUENTE_SIN_GUION, sqlFuenteSinGuionNoAprobado } from './script-scope.ts';
 import { resolverAlcanceDeFuentes } from './sources.ts';
 
 /** Un fragmento recuperado, con lo necesario para abrirlo en su fuente. */
@@ -120,6 +125,7 @@ export async function buscarEvidencia(opciones: BusquedaOpciones): Promise<Evide
         AND s.confidentiality_level <> 'sensible'
         AND ($6::boolean = false OR s.visibility IN ('tcl', 'compartida'))
         AND ${SQL_FRAGMENTO_VIGENTE}
+        AND ${SQL_FUENTE_SIN_GUION}
         AND f.embedding IS NOT NULL
         AND (f.embedding <=> $3::vector) <= $4
       ORDER BY f.embedding <=> $3::vector
@@ -247,6 +253,7 @@ export async function buscarTextoEnFuentes(
         AND s.confidentiality_level <> 'sensible'
         AND ($5::boolean = false OR s.visibility IN ('tcl', 'compartida'))
         AND ${SQL_FRAGMENTO_VIGENTE}
+        AND ${sqlFuenteSinGuionNoAprobado('$6')}
         AND f.text ILIKE $3 ESCAPE '\\'
       ORDER BY s.created_at, s.id, f.ordinal
       LIMIT $4`,
@@ -256,6 +263,7 @@ export async function buscarTextoEnFuentes(
       `%${comoLiteralLike(texto)}%`,
       limite,
       alcance.value.soloVisibleParaTcl,
+      alcance.value.excluirGuionesNoAprobados,
     ],
   );
   return ok(
