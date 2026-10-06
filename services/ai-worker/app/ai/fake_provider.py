@@ -25,6 +25,7 @@ import json
 import re
 from typing import Any
 
+from .fake_analisis import analisis_falso, es_tarea_de_analisis, reiniciar_contadores_de_analisis
 from .openrouter import LlamadaHerramienta, Respuesta, RespuestaHerramientas, Uso
 
 
@@ -61,6 +62,10 @@ def completar(
     formato_json: bool = False,
     timeout: int = 120,
 ) -> Respuesta:
+    # V2 · Fase 7: la tarea `analizar_guion` se despacha por un marcador FIJO del system prompt.
+    if es_tarea_de_analisis(mensajes):
+        return analisis_falso(mensajes)
+
     prompt = mensajes[-1]["content"] if mensajes else ""
     campos: list[dict[str, Any]] = []
 
@@ -144,3 +149,12 @@ def embeddings(
 
 def disponible() -> bool:
     return True
+
+
+__all__ = [
+    "completar",
+    "completar_con_herramientas",
+    "disponible",
+    "embeddings",
+    "reiniciar_contadores_de_analisis",
+]

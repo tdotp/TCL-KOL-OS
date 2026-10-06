@@ -21,11 +21,12 @@
  */
 
 import { createHash } from 'node:crypto';
-import type { Result, Role, User } from '@tcl-kol-os/domain';
+import { type Result, type Role, type User, campoDelCatalogo } from '@tcl-kol-os/domain';
 import { asociarInfluencerACampana, asociarProductoAInfluencer } from './campaign-influencers.ts';
 import { query, transaction } from './client.ts';
 import { crearEntregable } from './deliverables.ts';
 import { crearInfluencer } from './influencers.ts';
+import { crearVersionHija } from './versioning.ts';
 
 export async function eliminarCampanaDePrueba(idOids: string | readonly string[]): Promise<void> {
   const ids = Array.isArray(idOids) ? idOids : [idOids];
@@ -49,6 +50,25 @@ export async function eliminarCampanaDePrueba(idOids: string | readonly string[]
       // V2 · Fase 7: comentarios de revisión → versiones de guion → entregables. Primero: los
       // comentarios apuntan a los mensajes del chat, y las versiones a las fuentes y a las
       // acciones propuestas (todo RESTRICT); el entregable cuelga de la participación.
+      // Análisis de contenido (024): referencias → hallazgos → llamadas del ledger → revisiones. La FK
+      // `approved_analysis_id` de las versiones se suelta antes (RESTRICT: aquí SOLO limpieza de pruebas).
+      await client.query(
+        `DELETE FROM content_finding_script_refs
+          WHERE finding_id IN (SELECT id FROM content_findings WHERE campaign_id = $1)`,
+        [id],
+      );
+      await client.query(
+        `DELETE FROM content_finding_brief_refs
+          WHERE finding_id IN (SELECT id FROM content_findings WHERE campaign_id = $1)`,
+        [id],
+      );
+      await client.query(`DELETE FROM content_findings WHERE campaign_id = $1`, [id]);
+      await client.query(`DELETE FROM ai_runs WHERE campaign_id = $1 AND task = 'analizar_guion'`, [id]);
+      await client.query(
+        `UPDATE script_versions SET approved_analysis_id = NULL WHERE campaign_id = $1 AND approved_analysis_id IS NOT NULL`,
+        [id],
+      );
+      await client.query(`DELETE FROM content_analysis_runs WHERE campaign_id = $1`, [id]);
       await client.query(`DELETE FROM script_review_comments WHERE campaign_id = $1`, [id]);
       await client.query(`DELETE FROM script_versions WHERE campaign_id = $1`, [id]);
       await client.query(`DELETE FROM deliverables WHERE campaign_id = $1`, [id]);
@@ -449,4 +469,147 @@ export async function crearEscenarioDeContenido(nombre: string): Promise<Escenar
 export async function limpiarEscenarioDeContenido(e: EscenarioDeContenido): Promise<void> {
   await eliminarCampanaDePrueba(e.campanas);
   await eliminarInfluencersDePrueba(e.influencerIds);
+}
+
+// ─────────────────────────── Brief aprobado y guiones con texto (V2 · Fase 7 · análisis) ───
+
+/**
+ * Fuente-archivo de GUION procesada con el texto dado: un fragmento por elemento (página = posición).
+ * Hash SHA-256 real y único; visibilidad `interna`. Solo para pruebas (sintético, nunca P80 real).
+ */
+export async function crearFuenteDeGuionConTexto(
+  campaignId: string,
+  dueno: User,
+  etiqueta: string,
+  fragmentos: readonly string[],
+): Promise<string> {
+  const id = await crearFuenteDeGuionDePrueba(campaignId, dueno, etiqueta, 'en_cola');
+  await query(`UPDATE source_documents SET status = 'procesado' WHERE id = $1`, [id]);
+  for (const [i, texto] of fragmentos.entries()) await crearFragmentoDePrueba(id, i + 1, texto, i + 1);
+  return id;
+}
+
+export interface BriefDePrueba {
+  readonly briefId: string;
+  readonly versionId: string;
+  readonly version: number;
+  /** `fieldId` por clave del catálogo (los de producto, con `@{campaignProductId}`). */
+  readonly campos: Readonly<Record<string, string>>;
+}
+
+/** Valores sintéticos de un Brief aprobado «suficiente» para analizar guiones (sin datos reales). */
+export const VALORES_DE_BRIEF_DE_PRUEBA: Readonly<Record<string, unknown>> = {
+  'mensaje_principal.one_line': 'El P80 Pro lleva tu fotografía a otro nivel con su cámara de 200 MP.',
+  'mensaje_principal.mensaje_clave': 'Fotografía profesional en la palma de tu mano, de día y de noche.',
+  'mensaje_principal.beneficio_diferencial': 'La cámara de 200 MP captura detalle incluso con poca luz.',
+  'accion_kpis.accion_esperada':
+    'Invitar a la audiencia a visitar la tienda oficial usando el enlace de la biografía.',
+  mandatorios: [
+    { categoria: 'mensaje', descripcion: 'Mencionar el hashtag #P80Pro en la publicación.' },
+    { categoria: 'legal', descripcion: 'Incluir la etiqueta de publicidad al inicio del video.' },
+  ],
+  'practico.restricciones': ['No comparar el producto con marcas de la competencia.'],
+};
+
+const RTBS_DE_PRUEBA = ['Cámara principal de 200 MP', 'Batería de 5000 mAh con carga rápida'];
+
+/**
+ * Brief de la campaña en versión `approved` (o `draft` con `estado:'draft'`) con los campos que usa el
+ * análisis: mensaje principal, acción esperada (CTA), mandatorios, restricciones y, por producto, nombre y
+ * RTBs (claims con evidencia). Los campos críticos/claim llevan evidencia de una fuente sintética del
+ * Brief. Se inserta como borrador y se aprueba al final (las restricciones de 004/009 lo exigen).
+ */
+export async function crearBriefAprobadoDePrueba(
+  campaignId: string,
+  creador: User,
+  opciones: {
+    readonly productos?: readonly string[] | undefined;
+    readonly estado?: 'approved' | 'draft' | undefined;
+    readonly valores?: Readonly<Record<string, unknown>> | undefined;
+    /** Claves que quedan `not_found` (sin valor): requisitos NO evaluables. */
+    readonly noEncontrados?: readonly string[] | undefined;
+  } = {},
+): Promise<BriefDePrueba> {
+  const noEncontrados = opciones.noEncontrados ?? [];
+  const valores = Object.fromEntries(
+    Object.entries({ ...VALORES_DE_BRIEF_DE_PRUEBA, ...(opciones.valores ?? {}) }).filter(
+      ([k]) => !noEncontrados.includes(k),
+    ),
+  );
+  const fuenteDelBrief = await crearFuenteDePrueba(campaignId, creador, `brief-fuente-${Date.now()}`);
+  const [brief] = await query<{ id: string }>(
+    `INSERT INTO briefs (campaign_id) VALUES ($1)
+     ON CONFLICT (campaign_id) DO UPDATE SET campaign_id = EXCLUDED.campaign_id RETURNING id`,
+    [campaignId],
+  );
+  const [sig] = await query<{ proxima: number }>(
+    `SELECT COALESCE(MAX(version), 0) + 1 AS proxima FROM brief_versions WHERE brief_id = $1 AND language = 'es'`,
+    [brief!.id],
+  );
+  const [v] = await query<{ id: string }>(
+    `INSERT INTO brief_versions (brief_id, organization_id, version, language, status, created_by)
+     VALUES ($1, $2, $3, 'es', 'draft', $4) RETURNING id`,
+    [brief!.id, creador.organizationId, sig!.proxima, creador.id],
+  );
+  const campos: Record<string, string> = {};
+  const insertar = async (key: string, valor: unknown, productoId?: string): Promise<void> => {
+    const criticidad = campoDelCatalogo(key)?.criticidad ?? 'informativo';
+    const conEvidencia = criticidad !== 'informativo';
+    const [f] = await query<{ id: string }>(
+      `INSERT INTO brief_fields
+         (brief_version_id, key, campaign_product_id, value, status, confidence, provenance_type, criticidad)
+       VALUES ($1, $2, $3, $4::jsonb, 'found', 0.9, 'extracted', $5::criticality) RETURNING id`,
+      [v!.id, key, productoId ?? null, JSON.stringify(valor), criticidad],
+    );
+    campos[productoId === undefined ? key : `${key}@${productoId}`] = f!.id;
+    if (conEvidencia) {
+      await query(
+        `INSERT INTO evidence (brief_field_id, source_id, quote, relation) VALUES ($1, $2, $3, 'soporta')`,
+        [f!.id, fuenteDelBrief, `Cita sintética de respaldo para ${key}.`],
+      );
+    }
+  };
+  for (const [key, valor] of Object.entries(valores)) await insertar(key, valor);
+  for (const key of noEncontrados) {
+    const criticidad = campoDelCatalogo(key)?.criticidad ?? 'informativo';
+    const [f] = await query<{ id: string }>(
+      `INSERT INTO brief_fields (brief_version_id, key, value, status, provenance_type, criticidad)
+       VALUES ($1, $2, NULL, 'not_found', 'extracted', $3::criticality) RETURNING id`,
+      [v!.id, key, criticidad],
+    );
+    campos[key] = f!.id;
+  }
+  for (const productoId of opciones.productos ?? []) {
+    await insertar('marca_producto[].rtbs', RTBS_DE_PRUEBA, productoId);
+  }
+  if ((opciones.estado ?? 'approved') === 'approved') {
+    await query(`UPDATE brief_versions SET status = 'approved', approved_at = now() WHERE id = $1`, [v!.id]);
+  }
+  return { briefId: brief!.id, versionId: v!.id, version: sig!.proxima, campos };
+}
+
+/**
+ * Crea una versión hija del Brief (la padre queda `superseded`, como en producción), cambia los valores
+ * pedidos (campos de campaña, por clave) y la APRUEBA: el rector pasa a ser la hija. Sin `aprobar:false`.
+ * Con `aprobar:false` la deja en borrador (el rector sigue siendo el padre).
+ */
+export async function crearBriefHijoDePrueba(
+  actor: User,
+  versionPadreId: string,
+  opciones: { readonly cambios?: Readonly<Record<string, unknown>>; readonly aprobar?: boolean } = {},
+): Promise<{ readonly versionId: string; readonly version: number }> {
+  const r = await crearVersionHija(actor, versionPadreId);
+  if (!r.ok) throw new Error(`crearBriefHijoDePrueba: ${r.error.code}: ${r.error.message}`);
+  for (const [key, valor] of Object.entries(opciones.cambios ?? {})) {
+    await query(
+      `UPDATE brief_fields SET value = $3::jsonb WHERE brief_version_id = $1 AND key = $2 AND campaign_product_id IS NULL`,
+      [r.value.versionId, key, JSON.stringify(valor)],
+    );
+  }
+  if (opciones.aprobar !== false) {
+    await query(`UPDATE brief_versions SET status = 'approved', approved_at = now() WHERE id = $1`, [
+      r.value.versionId,
+    ]);
+  }
+  return { versionId: r.value.versionId, version: r.value.version };
 }

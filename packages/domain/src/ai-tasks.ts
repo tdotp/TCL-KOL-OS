@@ -26,7 +26,9 @@ export type AITask =
   | 'resolver_ambiguedad'
   | 'generar_embedding'
   // V2 · Fase 6 (D16): turno conversacional del agente de Cuenta.
-  | 'conversar';
+  | 'conversar'
+  // V2 · Fase 7: análisis de un guion contra el Brief aprobado vigente.
+  | 'analizar_guion';
 
 export interface AITaskSpec {
   readonly task: AITask;
@@ -117,6 +119,19 @@ const CATALOGO: Readonly<Record<AITask, AITaskSpec>> = {
       'es un caso de uso con el permiso de la persona y queda auditada con origen chat.',
     // La salida es texto conversacional + llamadas a tools validadas por esquema.
     salidaEstructurada: false,
+    generativa: true,
+  },
+  analizar_guion: {
+    task: 'analizar_guion',
+    // V2 · Fase 7: compara UN guion con los requisitos del Brief aprobado vigente. Nivel `equilibrado`
+    // (el de `resolver_ambiguedad` y `conversar`): es juicio semántico acotado, no razonamiento abierto.
+    // Qué modelo concreto responde es configuración (`AI_MODEL_EQUILIBRADO`); aquí solo hay tarea y nivel.
+    tier: 'equilibrado',
+    control:
+      'El análisis señala; nunca aprueba ni rechaza. Todo hallazgo se deriva del Brief y se verifica por ' +
+      'código (alias y citas literales); la aprobación del guion es de una persona.',
+    // Salida JSON validada por esquema (Pydantic en el worker, validador estricto en el dominio).
+    salidaEstructurada: true,
     generativa: true,
   },
 };

@@ -33,6 +33,9 @@ TAREA_A_NIVEL: dict[str, str] = {
     # Fase 6 (chat de Cuenta): nivel equilibrado por catálogo, sin cambiar el
     # modelo por defecto (DEC-019/020). El dominio TS debe espejar esta tarea.
     "conversar": "equilibrado",
+    # Fase 7 (análisis de guion contra el Brief aprobado): nivel equilibrado, mismo modelo por
+    # defecto que `resolver_ambiguedad`/`conversar`. El dominio TS espeja esta tarea.
+    "analizar_guion": "equilibrado",
 }
 
 

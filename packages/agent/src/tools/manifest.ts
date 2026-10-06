@@ -298,6 +298,28 @@ export const MANIFIESTO_DE_DB: Readonly<Record<string, ClasificacionDeExport>> =
   reactivarEntregable: X,
   iniciarRevisionDeVersionEnTransaccion: X, // recibe un cliente de BD
   bloquearEntregable: X, // mutex interno; SQL directo
+
+  // ── Fase 7 · content-analysis.ts / content-analysis-client.ts ── (revisión del guion contra el Brief rector)
+  // Lecturas con alcance de actor (script:read; el Operativo y el cliente no leen revisiones ni hallazgos).
+  obtenerBriefRector: R,
+  huellaDeBriefRector: R,
+  evaluarProntitudDeAnalisis: R,
+  obtenerRevisionVigente: R,
+  listarRevisiones: R,
+  listarHallazgos: R, // texto del modelo/guion/Brief: NO confiable (va en sobre)
+  // Escritura dentro de los permisos de la persona (`content_analysis_request`, origen chat; idempotente).
+  solicitarAnalisisDeGuion: W,
+  // La revisión humana la registra UNA PERSONA por `ui`: ninguna tool puede (HUMAN_CONFIRMATION_REQUIRED).
+  registrarRevisionHumana: X,
+  // Constantes y cliente del worker: infraestructura/pruebas, no capacidades del agente.
+  LIMITE_DE_ANALISIS_POR_VERSION: UI,
+  PLAZO_DE_ANALISIS_MS: UI,
+  crearClienteDeAnalisisHttp: UI,
+  resolverUrlDelWorkerDeAnalisis: UI,
+  ClienteDeAnalisisGuionado: UI,
+  llamadaOk: UI,
+  respuestaGuionada: UI,
+  falloGuionado: UI,
 };
 
 /** Clasificación de un export (`prohibited` si no está clasificado). */

@@ -28,5 +28,7 @@ export * from './influencer-sheet';
 export * from './influencer-import';
 export * from './agent-context';
 export * from './chat';
+export * from './content-analysis';
+export * from './content-analysis-prompt';
 export { LOCATOR_CASOS_INVALIDOS, LOCATOR_CASOS_VALIDOS } from './source-locator.fixtures';
 export * from './content';

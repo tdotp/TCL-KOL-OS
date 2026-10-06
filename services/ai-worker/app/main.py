@@ -23,7 +23,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-from . import embeddings, extraction, modelo_turno, parsers
+from . import embeddings, extraction, modelo_analisis, modelo_turno, parsers
 from .ai.router import RouterError
 from .config import ConfigError, Settings, load_settings
 
@@ -302,6 +302,86 @@ def _error_de_turno(
 ) -> JSONResponse:
     modelo_turno.registrar_metadatos(
         req, resultado=error.code, duracion_ms=int((time.monotonic() - inicio) * 1000)
+    )
+    cabeceras = {"Retry-After": str(error.retry_after_s)} if error.retry_after_s is not None else None
+    return JSONResponse(error.cuerpo(), status_code=error.status, headers=cabeceras)
+
+
+@app.post("/modelo/analisis", response_model=None)
+async def modelo_de_analisis(
+    request: Request,
+    transporte: modelo_analisis.Transporte = Depends(modelo_analisis.transporte_por_defecto),  # noqa: B008
+) -> JSONResponse:
+    """Análisis de UN guion contra el Brief aprobado (Fase 7, REPORTE B §2).
+
+    Sin estado y sin autoridad: Node arma los mensajes (sobres no confiables) y
+    valida/persiste; aquí solo hay kill-switch, contrato estricto, una llamada JSON
+    al proveedor (más UN reintento por JSON roto) y validación de FORMA. No guarda
+    nada y no registra contenido. Ver `app/modelo_analisis.py`.
+    """
+    inicio = time.monotonic()
+    req: modelo_analisis.AnalisisEntrada | None = None
+    seguimiento = modelo_analisis.Seguimiento()
+    try:
+        if not modelo_turno.ia_activa():
+            raise modelo_analisis.AnalisisError("AI_DISABLED")
+        declarado = request.headers.get("content-length")
+        if declarado is not None and declarado.isdigit() and int(declarado) > modelo_turno.MAX_BYTES_CUERPO:
+            raise modelo_analisis.AnalisisError(
+                "REQUEST_INVALID",
+                status=413,
+                details={"limit_bytes": modelo_turno.MAX_BYTES_CUERPO},
+                message="El cuerpo de la petición excede el tamaño máximo.",
+            )
+        try:
+            cuerpo = await _leer_cuerpo_acotado(request)
+        except modelo_turno.TurnoError as e:
+            raise modelo_analisis.AnalisisError(
+                e.code, status=e.status, details=e.details, message=e.message
+            ) from None
+        req = modelo_analisis.parsear_entrada(cuerpo)
+        salida = await asyncio.wait_for(
+            run_in_threadpool(modelo_analisis.ejecutar_analisis, req, transporte, seguimiento),
+            timeout=req.timeout_s + modelo_turno.MARGEN_DEADLINE_S,
+        )
+        respuesta = JSONResponse(salida)
+    except asyncio.TimeoutError:  # noqa: UP041
+        return _error_de_analisis(
+            req,
+            modelo_analisis.AnalisisError("MODEL_TIMEOUT", llamadas=seguimiento.llamadas_para_error()),
+            inicio,
+        )
+    except modelo_analisis.AnalisisError as error:
+        return _error_de_analisis(req, error, inicio)
+    except ValueError:
+        return _error_de_analisis(
+            req,
+            modelo_analisis.AnalisisError(
+                "MODEL_BAD_RESPONSE",
+                details={"reason": "respuesta no serializable"},
+                llamadas=seguimiento.llamadas_para_error(),
+            ),
+            inicio,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("modelo_analisis error inesperado tipo=%s", type(exc).__name__)
+        return _error_de_analisis(
+            req,
+            modelo_analisis.AnalisisError("INTERNAL_ERROR", llamadas=seguimiento.llamadas_para_error()),
+            inicio,
+        )
+
+    modelo_analisis.registrar_metadatos(
+        req, resultado="ok", salida=salida, duracion_ms=int((time.monotonic() - inicio) * 1000)
+    )
+    return respuesta
+
+
+def _error_de_analisis(
+    req: modelo_analisis.AnalisisEntrada | None, error: modelo_analisis.AnalisisError, inicio: float
+) -> JSONResponse:
+    modelo_analisis.registrar_metadatos(
+        req, resultado=error.code, error=error, duracion_ms=int((time.monotonic() - inicio) * 1000)
     )
     cabeceras = {"Retry-After": str(error.retry_after_s)} if error.retry_after_s is not None else None
     return JSONResponse(error.cuerpo(), status_code=error.status, headers=cabeceras)

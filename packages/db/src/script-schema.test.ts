@@ -217,11 +217,11 @@ describe('claves foráneas compuestas, índices y triggers', () => {
     expect(await definicion('script_review_comments_autor_fkey')).toContain(
       'FOREIGN KEY (author_id, organization_id)',
     );
-    // la FK de approved_analysis_id hacia los análisis la añade la 024: aquí aún no existe
+    // la FK de approved_analysis_id hacia los análisis la añade la 024
     const fks = await query<{ conname: string }>(
       `SELECT conname FROM pg_constraint WHERE conrelid = 'script_versions'::regclass AND contype = 'f'`,
     );
-    expect(fks.map((f) => f.conname)).not.toContain('script_versions_analisis_fkey');
+    expect(fks.map((f) => f.conname)).toContain('script_versions_analisis_fkey');
   });
 
   it('índices únicos parciales: etiqueta activa por participación y UNA aprobada vigente por entregable', async () => {
@@ -593,11 +593,11 @@ describe('CHECK de coherencia de script_versions (fijando estados con el bypass 
         [v, e.director.id],
       ),
     ).toMatch(/snapshot_objeto|check/);
-    // aprobada con su snapshot (y análisis sin FK todavía) es válida
+    // aprobada con su snapshot es válida (la FK al análisis la añade la 024)
     expect(
       await fijar(
         `UPDATE script_versions SET status = 'approved', approved_by = $2, approved_at = now(),
-                approval_snapshot = '{"version": 1}'::jsonb, approved_analysis_id = gen_random_uuid() WHERE id = $1`,
+                approval_snapshot = '{"version": 1}'::jsonb WHERE id = $1`,
         [v, e.director.id],
       ),
     ).toBe('');

@@ -283,6 +283,7 @@ describe('tarea de IA «conversar» (D16)', () => {
       'resolver_ambiguedad',
       'generar_embedding',
       'conversar',
+      'analizar_guion',
     ]);
     // Los niveles previos no se tocan.
     expect(tierFor('extraer_campos')).toBe('eficiente');
