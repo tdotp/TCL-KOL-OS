@@ -174,6 +174,12 @@ export interface VistaDeAccionPropuesta {
   /** Lo que se le muestra a la persona que confirma: qué se va a aprobar/aplicar/resolver. */
   readonly textoHumano: string;
   readonly detalle: readonly string[];
+  /**
+   * Avisos que la persona debe leer ANTES de confirmar (texto plano, compuesto solo desde el payload
+   * huellado): «Revisión humana, no asistida por IA», «N hallazgos abiertos», «Existe una versión más
+   * reciente»… Vacío si no hay nada que advertir. La interfaz los repite en el diálogo de confirmación.
+   */
+  readonly advertencias: readonly string[];
   /** Huella de lo propuesto (SHA-256 hex). Es la que se presenta al confirmar. */
   readonly payloadHash: string;
   /** Estado EFECTIVO: una propuesta pendiente/confirmada con el plazo vencido figura `expired`. */
@@ -555,13 +561,18 @@ interface TextoHumano {
   readonly titulo: string;
   readonly texto: string;
   readonly detalle: readonly string[];
+  readonly advertencias: readonly string[];
 }
 
 /**
  * Texto que se le muestra a la persona, compuesto SOLO con el payload ya huellado (lo que
  * confirma es exactamente lo que ve) y datos de lectura. Nunca se vuelca el JSON.
  */
-function componerTexto(accion: ProposedAction, versionDeBrief: number | undefined): TextoHumano {
+function componerTexto(
+  accion: ProposedAction,
+  versionDeBrief: number | undefined,
+  obsoleta = false,
+): TextoHumano {
   const p = accion.payload;
   switch (accion.type) {
     case 'brief.approve':
@@ -575,6 +586,7 @@ function componerTexto(accion: ProposedAction, versionDeBrief: number | undefine
           'La versión queda aprobada internamente y deja de editarse.',
           'Es una decisión que solo toma una persona con permiso de aprobación.',
         ],
+        advertencias: [],
       };
     case 'influencer_import.apply': {
       const muestra = (p['muestra'] ?? {}) as Record<string, unknown>;
@@ -599,6 +611,7 @@ function componerTexto(accion: ProposedAction, versionDeBrief: number | undefine
           'Crea o vincula influencers y sus participaciones en la campaña según el plan.',
           ...detalle,
         ],
+        advertencias: [],
       };
     }
     case 'influencer_import.resolve_record': {
@@ -620,9 +633,99 @@ function componerTexto(accion: ProposedAction, versionDeBrief: number | undefine
         titulo: 'Resolver un registro del plan',
         texto: `Resolverá «${nombre}» con la decisión: ${(kind !== undefined ? ETIQUETA_DE_DECISION[kind] : undefined) ?? 'la decisión propuesta'}.`,
         detalle: ['La decisión queda registrada a nombre de quien la confirma.', ...detalle],
+        advertencias: [],
       };
     }
+    case 'script_version.approve':
+      return componerTextoDeAprobacionDeGuion(p, obsoleta);
   }
+}
+
+function objeto(valor: unknown): Record<string, unknown> {
+  return typeof valor === 'object' && valor !== null && !Array.isArray(valor)
+    ? (valor as Record<string, unknown>)
+    : {};
+}
+
+/**
+ * Aprobar una versión de guion (Fase 7). Se compone SOLO con el payload huellado (snapshot y etiquetas) y
+ * con cifras: jamás texto del guion ni de los hallazgos del modelo (son datos no confiables). Los hallazgos
+ * abiertos no bloquean: se muestran como aviso para que la persona decida con ellos a la vista.
+ */
+function componerTextoDeAprobacionDeGuion(
+  p: Readonly<Record<string, unknown>>,
+  obsoleta: boolean,
+): TextoHumano {
+  const snapshot = objeto(p['snapshot']);
+  const etiquetas = objeto(p['etiquetas']);
+  const version = numero(objeto(snapshot['scriptVersion'])['number']);
+  const entregable = texto(etiquetas['deliverable'], 120);
+  const influencer = texto(etiquetas['influencer'], 120);
+  const producto = texto(etiquetas['product'], 120);
+  const briefNumero = numero(objeto(snapshot['brief'])['number']);
+  const revision = objeto(snapshot['review']);
+  const humana = revision['kind'] === 'human';
+  const hallazgos = objeto(snapshot['findings']);
+  const total = numero(hallazgos['total']) ?? 0;
+  const porSeveridad = objeto(hallazgos['openBySeverity']);
+  const alta = numero(porSeveridad['alta']) ?? 0;
+  const media = numero(porSeveridad['media']) ?? 0;
+  const baja = numero(porSeveridad['baja']) ?? 0;
+  const comentarios = numero(objeto(snapshot['comments'])['total']) ?? 0;
+  const reemplaza = numero(objeto(snapshot['replaces'])['number']);
+  const cabeza = numero(etiquetas['headVersion']);
+  const fechaRevision = texto(etiquetas['reviewedAt'], 40);
+
+  const quien = [entregable === undefined ? undefined : `«${entregable}»`, influencer]
+    .filter((x): x is string => x !== undefined)
+    .join(' de ');
+  const detalle: string[] = [];
+  const contexto = [
+    entregable === undefined ? undefined : `Entregable: ${entregable}`,
+    influencer === undefined ? undefined : `Influencer: ${influencer}`,
+    producto === undefined ? undefined : `Producto: ${producto}`,
+  ].filter((x): x is string => x !== undefined);
+  if (contexto.length > 0) detalle.push(contexto.join(' · '));
+  detalle.push(
+    `Revisión ${humana ? 'humana' : 'asistida por IA'}${briefNumero === undefined ? '' : ` contra el Brief V${briefNumero}`}${fechaRevision === undefined ? '' : ` (${fechaRevision.slice(0, 10)})`}.`,
+  );
+  detalle.push(
+    total === 0
+      ? 'La revisión no dejó hallazgos.'
+      : `Hallazgos de la revisión: ${total} (${alta} alta, ${media} media, ${baja} baja).`,
+  );
+  if (comentarios > 0) detalle.push(`Comentarios de revisión registrados: ${comentarios}.`);
+  detalle.push(
+    'La versión queda aprobada y deja de revisarse; no se expone a TCL.',
+    'Es una decisión que solo toma una persona con permiso de aprobación.',
+  );
+
+  const advertencias: string[] = [];
+  if (obsoleta) {
+    advertencias.push(
+      'Revisión desactualizada: el guion, su revisión, el Brief o los comentarios cambiaron desde que se propuso.',
+    );
+  }
+  if (total > 0) {
+    advertencias.push(
+      `${total} hallazgo${total === 1 ? '' : 's'} abierto${total === 1 ? '' : 's'} (${alta} alta, ${media} media, ${baja} baja): no bloquean, decide la persona.`,
+    );
+  }
+  if (humana) advertencias.push('Revisión humana, no asistida por IA.');
+  if (version !== undefined && cabeza !== undefined && cabeza > version) {
+    advertencias.push(`Existe una versión más reciente (V${cabeza}) de este entregable.`);
+  }
+  if (reemplaza !== undefined) advertencias.push(`Reemplaza a la versión ${reemplaza} aprobada.`);
+
+  return {
+    titulo: 'Aprobar una versión de guion',
+    texto:
+      version === undefined
+        ? 'Aprobará una versión de guion de esta campaña.'
+        : `Aprobará la versión ${version} del guion${quien === '' ? '' : ` ${quien}`}.`,
+    detalle,
+    advertencias,
+  };
 }
 
 interface FilaDeAccion {
@@ -698,7 +801,7 @@ async function construirVistas(
       new Date(a.expiresAt).getTime() <= ahora.getTime();
     const estado: ProposedActionStatus = vencida ? 'expired' : a.status;
     const obsoleta = estado === 'pending' || estado === 'confirmed' ? await esObsoleta(a) : false;
-    const texto = componerTexto(a, versiones.get(a.resourceId));
+    const texto = componerTexto(a, versiones.get(a.resourceId), obsoleta);
     const abierta = estado === 'pending' || estado === 'confirmed';
     const propuestaPorMi = a.proposedBy === actor.id;
     vistas.push({
@@ -707,6 +810,7 @@ async function construirVistas(
       titulo: texto.titulo,
       textoHumano: texto.texto,
       detalle: texto.detalle,
+      advertencias: texto.advertencias,
       payloadHash: a.payloadHash,
       estado,
       obsoleta,

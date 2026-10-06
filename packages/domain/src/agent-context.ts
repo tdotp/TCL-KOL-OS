@@ -31,8 +31,8 @@ import { type Result, err, ok } from './errors';
 import type { BriefWorkspace } from './workspace';
 import type { Role } from './types';
 
-export const CONTEXT_ASSEMBLER_VERSION = 'ctx-1';
-export const CONTEXT_BUDGET_VERSION = 'budget-1';
+export const CONTEXT_ASSEMBLER_VERSION = 'ctx-2';
+export const CONTEXT_BUDGET_VERSION = 'budget-2';
 export const CONTEXT_POLICY_VERSION = 'policy-1';
 
 // ─────────────────────────── 1. Política de lectura de fuentes ─────────────────
@@ -157,6 +157,7 @@ export type ContextSectionId =
   | 'fragments'
   | 'products'
   | 'influencers'
+  | 'content'
   | 'sheet_import';
 
 /** Orden en que se muestran las secciones (no el de prioridad de llenado). */
@@ -170,6 +171,7 @@ export const ORDEN_DE_SECCIONES_DE_CONTEXTO: readonly ContextSectionId[] = [
   'fragments',
   'products',
   'influencers',
+  'content',
   'sheet_import',
   'turn_attachments',
   'recent_messages',
@@ -193,6 +195,9 @@ const CAPACIDADES_DE_SECCION: Readonly<Record<ContextSectionId, readonly Action[
   fragments: ['source:read'],
   products: ['campaign:read'],
   influencers: ['influencer:read', 'campaign_influencer:read'],
+  // V2 · Fase 7: entregables y guiones. Solo Cuenta (`script:read`): el Operativo ve el estado en la UI,
+  // no en el agente (no tiene `chat:write`).
+  content: ['deliverable:read', 'script:read', 'campaign_influencer:read'],
   sheet_import: ['source:read', 'influencer:read', 'campaign_influencer:read'],
 };
 
@@ -270,6 +275,9 @@ export const PRESUPUESTO_POR_DEFECTO: ConfiguracionDePresupuesto = {
     fragments: { prioridad: 4, requerida: false, maxChars: 9_600, maxItems: 8, maxCharsPorItem: 1_200 },
     products: { prioridad: 5, requerida: false, maxChars: 1_200, maxItems: 12, maxCharsPorItem: 200 },
     influencers: { prioridad: 6, requerida: false, maxChars: 3_200, maxItems: 20, maxCharsPorItem: 300 },
+    // V2 · Fase 7: una línea por entregable (estado, revisión, hallazgos por severidad, cambios pedidos).
+    // Nunca texto de guion ni de hallazgos: eso es bajo demanda (`finding_list`, `source_read_content`).
+    content: { prioridad: 6, requerida: false, maxChars: 3_000, maxItems: 20, maxCharsPorItem: 260 },
     sheet_import: { prioridad: 7, requerida: false, maxChars: 1_500, maxItems: 10, maxCharsPorItem: 400 },
   },
 };
@@ -550,7 +558,13 @@ export type ContextReferenceKind =
   | 'influencer'
   | 'campaign_influencer'
   | 'message'
-  | 'import_plan';
+  | 'import_plan'
+  // V2 · Fase 7: contenido. Alias SOLO (jamás UUID) para el modelo: E entregable, V versión de guion,
+  // H hallazgo, C comentario de revisión.
+  | 'deliverable'
+  | 'script_version'
+  | 'finding'
+  | 'review_comment';
 
 const PREFIJO_DE_ALIAS: Readonly<Record<ContextReferenceKind, string>> = {
   source: 'S',
@@ -562,6 +576,10 @@ const PREFIJO_DE_ALIAS: Readonly<Record<ContextReferenceKind, string>> = {
   campaign_influencer: 'P',
   message: 'M',
   import_plan: 'L',
+  deliverable: 'E',
+  script_version: 'V',
+  finding: 'H',
+  review_comment: 'C',
 };
 
 export interface ContextReference {
@@ -902,6 +920,86 @@ export function lineaDeParticipante(p: ParticipanteParaContexto): string {
     `nombre: ${JSON.stringify(recortarCampo(p.displayName, 80))}`,
     cuentas === '' ? null : `cuentas: ${JSON.stringify(cuentas)}`,
     productos === '' ? null : `productos: ${JSON.stringify(productos)}`,
+  ]
+    .filter((x): x is string => x !== null)
+    .join(' | ');
+}
+
+/** Estado de la última versión de guion, en español (texto fijo del código). */
+const ETIQUETA_DE_ESTADO_DE_VERSION: Readonly<Record<string, string>> = {
+  received: 'recibida',
+  in_review: 'en revisión',
+  changes_requested: 'cambios solicitados',
+  approved: 'aprobada',
+  superseded: 'reemplazada',
+};
+
+/** Vigencia de la revisión contra el Brief aprobado, en español (texto fijo del código). */
+const ETIQUETA_DE_ANALISIS: Readonly<Record<string, string>> = {
+  current: 'vigente',
+  stale: 'desactualizado (el Brief cambió)',
+  none: 'sin revisar',
+  failed: 'el último intento falló',
+  running: 'en curso',
+};
+
+export interface EntregableParaContexto {
+  /** Alias `E…` del entregable. */
+  readonly alias: string;
+  /** Alias `P…` de la participación. */
+  readonly participationAlias: string;
+  readonly influencerDisplayName: string;
+  readonly label: string;
+  /** Última versión registrada (alias `V…`), o `null` si todavía no hay guion. */
+  readonly latest: {
+    readonly alias: string;
+    readonly number: number;
+    readonly status: string;
+  } | null;
+  /** Número de la versión aprobada vigente, si la hay. */
+  readonly approvedNumber: number | null;
+  /** Vigencia de la revisión de la última versión (`current|stale|none|failed|running`). */
+  readonly analysis: string;
+  /** Hallazgos de la revisión elegida (informativos; no bloquean). */
+  readonly findings: {
+    readonly total: number;
+    readonly alta: number;
+    readonly media: number;
+    readonly baja: number;
+  };
+  /** Cambios pedidos registrados sobre la última versión. */
+  readonly requestedChanges: number;
+  /** ¿Hay una propuesta de aprobación abierta para la última versión? */
+  readonly pendingApproval: boolean;
+}
+
+/**
+ * Una línea de dato por entregable (la envuelve el sobre `content_state`). Solo estados, conteos y alias
+ * que fija el código; los textos de personas (nombre, etiqueta) van entre comillas JSON y recortados.
+ * NUNCA texto de guion ni de hallazgos, y TAMPOCO el nombre del archivo: la línea no sabe si su fuente es
+ * restringida para la IA (regla QA-04) y el nombre se consulta, ya filtrado, con `deliverable_get` /
+ * `script_version_get`.
+ */
+export function lineaDeEntregable(e: EntregableParaContexto): string {
+  const ultima =
+    e.latest === null
+      ? 'sin guion recibido'
+      : `última ${e.latest.alias} (n=${e.latest.number}, ${ETIQUETA_DE_ESTADO_DE_VERSION[e.latest.status] ?? 'estado desconocido'})`;
+  const hallazgos =
+    e.findings.total === 0
+      ? 'hallazgos: 0'
+      : `hallazgos: ${e.findings.total} (alta ${e.findings.alta}, media ${e.findings.media}, baja ${e.findings.baja})`;
+  return [
+    e.alias,
+    e.participationAlias,
+    `nombre: ${JSON.stringify(recortarCampo(e.influencerDisplayName, 80))}`,
+    `entregable: ${JSON.stringify(recortarCampo(e.label, 80))}`,
+    ultima,
+    e.approvedNumber === null ? null : `aprobada vigente: n=${e.approvedNumber}`,
+    e.latest === null ? null : `análisis: ${ETIQUETA_DE_ANALISIS[e.analysis] ?? 'desconocido'}`,
+    e.latest === null ? null : hallazgos,
+    e.requestedChanges > 0 ? `cambios pedidos: ${e.requestedChanges}` : null,
+    e.pendingApproval ? 'propuesta de aprobación pendiente' : null,
   ]
     .filter((x): x is string => x !== null)
     .join(' | ');

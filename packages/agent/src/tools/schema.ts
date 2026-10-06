@@ -121,6 +121,24 @@ export const CLAVES_PROHIBIDAS_DEL_MODELO: ReadonlySet<string> = new Set([
   'visibility',
   'confidentiality',
   'confidentialitylevel',
+  // V2 · Fase 7: el Brief gobernante lo elige el servidor, el número de versión lo asigna la base, el
+  // autor es siempre la persona del run y la aprobación/revisión es de una persona en la UI.
+  'approved',
+  'approvedby',
+  'approvedat',
+  'authorid',
+  'authorkind',
+  'versionnumber',
+  'number',
+  'briefversionid',
+  'briefversion',
+  'analysisid',
+  'findingstatus',
+  'reviewstatus',
+  'mode',
+  'force',
+  'idempotencykey',
+  'chatmessageid',
 ]);
 
 const CLAVES_PELIGROSAS: ReadonlySet<string> = new Set(['__proto__', 'constructor', 'prototype']);

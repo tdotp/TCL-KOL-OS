@@ -12,14 +12,8 @@
  *   influencer_get_origin           → obtenerCampaignInfluencer + getParticipationOrigin
  */
 
-import {
-  type CampaignInfluencerDetail,
-  err,
-  lineaDeParticipante,
-  ok,
-  recortarCampo,
-} from '@tcl-kol-os/domain';
-import { RECURSO_NO_ENCONTRADO, fuenteDeCampana, resolverId } from '../guards.ts';
+import { type CampaignInfluencerDetail, lineaDeParticipante, ok, recortarCampo } from '@tcl-kol-os/domain';
+import { fuenteDeCampana, participacionDeCampana } from '../guards.ts';
 import { acotar, linea, maxQueCabe, sobre } from '../projection.ts';
 import type { ToolCtx } from '../types.ts';
 import * as uc from '../use-cases.ts';
@@ -94,18 +88,6 @@ export const influencerListParticipants = definirTool<ListarEntrada, uc.PaginaDe
 // ─────────────────────────── influencer_get_participation ──────────────────────
 
 type ParticipacionEntrada = { participationId: string };
-
-async function participacionDeCampana(
-  ctx: ToolCtx,
-  valor: string,
-): ReturnType<typeof uc.obtenerCampaignInfluencer> {
-  const id = resolverId(ctx, valor, 'campaign_influencer');
-  if (!id.ok) return id;
-  const r = await uc.obtenerCampaignInfluencer(ctx.actor, id.value);
-  if (!r.ok || r.value.campaignInfluencer.campaignId !== ctx.run.campaignId)
-    return err(RECURSO_NO_ENCONTRADO);
-  return r;
-}
 
 export const influencerGetParticipation = definirTool<ParticipacionEntrada, CampaignInfluencerDetail>({
   name: 'influencer_get_participation',

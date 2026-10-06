@@ -30,12 +30,16 @@ export type ProposedActionStatus = 'pending' | 'confirmed' | 'executed' | 'cance
  *  · `influencer_import.resolve_record` resolver un registro ambiguo del plan con
  *                                       una decisión que el agente formaliza y una
  *                                       persona confirma.
+ *  · `script_version.approve`           aprobar una versión de guion (Fase 7): la
+ *                                       propone quien gestiona el contenido
+ *                                       (`script:manage`, también el agente) y solo la
+ *                                       confirma Dirección (`script:approve`).
  */
 export type ProposedActionType =
-  'brief.approve' | 'influencer_import.apply' | 'influencer_import.resolve_record';
+  'brief.approve' | 'influencer_import.apply' | 'influencer_import.resolve_record' | 'script_version.approve';
 
 export type ProposedActionResourceType =
-  'brief_version' | 'influencer_import_plan' | 'influencer_import_record';
+  'brief_version' | 'influencer_import_plan' | 'influencer_import_record' | 'script_version';
 
 export interface ProposedActionSpec {
   readonly type: ProposedActionType;
@@ -72,6 +76,14 @@ export const PROPOSED_ACTION_SPECS: Readonly<Record<ProposedActionType, Proposed
     resourceType: 'influencer_import_record',
     proposeCapability: ['influencer:manage', 'campaign_influencer:manage'],
     confirmCapability: ['influencer:manage', 'campaign_influencer:manage'],
+  },
+  // Contenido (Fase 7): proponer es de quien gestiona guiones (admin, director, consultor);
+  // confirmar y ejecutar es de Dirección (admin, director). El consultor propone, no aprueba.
+  'script_version.approve': {
+    type: 'script_version.approve',
+    resourceType: 'script_version',
+    proposeCapability: 'script:manage',
+    confirmCapability: 'script:approve',
   },
 };
 

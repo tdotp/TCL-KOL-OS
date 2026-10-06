@@ -66,18 +66,16 @@ afterAll(async () => {
 });
 
 describe('catálogo y definiciones por rol', () => {
-  it('ofrece las 25 tools a quien tiene chat y las capacidades; ninguna a operativo, cliente, analista o legal', () => {
+  it('ofrece las 36 tools a quien tiene chat y las capacidades; ninguna a operativo, cliente, analista o legal', () => {
     const nombres = r.definitionsFor(e.consultor).map((d) => d.name);
-    expect(nombres).toHaveLength(25);
+    expect(nombres).toHaveLength(36);
     expect(new Set(nombres)).toEqual(new Set(CATALOGO_V1.map((t) => t.name)));
     for (const u of [e.operativo, e.cliente, e.analista, e.legal]) {
       expect(r.definitionsFor(u), u.role).toEqual([]);
     }
     // ni siquiera ofrece nada aprobar/confirmar/ejecutar
     expect(
-      nombres.filter(
-        (n) => /approve|confirm|execute|aprobar|ejecutar/.test(n) && !n.startsWith('brief_propose'),
-      ),
+      nombres.filter((n) => /approve|confirm|execute|aprobar|ejecutar/.test(n) && !n.includes('_propose_')),
     ).toEqual([]);
     // un usuario inactivo tampoco ve herramientas
     expect(r.definitionsFor({ ...e.consultor, status: 'inactivo' })).toEqual([]);

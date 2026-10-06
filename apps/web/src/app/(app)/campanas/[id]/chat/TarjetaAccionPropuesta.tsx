@@ -16,6 +16,24 @@ const PILL: Readonly<Record<string, string>> = {
 };
 
 /**
+ * Avisos que la persona debe leer antes de decidir (hallazgos abiertos, revisión humana, versión más
+ * reciente…). Texto plano compuesto en el servidor solo desde lo huellado; no bloquean nada. Se pintan en
+ * la tarjeta y se repiten en el diálogo de confirmación.
+ */
+function AvisosDeLaPropuesta({ advertencias }: { advertencias: readonly string[] }) {
+  if (advertencias.length === 0) return null;
+  return (
+    <div className={styles.otroRol} role="note" data-testid="chat-proposal-warnings">
+      <ul>
+        {advertencias.map((a) => (
+          <li key={a}>{a}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
  * Tarjeta de una acción que el asistente PROPUSO. El asistente nunca aprueba, aplica ni
  * resuelve: solo deja la propuesta; la decisión es de una persona con permiso, que la
  * confirma aquí, con la huella de lo que se le muestra, desde la interfaz (canal `ui`).
@@ -118,6 +136,7 @@ export function TarjetaAccionPropuesta({
           ))}
         </ul>
       )}
+      <AvisosDeLaPropuesta advertencias={accion.advertencias} />
 
       <div className={styles.propuestaMeta}>
         <span data-testid="chat-proposal-author">
@@ -218,6 +237,7 @@ export function TarjetaAccionPropuesta({
                   <code className={styles.huella}>{huellaCorta(accion.payloadHash)}</code>
                 </li>
               </ul>
+              <AvisosDeLaPropuesta advertencias={accion.advertencias} />
             </div>
             {error !== undefined && (
               <p className={styles.error} role="alert" data-testid="chat-proposal-dialog-error">

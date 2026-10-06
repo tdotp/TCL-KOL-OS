@@ -299,6 +299,13 @@ export const MANIFIESTO_DE_DB: Readonly<Record<string, ClasificacionDeExport>> =
   iniciarRevisionDeVersionEnTransaccion: X, // recibe un cliente de BD
   bloquearEntregable: X, // mutex interno; SQL directo
 
+  // ── Fase 7 · script-review.ts ── (comentarios SmartPR y cambios solicitados)
+  // El autor es siempre la persona (nunca el modelo): `review_comment_add` y `script_request_changes`
+  // fijan origen `chat` y `chatMessageId` desde el run; la base impone que el texto es cita exacta.
+  crearComentarioDeRevision: W,
+  solicitarCambiosDeScript: W,
+  listarComentariosDeRevision: R,
+
   // ── Fase 7 · content-analysis.ts / content-analysis-client.ts ── (revisión del guion contra el Brief rector)
   // Lecturas con alcance de actor (script:read; el Operativo y el cliente no leen revisiones ni hallazgos).
   obtenerBriefRector: R,
@@ -307,6 +314,7 @@ export const MANIFIESTO_DE_DB: Readonly<Record<string, ClasificacionDeExport>> =
   obtenerRevisionVigente: R,
   listarRevisiones: R,
   listarHallazgos: R, // texto del modelo/guion/Brief: NO confiable (va en sobre)
+  resumenesDeContenidoDeVersiones: R, // solo cifras y estados por versión (`deliverable_list` y la sección `content`)
   // Escritura dentro de los permisos de la persona (`content_analysis_request`, origen chat; idempotente).
   solicitarAnalisisDeGuion: W,
   // La revisión humana la registra UNA PERSONA por `ui`: ninguna tool puede (HUMAN_CONFIRMATION_REQUIRED).
@@ -320,6 +328,16 @@ export const MANIFIESTO_DE_DB: Readonly<Record<string, ClasificacionDeExport>> =
   llamadaOk: UI,
   respuestaGuionada: UI,
   falloGuionado: UI,
+
+  // ── Fase 7 · script-approval.ts ── (aprobar un guion es decisión humana: ui directa o HITL)
+  // La evaluación (elegibilidad, snapshot, huella) recibe un `db` sin autorizar y revela el payload de la
+  // aprobación: es de la UI y del handler; ninguna tool la usa. La lectura autorizada de la UI tampoco.
+  evaluarAprobacionDeScript: UI,
+  obtenerEvaluacionDeAprobacion: UI,
+  // Prohibidas: aprobar solo existe como propuesta (`script_propose_approval` → `proponerAccion`) que una
+  // persona confirma por la interfaz, o como aprobación directa de una persona desde la UI.
+  aprobarScriptVersion: X,
+  aprobarScriptVersionEnTransaccion: X,
 };
 
 /** Clasificación de un export (`prohibited` si no está clasificado). */

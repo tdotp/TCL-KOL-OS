@@ -41,6 +41,14 @@ export interface GroundingDeTool {
    * `2027-03-01`, `1 de marzo de 2027`, `01/03/2027`…). Ver `fechaFundamentada`.
    */
   readonly dateFields?: readonly string[];
+  /**
+   * Grounding REFORZADO (F7): el campo debe ser una subcadena EXACTA (sin plegar mayúsculas ni
+   * acentos) del texto del MENSAJE EN CURSO de la persona —no de uno anterior, no del asistente, no de
+   * un documento—, con al menos `minChars` caracteres. Lo usan las tools que guardan palabras de la
+   * persona como texto propio (`review_comment_add`, `script_request_changes`): la base lo vuelve a
+   * imponer con el mensaje del run, así que ni un bug de aquí permite guardar texto redactado.
+   */
+  readonly currentMessageQuote?: { readonly field: string; readonly minChars: number };
 }
 
 /** Contexto que el executor entrega a una tool, ya verificado. */

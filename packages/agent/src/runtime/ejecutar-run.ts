@@ -438,6 +438,14 @@ class Turno {
 
     // Base del grounding (D11): los mensajes de la persona de ESTA conversación.
     const textosDelActor = textosDelActorDeDominio(ventana, actor.id);
+    // F7: adjuntos de los mensajes de la PERSONA (nunca los del asistente) y texto exacto del mensaje en curso.
+    const actorId = actor.id;
+    const delActor = historial.value.filter((m) => m.role === 'user' && m.userId === actorId);
+    const adjuntosPorMensaje = delActor
+      .filter((m) => m.attachments.length > 0)
+      .map((m) => ({ texto: m.content, sourceIds: m.attachments.map((a) => a.sourceId) }));
+    const adjuntosDelActor = [...new Set(adjuntosPorMensaje.flatMap((m) => m.sourceIds))];
+    const textoDelMensajeEnCurso = mensaje.value.content;
     const referencias = ctx.registro;
     const mensajes: ModelMessage[] = construirMensajesIniciales(ctx.texto);
     const senalDelPlazo = AbortSignal.timeout(Math.max(plazoMs - this.now().getTime(), 1));
@@ -562,6 +570,9 @@ class Turno {
           stepIndex: paso,
           referencias,
           textosDelActor,
+          messageText: textoDelMensajeEnCurso,
+          adjuntosDelActor,
+          adjuntosPorMensaje,
           signal: senalDelPlazo,
         };
         this.toolCalls += 1;

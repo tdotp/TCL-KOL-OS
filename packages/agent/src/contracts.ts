@@ -126,6 +126,22 @@ export interface ToolRunContext {
   readonly referencias: RegistroDeReferencias;
   /** Textos de mensajes del ACTOR en esta conversación (base del grounding literal, D11). */
   readonly textosDelActor: readonly string[];
+  /**
+   * Texto EXACTO del mensaje en curso (el que originó el run), tal como está guardado. Base del
+   * grounding reforzado `currentMessageQuote` (F7): un comentario o un cambio solicitado debe ser
+   * subcadena exacta de ESTE mensaje, no de uno anterior ni del asistente.
+   */
+  readonly messageText: string;
+  /**
+   * `source_id` de los adjuntos de mensajes del ACTOR en la ventana de la conversación (F7). Sin
+   * esto, un documento podría hacer que el modelo registrara como guion cualquier fuente legible.
+   */
+  readonly adjuntosDelActor: readonly string[];
+  /**
+   * Mensajes del ACTOR que traen adjuntos (texto + fuentes), en orden cronológico (F7). Permite saber
+   * cuántos archivos acompañaban a la frase en la que la persona nombró al influencer.
+   */
+  readonly adjuntosPorMensaje: readonly { readonly texto: string; readonly sourceIds: readonly string[] }[];
   readonly signal?: AbortSignal;
 }
 

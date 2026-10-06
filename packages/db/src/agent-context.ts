@@ -53,6 +53,7 @@ import {
   fuenteLegibleParaIA,
   instruccionesDeSobre,
   lineaDeFuente,
+  lineaDeEntregable,
   lineaDeParticipante,
   lineaDePregunta,
   lineaDeProducto,
@@ -68,6 +69,8 @@ import { obtenerBriefWorkspace } from './brief-workspace.ts';
 import { getCampaign } from './campaigns.ts';
 import { listarInfluencersDeCampanaConConteo } from './campaign-influencers.ts';
 import type { ContextoDeAuditoria } from './audit-context.ts';
+import { resumenesDeContenidoDeVersiones } from './content-analysis.ts';
+import { listarEntregablesDeCampana } from './deliverables.ts';
 import { listImportPlans } from './influencer-import.ts';
 import { buscarEvidenciaComoActor, buscarTextoEnFuentes } from './search.ts';
 import { listSyncRuns } from './source-sync.ts';
@@ -290,13 +293,17 @@ export async function ensamblarContexto(
   };
 
   // ── Lecturas independientes, en paralelo ──
-  const [briefR, fuentesR, participantesR] = await Promise.all([
+  const [briefR, fuentesR, participantesR, entregablesR] = await Promise.all([
     puede('brief_state')
       ? obtenerBriefWorkspace(actor, campaignId, { incluirActividad: false })
       : Promise.resolve(undefined),
     puede('sources') ? listSources(actor, campaignId) : Promise.resolve(undefined),
     puede('influencers')
       ? listarInfluencersDeCampanaConConteo(actor, campaignId, { limite: pres('influencers').maxItems })
+      : Promise.resolve(undefined),
+    // V2 · Fase 7: entregables (una sola consulta agregada; el orden por atención se hace aquí).
+    puede('content')
+      ? listarEntregablesDeCampana(actor, campaignId, { limite: 200 })
       : Promise.resolve(undefined),
   ]);
 
@@ -321,6 +328,27 @@ export async function ensamblarContexto(
       : participantesR.ok
         ? participantesR.value
         : (degradar('influencers', participantesR.error.code), undefined);
+
+  // Entregables y su resumen de revisión (cifras por la ÚLTIMA versión de cada uno; sin N+1).
+  const entregables =
+    entregablesR === undefined
+      ? undefined
+      : entregablesR.ok
+        ? entregablesR.value
+        : (degradar('content', entregablesR.error.code), undefined);
+  const resumenesDeContenido =
+    entregables === undefined || entregables.projection !== 'cuenta'
+      ? undefined
+      : await resumenesDeContenidoDeVersiones(
+          actor,
+          campaignId,
+          entregables.items.flatMap((i) =>
+            i.projection === 'cuenta' && i.latest !== null ? [i.latest.id] : [],
+          ),
+        );
+  if (resumenesDeContenido !== undefined && !resumenesDeContenido.ok) {
+    degradar('content', resumenesDeContenido.error.code);
+  }
 
   // ── Fuentes: preparación en vivo (incluye el estado de sincronización de los Sheets) ──
   const filasPorId = new Map<string, SourceRow>((fuentes ?? []).map((f) => [f.id, f]));
@@ -668,6 +696,103 @@ export async function ensamblarContexto(
         items,
         omitidosPorLectura: fuera > 0 ? { count: fuera } : undefined,
         herramientaSugerida: 'influencer_list_participants',
+      }),
+    );
+  }
+
+  // ── P6 · contenido: entregables y su última versión (solo estados y cifras; NUNCA texto de guion) ──
+  if (
+    entregables !== undefined &&
+    entregables.projection === 'cuenta' &&
+    resumenesDeContenido !== undefined &&
+    resumenesDeContenido.ok
+  ) {
+    const resumenes = resumenesDeContenido.value;
+    const prioridad = (e: {
+      status: string | undefined;
+      resumen: { requestedChanges: number; pendingApproval: boolean; vigencia: string; findingTotal: number };
+    }): number => {
+      if (e.resumen.pendingApproval) return 0;
+      if (e.resumen.requestedChanges > 0 || e.status === 'changes_requested') return 1;
+      if (e.resumen.vigencia === 'stale' || e.resumen.findingTotal > 0) return 2;
+      return 3;
+    };
+    const SIN_RESUMEN = {
+      vigencia: 'none',
+      findingsBySeverity: { alta: 0, media: 0, baja: 0 },
+      findingTotal: 0,
+      requestedChanges: 0,
+      pendingApproval: false,
+    } as const;
+    const filas = entregables.items.flatMap((i, orden) => {
+      if (i.projection !== 'cuenta') return [];
+      const resumen = (i.latest !== null ? resumenes.get(i.latest.id) : undefined) ?? SIN_RESUMEN;
+      return [{ i, resumen, orden }];
+    });
+    filas.sort(
+      (a, b) =>
+        prioridad({ status: a.i.latest?.status, resumen: a.resumen }) -
+          prioridad({ status: b.i.latest?.status, resumen: b.resumen }) || a.orden - b.orden,
+    );
+    const visibles = filas.slice(0, pres('content').maxItems);
+    const items: ItemDeContexto[] = visibles.map(({ i, resumen }) => {
+      const aliasE = registro.registrar({
+        kind: 'deliverable',
+        entityId: i.deliverable.id,
+        parentId: i.deliverable.campaignInfluencerId,
+      }).alias;
+      const aliasP = registro.registrar({
+        kind: 'campaign_influencer',
+        entityId: i.deliverable.campaignInfluencerId,
+      }).alias;
+      const aliasV =
+        i.latest === null
+          ? undefined
+          : registro.registrar({
+              kind: 'script_version',
+              entityId: i.latest.id,
+              parentId: i.deliverable.id,
+            }).alias;
+      return {
+        id: i.deliverable.id,
+        aliases: aliasV === undefined ? [aliasE, aliasP] : [aliasE, aliasP, aliasV],
+        texto: lineaDeEntregable({
+          alias: aliasE,
+          participationAlias: aliasP,
+          influencerDisplayName: i.influencerDisplayName,
+          label: i.deliverable.label,
+          latest:
+            i.latest === null || aliasV === undefined
+              ? null
+              : {
+                  alias: aliasV,
+                  number: i.latest.version,
+                  status: i.latest.status,
+                },
+          approvedNumber: i.currentApproved?.version ?? null,
+          analysis: resumen.vigencia,
+          findings: { total: resumen.findingTotal, ...resumen.findingsBySeverity },
+          requestedChanges: resumen.requestedChanges,
+          pendingApproval: resumen.pendingApproval,
+        }),
+      };
+    });
+    const conGuion = filas.filter((f) => f.i.latest !== null).length;
+    const conAtencion = filas.filter(
+      (f) => prioridad({ status: f.i.latest?.status, resumen: f.resumen }) < 3,
+    ).length;
+    const fuera = Math.max(entregables.total - visibles.length, 0);
+    candidatas.push(
+      candidata('content', 'Entregables y guiones', {
+        modo: 'agrupado',
+        encabezado:
+          `Entregables activos de la campaña: ${entregables.total} (con guion recibido: ${conGuion}; con algo pendiente de atención: ${conAtencion}). ` +
+          'Cada línea es un entregable de UNA participación (P…) y su última versión de guion (V…). ' +
+          'Los guiones, hallazgos y comentarios no se muestran aquí: se consultan con herramientas. Un guion no se aprueba desde el chat: solo se propone.',
+        sobre: { kind: 'content_state' },
+        items,
+        omitidosPorLectura: fuera > 0 ? { count: fuera } : undefined,
+        herramientaSugerida: 'deliverable_list',
       }),
     );
   }

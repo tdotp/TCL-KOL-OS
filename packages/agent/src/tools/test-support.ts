@@ -30,6 +30,12 @@ export interface Turno {
   readonly campaignId: string;
   readonly referencias: RegistroDeReferencias;
   readonly textos: string[];
+  /** Texto EXACTO del mensaje en curso (el que publicó `abrirTurno`). */
+  readonly mensaje: string;
+  /** F7: `source_id` de los adjuntos de la persona (ventana de la conversación). */
+  adjuntos: string[];
+  /** F7: mensajes de la persona que traen adjuntos. */
+  adjuntosPorMensaje: { texto: string; sourceIds: string[] }[];
   step: number;
 }
 
@@ -54,6 +60,9 @@ export async function abrirTurno(actor: User, campaignId: string, texto: string)
     campaignId,
     referencias: new RegistroDeReferencias(),
     textos: [texto],
+    mensaje: texto,
+    adjuntos: [],
+    adjuntosPorMensaje: [],
     step: 0,
   };
 }
@@ -68,6 +77,9 @@ export function contextoDe(t: Turno): ToolRunContext {
     stepIndex: t.step,
     referencias: t.referencias,
     textosDelActor: t.textos,
+    messageText: t.mensaje,
+    adjuntosDelActor: t.adjuntos,
+    adjuntosPorMensaje: t.adjuntosPorMensaje,
   };
 }
 

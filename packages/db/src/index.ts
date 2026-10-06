@@ -173,6 +173,23 @@ export type {
   RevisionIniciada,
 } from './script-versions.ts';
 export {
+  crearComentarioDeRevision,
+  solicitarCambiosDeScript,
+  listarComentariosDeRevision,
+} from './script-review.ts';
+export type {
+  TipoDeComentarioDeRevision,
+  ComentarioDeRevision,
+  NuevoComentarioDeRevision,
+  ResultadoDeComentario,
+  CambioSolicitado,
+  SolicitarCambiosInput,
+  VersionConCambiosSolicitados,
+  ResultadoDeCambiosSolicitados,
+  ListarComentariosOpciones,
+  PaginaDeComentarios,
+} from './script-review.ts';
+export {
   LIMITE_DE_ANALISIS_POR_VERSION,
   PLAZO_DE_ANALISIS_MS,
   obtenerBriefRector,
@@ -183,6 +200,7 @@ export {
   obtenerRevisionVigente,
   listarRevisiones,
   listarHallazgos,
+  resumenesDeContenidoDeVersiones,
 } from './content-analysis.ts';
 export type {
   TipoDeRevision,
@@ -206,6 +224,7 @@ export type {
   RevisionHumanaRegistrada,
   DependenciasDeAnalisis,
   OpcionesDeListado,
+  ResumenDeContenidoDeVersion,
 } from './content-analysis.ts';
 export {
   crearClienteDeAnalisisHttp,
@@ -223,3 +242,18 @@ export type {
   GuionDeLlamada,
   OpcionesDeClienteHttp,
 } from './content-analysis-client.ts';
+export {
+  evaluarAprobacionDeScript,
+  obtenerEvaluacionDeAprobacion,
+  aprobarScriptVersion,
+  aprobarScriptVersionEnTransaccion,
+} from './script-approval.ts';
+export type {
+  SeveridadesAbiertas,
+  SnapshotDeAprobacion,
+  EtiquetasDeAprobacion,
+  EvaluacionDeAprobacion,
+  OpcionesDeAprobacion,
+  VersionReemplazada,
+  AprobacionDeScript,
+} from './script-approval.ts';

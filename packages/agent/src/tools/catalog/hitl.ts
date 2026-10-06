@@ -4,6 +4,7 @@
  *   brief_propose_approval   CONFIRMATION_REQUIRED → proponerAccion('brief.approve')
  *   sheet_propose_apply      CONFIRMATION_REQUIRED → proponerAccion('influencer_import.apply')
  *   sheet_propose_resolution CONFIRMATION_REQUIRED → proponerAccion('influencer_import.resolve_record')
+ *   script_propose_approval  CONFIRMATION_REQUIRED → proponerAccion('script_version.approve')
  *   proposed_action_get      READ                  → obtenerAccionPropuesta
  *
  * Estas tools SOLO dejan una propuesta `pending`. Confirmar y ejecutar son de una
@@ -13,17 +14,18 @@
  */
 
 import { type ProposedAction, type ProposedActionType, err } from '@tcl-kol-os/domain';
-import { RECURSO_NO_ENCONTRADO, esUuid, resolverId } from '../guards.ts';
+import { RECURSO_NO_ENCONTRADO, esUuid, resolverId, versionDeGuionDeCampana } from '../guards.ts';
 import { isoODeNulo } from '../projection.ts';
 import type { ToolCtx } from '../types.ts';
 import * as uc from '../use-cases.ts';
 import { versionVigenteDelBrief } from './brief.ts';
-import { CITA_DE_LA_PERSONA, definirTool, idDeRecurso } from './common.ts';
+import { CITA_DE_LA_PERSONA, aliasEstricto, definirTool, idDeRecurso } from './common.ts';
 
 const ETIQUETA_DE_TIPO: Readonly<Record<ProposedActionType, string>> = {
   'brief.approve': 'aprobar el brief',
   'influencer_import.apply': 'aplicar el plan de importación de influencers',
   'influencer_import.resolve_record': 'resolver un registro del plan de importación',
+  'script_version.approve': 'aprobar una versión de guion',
 };
 
 function proyectarPropuesta(accion: ProposedAction) {
@@ -265,4 +267,42 @@ export const proposedActionGet = definirTool<PropuestaEntrada, ProposedAction>({
       stored: { proposedActionId: accion.id, status: accion.status },
     };
   },
+});
+
+// ─────────────────────────── script_propose_approval ───────────────────────────
+
+type ProponerAprobacionDeGuionEntrada = { versionId: string; evidenceQuote: string };
+
+export const scriptProposeApproval = definirTool<ProponerAprobacionDeGuionEntrada, ProposedAction>({
+  name: 'script_propose_approval',
+  version: 1,
+  label: 'Proponiendo la aprobación de un guion',
+  description:
+    'Deja una PROPUESTA pendiente para aprobar UNA versión de guion (alias V…). No la aprueba: una persona con permiso debe revisarla y confirmarla en la interfaz (ve el estado de la revisión, los hallazgos abiertos y el Brief gobernante). Solo si la persona pidió proponer la aprobación de ese guion; cita su petición en evidenceQuote. Antes consulta script_version_get y dile cómo está la revisión. Si ya hay una propuesta idéntica abierta, devuelve esa. Nunca digas que quedó aprobado.',
+  risk: 'confirmation_required',
+  requiredAction: ['script:manage', 'script:read'],
+  inputSchema: {
+    type: 'object',
+    properties: {
+      versionId: aliasEstricto('V', 'Alias de la versión de guion (V1…).'),
+      evidenceQuote: CITA_DE_LA_PERSONA,
+    },
+    required: ['versionId', 'evidenceQuote'],
+    additionalProperties: false,
+  },
+  campaignStatus: 'activa',
+  grounding: { quoteField: 'evidenceQuote' },
+  quota: {
+    perRun: 3,
+    why: 'Una propuesta idéntica abierta es idempotente; más de tres propuestas por turno es un bucle.',
+  },
+  reuses: ['obtenerVersionDeGuion', 'proponerAccion'],
+  reuseNote:
+    'proponerAccion(script_version.approve) con origin=chat: crea una ProposedAction pending; la confirma una persona con `script:approve` en la UI (aprobarScriptVersion, confirmarAccion y ejecutarAccion no existen para el agente). La versión se verifica contra la campaña con obtenerVersionDeGuion.',
+  async run(ctx, input) {
+    const version = await versionDeGuionDeCampana(ctx, input.versionId);
+    if (!version.ok) return version;
+    return proponer(ctx, 'script_version.approve', version.value.id);
+  },
+  project: (accion) => proyectarPropuesta(accion),
 });

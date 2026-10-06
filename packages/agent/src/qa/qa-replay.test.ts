@@ -59,6 +59,9 @@ describe('V5 · misma tool_call_id', () => {
       stepIndex: t.step,
       referencias: t.referencias,
       textosDelActor: t.textos,
+      messageText: t.textos[0] ?? '',
+      adjuntosDelActor: [],
+      adjuntosPorMensaje: [],
     };
     const resultados = await Promise.all(
       Array.from({ length: 8 }, () =>

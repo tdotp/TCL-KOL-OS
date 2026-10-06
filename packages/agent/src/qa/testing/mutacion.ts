@@ -5,7 +5,7 @@
  * a la COPIA y se ejecuta allí la copia de `manifest.test.ts`. Solo pruebas de QA.
  */
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync, rmSync, rmdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -13,7 +13,9 @@ const AQUI = dirname(fileURLToPath(import.meta.url));
 /** packages/agent */
 export const RAIZ_AGENT = resolve(AQUI, '..', '..', '..');
 const REPO = resolve(RAIZ_AGENT, '..', '..');
-export const BASE_TMP = join(RAIZ_AGENT, 'qa-tmp-mutacion');
+/** Raíz común de las copias; cada proceso usa su propio subdirectorio (`p<pid>`) para no pisar a otro. */
+const RAIZ_TMP = join(RAIZ_AGENT, 'qa-tmp-mutacion');
+export const BASE_TMP = join(RAIZ_TMP, `p${process.pid}`);
 
 export interface Copia {
   /** Raíz de la copia: contiene `agent/src` y `db/src`. */
@@ -29,7 +31,12 @@ export interface Copia {
 
 let contador = 0;
 
-export function crearCopia(): Copia {
+/**
+ * `origen`: `'HEAD'` (por defecto) parte del árbol COMMITEADO; `'arbol'` parte del directorio de trabajo.
+ * Las mutaciones de la Fase 7 necesitan `'arbol'` mientras el catálogo de contenido no esté commiteado (tras el
+ * commit, ambos coinciden).
+ */
+export function crearCopia(origen: 'HEAD' | 'arbol' = 'HEAD'): Copia {
   contador += 1;
   const raiz = join(BASE_TMP, `c${process.pid}-${contador}`);
   mkdirSync(raiz, { recursive: true });
@@ -39,11 +46,19 @@ export function crearCopia(): Copia {
   // editando db/web en paralelo y el baseline debe ser estable.
   const crudo = join(raiz, '_head');
   mkdirSync(crudo, { recursive: true });
-  execFileSync(
-    'sh',
-    ['-c', `git -C "${REPO}" archive HEAD packages/agent/src packages/db/src | tar -x -C "${crudo}"`],
-    { stdio: 'ignore' },
-  );
+  if (origen === 'HEAD') {
+    execFileSync(
+      'sh',
+      ['-c', `git -C "${REPO}" archive HEAD packages/agent/src packages/db/src | tar -x -C "${crudo}"`],
+      { stdio: 'ignore' },
+    );
+  } else {
+    for (const paquete of ['agent', 'db']) {
+      cpSync(join(REPO, 'packages', paquete, 'src'), join(crudo, 'packages', paquete, 'src'), {
+        recursive: true,
+      });
+    }
+  }
   mkdirSync(join(raiz, 'agent'), { recursive: true });
   mkdirSync(join(raiz, 'db'), { recursive: true });
   cpSync(join(crudo, 'packages', 'agent', 'src'), agent, { recursive: true });
@@ -80,13 +95,17 @@ export interface ResultadoDeManifiesto {
 export function correrManifiesto(copia: Copia): ResultadoDeManifiesto {
   const prueba = join(copia.agent, 'tools', 'manifest.test.ts');
   try {
-    const salida = execFileSync('npx', ['vitest', 'run', prueba, '--reporter=dot'], {
-      cwd: RAIZ_AGENT,
-      env: { ...process.env, FORCE_COLOR: '0' },
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 120_000,
-    });
+    const salida = execFileSync(
+      'npx',
+      ['vitest', 'run', '--config', 'vitest.mutacion.config.ts', prueba, '--reporter=dot'],
+      {
+        cwd: RAIZ_AGENT,
+        env: { ...process.env, FORCE_COLOR: '0' },
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 120_000,
+      },
+    );
     return { detectado: false, salida };
   } catch (error) {
     const e = error as { stdout?: string; stderr?: string; status?: number | null };
@@ -99,4 +118,10 @@ export function correrManifiesto(copia: Copia): ResultadoDeManifiesto {
 
 export function limpiarMutaciones(): void {
   rmSync(BASE_TMP, { recursive: true, force: true });
+  // la raíz común solo se retira si ya no queda el subdirectorio de ningún otro proceso
+  try {
+    rmdirSync(RAIZ_TMP);
+  } catch {
+    /* hay copias de otro proceso: no es asunto de este */
+  }
 }

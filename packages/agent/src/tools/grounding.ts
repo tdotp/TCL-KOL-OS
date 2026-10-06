@@ -302,3 +302,114 @@ export function verificarValorDeRespuesta(
   if (campo === undefined || campo.valueType === 'enum') return { ok: true };
   return recorrer(answerValue, 'answerValue', undefined, textosDelActor, 0);
 }
+
+// ─────────────────────────── Cita exacta del mensaje en curso (F7) ─────────────
+
+export type ResultadoDeCitaDelMensaje =
+  | { readonly ok: true; readonly cita: string }
+  | { readonly ok: false; readonly motivo: 'vacia' | 'muy_corta' | 'muy_larga' | 'no_aparece' };
+
+const CITA_DEL_MENSAJE_MAX_CHARS = 1_000;
+
+/**
+ * ¿`cita` es una subcadena EXACTA del texto del mensaje en curso? Sin plegar mayúsculas, acentos ni
+ * espacios internos (lo que se guarda como comentario es lo que la persona escribió, byte a byte); solo
+ * se recortan los espacios de los bordes, igual que el caso de uso (`body.trim()`). Devuelve la cita ya
+ * recortada: es exactamente el texto que se guardará.
+ */
+export function verificarCitaDelMensajeEnCurso(
+  cita: unknown,
+  mensajeEnCurso: string,
+  minChars: number,
+): ResultadoDeCitaDelMensaje {
+  if (typeof cita !== 'string') return { ok: false, motivo: 'vacia' };
+  const limpia = cita.trim();
+  if (limpia === '') return { ok: false, motivo: 'vacia' };
+  const largo = Array.from(limpia).length;
+  if (largo < minChars) return { ok: false, motivo: 'muy_corta' };
+  if (largo > CITA_DEL_MENSAJE_MAX_CHARS) return { ok: false, motivo: 'muy_larga' };
+  if (!mensajeEnCurso.includes(limpia)) return { ok: false, motivo: 'no_aparece' };
+  return { ok: true, cita: limpia };
+}
+
+// ─────────────────────────── Asociación guion ↔ persona (F7) ────────────────────
+
+export interface EntradaDeAsociacionDeGuion {
+  /** `participantMention`: lo que la persona dijo («Valentina»). */
+  readonly mencion: string;
+  /** `evidenceQuote`: la frase de la persona que asocia el guion con el influencer. */
+  readonly cita: string;
+  /** La fuente que se quiere registrar y su nombre de archivo. */
+  readonly sourceId: string;
+  readonly filename: string;
+  /** Mensajes del ACTOR que traen adjuntos (ventana de la conversación). */
+  readonly mensajesConAdjuntos: readonly { readonly texto: string; readonly sourceIds: readonly string[] }[];
+  /** Nombres de archivo de los OTROS adjuntos en juego (para saber qué fragmento distingue a este). */
+  readonly nombresDeOtrosAdjuntos: readonly string[];
+}
+
+export type ResultadoDeAsociacionDeGuion =
+  | { readonly ok: true; readonly via: 'archivo_nombrado' | 'unico_adjunto' }
+  | { readonly ok: false; readonly motivo: 'mencion_ausente' | 'archivo_sin_nombrar' };
+
+/** Forma comparable: la del grounding (NFKC, minúsculas, espacios) más sin acentos. */
+const plano = (t: string): string => paraFechas(t);
+
+const sinExtension = (nombre: string): string => nombre.replace(/\.[A-Za-z0-9]{1,6}$/u, '');
+
+const palabrasLargas = (t: string, minimo: number): string[] =>
+  plano(t)
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((p) => p.length >= minimo);
+
+/**
+ * Decide si la frase de la persona asocia INEQUÍVOCAMENTE este archivo con ese influencer (pura, sin E/S).
+ *
+ *  1. La cita debe contener la mención (sin acentos ni mayúsculas): la persona dijo de quién es.
+ *  2. Si la cita nombra el archivo (nombre completo o sin extensión, ≥4 caracteres) o un fragmento
+ *     DISTINTIVO del nombre (palabra ≥6 caracteres que no es de la mención ni aparece en el nombre de
+ *     otro adjunto), el mapeo archivo↔persona es explícito.
+ *  3. Si no, solo vale cuando el archivo es el ÚNICO adjunto en juego: el de los mensajes que contienen
+ *     la cita (si traen adjuntos) o, si ninguno trae, el único adjunto de la persona en la ventana.
+ *     «Te dejo dos guiones: el de Valentina y el de Diego» con dos archivos sin mapeo NO se registra.
+ *
+ * Es política de agente (grounding), no de dominio: el caso de uso decide si la mención es inequívoca.
+ */
+export function verificarAsociacionDeGuion(e: EntradaDeAsociacionDeGuion): ResultadoDeAsociacionDeGuion {
+  const cita = plano(e.cita);
+  const mencion = plano(e.mencion).replace(/^@/u, '');
+  if (mencion.length < 2 || !cita.includes(mencion)) return { ok: false, motivo: 'mencion_ausente' };
+
+  const nombre = plano(e.filename);
+  const raiz = plano(sinExtension(e.filename));
+  const deOtros = e.nombresDeOtrosAdjuntos.map((n) => plano(n));
+  // El nombre COMPLETO es explícito; la raíz sin extensión solo si no es también la de otro adjunto
+  // («valentina.docx» y «valentina_otro.docx» comparten «valentina»: «el de Valentina» no distingue).
+  const nombraElArchivo =
+    (nombre.length >= 4 && cita.includes(nombre)) ||
+    (raiz.length >= 4 && cita.includes(raiz) && !deOtros.some((o) => o.includes(raiz)));
+  if (nombraElArchivo) return { ok: true, via: 'archivo_nombrado' };
+
+  const palabrasDeLaMencion = new Set(palabrasLargas(e.mencion, 1));
+  const distintivo = palabrasLargas(sinExtension(e.filename), 6).some(
+    (p) => cita.includes(p) && !palabrasDeLaMencion.has(p) && !deOtros.some((o) => o.includes(p)),
+  );
+  if (distintivo) return { ok: true, via: 'archivo_nombrado' };
+
+  const conLaCita = e.mensajesConAdjuntos.filter((m) => plano(m.texto).includes(cita));
+  const enJuego = new Set(
+    (conLaCita.length > 0 ? conLaCita : e.mensajesConAdjuntos).flatMap((m) => m.sourceIds),
+  );
+  if (enJuego.size === 1 && enJuego.has(e.sourceId)) return { ok: true, via: 'unico_adjunto' };
+  return { ok: false, motivo: 'archivo_sin_nombrar' };
+}
+
+/** ¿Aparece el nombre del archivo (≥4 caracteres) literal en algún mensaje de la persona? */
+export function archivoNombradoPorLaPersona(filename: string, textosDelActor: readonly string[]): boolean {
+  const nombre = plano(filename);
+  const raiz = plano(sinExtension(filename));
+  return textosDelActor.some((t) => {
+    const p = plano(t);
+    return (nombre.length >= 4 && p.includes(nombre)) || (raiz.length >= 4 && p.includes(raiz));
+  });
+}

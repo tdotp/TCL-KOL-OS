@@ -124,6 +124,15 @@ describe('(a) manifiesto de exports de @tcl-kol-os/db', () => {
       'actualizarInfluencer',
       'actualizarCuenta',
       'transicionarBriefEnTransaccion',
+      // F7: la revisión humana la registra una persona por ui; archivar/reactivar es de la persona; los
+      // internos reciben un cliente de BD o son el mutex.
+      'registrarRevisionHumana',
+      'archivarEntregable',
+      'reactivarEntregable',
+      'iniciarRevisionDeVersionEnTransaccion',
+      'bloquearEntregable',
+      'aprobarScriptVersion',
+      'aprobarScriptVersionEnTransaccion',
     ];
     for (const n of prohibidas) expect(clasificacionDe(n), n).toBe('prohibited');
     expect(clasificacionDe('proponerAccion')).toBe('proposal-tool');
@@ -621,16 +630,78 @@ describe('(d) el catálogo registrado', () => {
   const nombresDeUseCases = importadosDeDb(fuente(join(AQUI, 'use-cases.ts')));
   const permitidosParaTools = new Set([...nombresDeUseCases, 'solicitarRevisionInternaDelBrief']);
 
-  it('tiene 14 READ, 8 WRITE y 3 CONFIRMATION_REQUIRED, todos distintos', () => {
+  it('tiene 19 READ, 13 WRITE y 4 CONFIRMATION_REQUIRED, todos distintos (36 tools)', () => {
     const por = (r: string) => CATALOGO_V1.filter((t) => t.risk === r).map((t) => t.name);
-    expect(por('read')).toHaveLength(14);
-    expect(por('write')).toHaveLength(8);
+    expect(por('read')).toHaveLength(19);
+    expect(por('write')).toHaveLength(13);
     expect(por('confirmation_required').sort()).toEqual([
       'brief_propose_approval',
+      'script_propose_approval',
       'sheet_propose_apply',
       'sheet_propose_resolution',
     ]);
-    expect(new Set(CATALOGO_V1.map((t) => t.name)).size).toBe(25);
+    expect(new Set(CATALOGO_V1.map((t) => t.name)).size).toBe(36);
+  });
+
+  it('F7: las 11 tools de contenido son exactamente estas (5 lectura, 5 escritura, 1 propuesta)', () => {
+    const f7 = (r: string, nombres: string[]) =>
+      expect(
+        CATALOGO_V1.filter((t) => t.risk === r && nombres.includes(t.name))
+          .map((t) => t.name)
+          .sort(),
+      ).toEqual([...nombres].sort());
+    f7('read', [
+      'deliverable_list',
+      'deliverable_get',
+      'script_version_get',
+      'finding_list',
+      'review_comment_list',
+    ]);
+    f7('write', [
+      'deliverable_create',
+      'script_version_register',
+      'content_analysis_request',
+      'review_comment_add',
+      'script_request_changes',
+    ]);
+    f7('confirmation_required', ['script_propose_approval']);
+  });
+
+  it('(c′) ninguna tool tiene un nombre de decisión (approve/confirm/execute/reject/dismiss/publish/visibility/archive) salvo `_propose_`', () => {
+    const decision = /(^|_)(approve|approval|confirm|execute|reject|dismiss|publish|visibility|archive)(_|$)/;
+    for (const t of CATALOGO_V1) {
+      if (t.name.includes('_propose_')) continue;
+      expect(decision.test(t.name), t.name).toBe(false);
+    }
+    // el patrón detecta justo lo que debe (control)
+    for (const malo of [
+      'script_approve',
+      'finding_dismiss',
+      'deliverable_archive',
+      'script_version_visibility',
+    ]) {
+      expect(decision.test(malo), malo).toBe(true);
+    }
+    expect(decision.test('script_propose_approval')).toBe(true); // por eso se exceptúa `_propose_`
+  });
+
+  it('F7: ninguna tool de contenido tiene una propiedad de esquema que el modelo no deba aportar', () => {
+    const prohibidas = [
+      'approved',
+      'authorId',
+      'versionNumber',
+      'briefVersionId',
+      'analysisId',
+      'mode',
+      'force',
+      'idempotencyKey',
+      'chatMessageId',
+      'status',
+    ];
+    for (const t of CATALOGO_V1) {
+      for (const p of prohibidas)
+        expect(Object.hasOwn(t.inputSchema.properties, p), `${t.name}.${p}`).toBe(false);
+    }
   });
 
   it('ninguna tool es PROHIBIDA: ni por nombre ni por el caso de uso que reutiliza', () => {

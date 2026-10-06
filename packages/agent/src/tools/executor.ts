@@ -38,7 +38,7 @@ import {
   serializarError,
   serializarExito,
 } from './projection.ts';
-import { fechaFundamentada } from './grounding.ts';
+import { fechaFundamentada, verificarCitaDelMensajeEnCurso } from './grounding.ts';
 import { describirIncidencias, validarArgumentos } from './schema.ts';
 import type { AnyToolDefinition, ToolCtx } from './types.ts';
 import * as uc from './use-cases.ts';
@@ -145,10 +145,11 @@ function canonico(valor: unknown): string {
 function verificarGrounding(
   def: AnyToolDefinition,
   args: Readonly<Record<string, unknown>>,
-  textosDelActor: readonly string[],
+  run: Pick<ToolRunContext, 'textosDelActor' | 'messageText'>,
 ): Falla | undefined {
   const g = def.grounding;
   if (g === undefined) return undefined;
+  const textosDelActor = run.textosDelActor;
   const fallaDe = (field: string, motivo: string, mensaje: string): Falla => ({
     code: 'VALIDATION_FAILED',
     message: mensaje,
@@ -194,6 +195,18 @@ function verificarGrounding(
         campo,
         'no_aparece',
         `La fecha de «${campo}» no aparece en los mensajes de la persona: solo se registra una fecha que ella escribió (por ejemplo «30 de junio de 2027»). Si no la dio, pídesela; no uses fechas de documentos ni relativas («mañana»).`,
+      );
+    }
+  }
+  if (g.currentMessageQuote !== undefined) {
+    // F7: el texto que se guarda como palabras de la persona debe ser subcadena EXACTA del mensaje en curso.
+    const { field, minChars } = g.currentMessageQuote;
+    const r = verificarCitaDelMensajeEnCurso(args[field], run.messageText, minChars);
+    if (!r.ok) {
+      return fallaDe(
+        field,
+        r.motivo,
+        `El texto de «${field}» debe ser una frase EXACTA (≥${minChars} caracteres) de tu mensaje actual: cópiala tal cual; no la parafrasees, ni uses la de un mensaje anterior, del asistente o de un documento. Si la persona no la escribió, pídele que la diga con sus palabras.`,
       );
     }
   }
@@ -365,7 +378,7 @@ async function cuerpoDelPipeline(
     });
   }
 
-  const sinGrounding = verificarGrounding(def, valida.value, run.textosDelActor);
+  const sinGrounding = verificarGrounding(def, valida.value, run);
   if (sinGrounding !== undefined) return fallido(sinGrounding);
 
   if (contarPresupuesto) {

@@ -65,7 +65,7 @@ describe('configuracionDeRun: procedencia verificable', () => {
       model: 'anthropic/claude-haiku-4.5',
       tier: tierFor('conversar'),
       promptVersion: PROMPT_VERSION,
-      contextVersion: 'ctx-1.budget-1.policy-1',
+      contextVersion: 'ctx-2.budget-2.policy-1',
     });
   });
 

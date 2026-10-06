@@ -167,9 +167,44 @@ describe('V4 · una clave de identidad/ámbito en los argumentos se rechaza en T
     );
   });
 
-  it('un patrón de regexp en un campo no se puede usar para ReDoS (los esquemas del catálogo no declaran patrones)', () => {
-    const conPatron = CATALOGO_V1.filter((t) => JSON.stringify(t.inputSchema).includes('"pattern"'));
-    expect(conPatron.map((t) => t.name)).toEqual([]);
+  it('un patrón de regexp en un campo no se puede usar para ReDoS: solo los alias de contenido (F7), anclados y de longitud fija', () => {
+    // Los únicos patrones del catálogo son los de los alias estrictos de contenido (`^[Ee]\\d{1,5}$`): anclados, sin
+    // cuantificadores anidados ni alternancias, con longitud máxima acotada por el propio esquema.
+    const patrones: { tool: string; campo: string; pattern: string; maxLength: number | undefined }[] = [];
+    const recorre = (nombre: string, ruta: string, nodo: unknown): void => {
+      if (nodo === null || typeof nodo !== 'object') return;
+      const o = nodo as Record<string, unknown>;
+      if (typeof o['pattern'] === 'string') {
+        patrones.push({
+          tool: nombre,
+          campo: ruta,
+          pattern: o['pattern'],
+          maxLength: typeof o['maxLength'] === 'number' ? o['maxLength'] : undefined,
+        });
+      }
+      for (const [k, v] of Object.entries(o)) recorre(nombre, `${ruta}.${k}`, v);
+    };
+    for (const t of CATALOGO_V1) recorre(t.name, '', t.inputSchema);
+    expect(patrones.length).toBeGreaterThan(0);
+    for (const p of patrones) {
+      expect(p.pattern, `${p.tool}${p.campo}`).toMatch(/^\^\[[A-Za-z]{2}\]\\d\{1,5\}\$$/);
+      expect(p.maxLength, `${p.tool}${p.campo}`).toBeLessThanOrEqual(7);
+    }
+    // y ninguna de las tools anteriores a la Fase 7 declara un patrón
+    const f7 = new Set([
+      'deliverable_list',
+      'deliverable_get',
+      'script_version_get',
+      'finding_list',
+      'review_comment_list',
+      'deliverable_create',
+      'script_version_register',
+      'content_analysis_request',
+      'review_comment_add',
+      'script_request_changes',
+      'script_propose_approval',
+    ]);
+    expect(patrones.filter((p) => !f7.has(p.tool))).toEqual([]);
   });
 });
 
@@ -232,6 +267,9 @@ describe('V4 · el registro frente a nombres de tool hostiles (BD real)', () => 
           stepIndex: t.step,
           referencias: t.referencias,
           textosDelActor: t.textos,
+          messageText: t.textos[0] ?? '',
+          adjuntosDelActor: [],
+          adjuntosPorMensaje: [],
         },
         call: { id: clave(), name: name as string, arguments: {} },
       });

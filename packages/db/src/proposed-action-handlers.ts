@@ -21,8 +21,8 @@
  *
  * ── Garantía de ejecución (modo) ──────────────────────────────────────────────
  *
- *  · `atomic` (`brief.approve`): el cambio de dominio, la marca `executed` y la
- *    auditoría ocurren en UNA transacción (la del executor). Si algo falla, todo
+ *  · `atomic` (`brief.approve`, `script_version.approve`): el cambio de dominio, la
+ *    marca `executed` y la auditoría ocurren en UNA transacción (la del executor). Si algo falla, todo
  *    se revierte; nunca queda el dominio aplicado con la acción `confirmed`, ni
  *    `executed` sin dominio aplicado.
  *
@@ -47,6 +47,7 @@ import {
   type ProposedActionType,
   type Result,
   type User,
+  authorizeInternalResource,
   err,
   ok,
   transitionsFrom,
@@ -60,6 +61,7 @@ import {
   validarAplicacionDePlan,
   validarResolucionDeRegistro,
 } from './influencer-import.ts';
+import { aprobarScriptVersionEnTransaccion, evaluarAprobacionDeScript } from './script-approval.ts';
 import { transicionarBriefEnTransaccion } from './transitions.ts';
 
 // ─────────────────────────── Huellas ───────────────────────────────────────────
@@ -477,6 +479,94 @@ const importResolveRecord: HandlerDeAccion = {
   },
 };
 
+// ─────────────────────────── script_version.approve ────────────────────────────
+
+/**
+ * Aprobar una versión de guion (V2 · Fase 7). El payload huellado es
+ * `{ snapshot, approvalFingerprint, etiquetas }`: el snapshot (cifras e ids de lo que se aprueba), su huella
+ * y las etiquetas para MOSTRAR (nombres; no se comparan). Lo propone quien gestiona guiones (o el agente en su
+ * nombre) y solo lo confirma Dirección; la elegibilidad, el snapshot y la huella salen SIEMPRE de
+ * `evaluarAprobacionDeScript` (única fuente para la UI, este handler y el caso de uso).
+ */
+const NO_ES_UN_OBJETO = Symbol('no_es_un_objeto');
+
+function snapshotDelPayload(payload: Readonly<Record<string, unknown>>): unknown {
+  const s = payload['snapshot'];
+  return typeof s === 'object' && s !== null && !Array.isArray(s) ? s : NO_ES_UN_OBJETO;
+}
+
+const scriptVersionApprove: HandlerDeAccion = {
+  type: 'script_version.approve',
+  modo: 'atomic',
+
+  async prepararPropuesta(db, actor, resourceId) {
+    if (actor === 'system') return soloPersonas();
+    const evaluada = await evaluarAprobacionDeScript(db, resourceId);
+    if (!evaluada.ok) return evaluada;
+    const ev = evaluada.value;
+    // Mismo aislamiento que aprobar: otra organización o un cliente no ven que existe.
+    const permitido = authorizeInternalResource(actor, 'script:manage', ev.ubicacion.organizationId);
+    if (!permitido.ok) return permitido;
+    // Falla pronto lo que nunca podría ejecutarse (y devuelve el código tipificado del primer bloqueo).
+    if (!ev.elegible) return err(ev.bloqueos[0]!);
+    return ok({
+      organizationId: ev.ubicacion.organizationId,
+      campaignId: ev.ubicacion.campaignId,
+      payload: {
+        snapshot: ev.snapshot as unknown as Record<string, unknown>,
+        approvalFingerprint: ev.huella,
+        etiquetas: ev.etiquetas as unknown as Record<string, unknown>,
+      },
+    });
+  },
+
+  async verificarVigente(db, accion) {
+    const evaluada = await evaluarAprobacionDeScript(db, accion.resource_id);
+    if (!evaluada.ok) return err(evaluada.error);
+    const ev = evaluada.value;
+    if (!ev.elegible) {
+      return OBSOLETA(
+        `La versión ya no se puede aprobar tal como se propuso: ${ev.bloqueos[0]!.message} Hay que proponerla de nuevo.`,
+      );
+    }
+    const propuesto = snapshotDelPayload(accion.payload);
+    if (
+      propuesto === NO_ES_UN_OBJETO ||
+      canonico(propuesto) !== canonico(ev.snapshot) ||
+      accion.payload['approvalFingerprint'] !== ev.huella
+    ) {
+      return OBSOLETA(
+        'El guion, su revisión, el Brief o los comentarios cambiaron después de proponerse la aprobación. Hay que proponerla de nuevo.',
+      );
+    }
+    return ok(true);
+  },
+
+  async ejecutar(client, humano, accion) {
+    const huellaVista = accion.payload['approvalFingerprint'];
+    if (typeof huellaVista !== 'string') {
+      return OBSOLETA('La propuesta no lleva la huella de la aprobación. Hay que proponerla de nuevo.');
+    }
+    // La misma aprobación humana directa, con origen `ui` y correlación a la propuesta; corre DENTRO de la
+    // transacción del executor: el dominio, la marca `executed` y las auditorías se confirman juntos o no.
+    const r = await aprobarScriptVersionEnTransaccion(client, humano, accion.resource_id, {
+      huellaVista,
+      origen: 'ui',
+      correlation: { proposedActionId: accion.id },
+    });
+    if (!r.ok) return err(r.error);
+    // Resumen de cifras (sin contenido) para la auditoría de la ejecución.
+    return ok({
+      scriptVersionId: r.value.versionId,
+      versionNumber: r.value.version,
+      reviewKind: r.value.reviewKind,
+      findingTotal: r.value.findings.total,
+      commentTotal: r.value.comments.total,
+      supersededCount: r.value.replaced.length,
+    });
+  },
+};
+
 // ─────────────────────────── Registro ──────────────────────────────────────────
 
 /**
@@ -487,6 +577,7 @@ export const HANDLERS: Readonly<Record<ProposedActionType, HandlerDeAccion>> = {
   'brief.approve': briefApprove,
   'influencer_import.apply': importApply,
   'influencer_import.resolve_record': importResolveRecord,
+  'script_version.approve': scriptVersionApprove,
 };
 
 export function handlerDe(type: string): HandlerDeAccion | undefined {

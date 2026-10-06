@@ -780,6 +780,40 @@ export async function huellaDeBriefRector(
   return ok(huellaDe(await cargarInsumos(getPool(), fila, rector), rector));
 }
 
+// ─────────────────────────── Insumos de la aprobación (W3a) ────────────────────
+
+/**
+ * Lo que la aprobación de un guion necesita de este módulo, leído con un `db` cualquiera (el pool o el
+ * cliente de una transacción: la aprobación lo usa BAJO los bloqueos, sin pedir otra conexión). Es la
+ * MISMA definición de rector y de CURRENT/STALE que usan las lecturas (`leerRector`, `elegirVigente`); no
+ * autoriza (quien llama ya lo hizo).
+ */
+export interface InsumosDeRevisionParaAprobar {
+  readonly rector: BriefRector | undefined;
+  readonly vigente: RevisionVigente;
+  /** `request_hash` de la revisión elegida (solo `ai_assisted`); `null` en una revisión humana o sin revisión. */
+  readonly inputHash: string | null;
+}
+
+export async function leerInsumosDeRevisionParaAprobar(
+  db: pg.Pool | pg.PoolClient,
+  version: { readonly id: string; readonly campaign_id: string; readonly organization_id: string },
+): Promise<InsumosDeRevisionParaAprobar> {
+  const rector = await leerRector(db, version.campaign_id, version.organization_id);
+  const filas = await filasDeVersion(db, version.id);
+  const vigente = elegirVigente(filas, rector);
+  const runId = vigente.run?.id;
+  let inputHash: string | null = null;
+  if (runId !== undefined) {
+    const { rows } = await db.query<{ request_hash: string | null }>(
+      `SELECT request_hash FROM content_analysis_runs WHERE id = $1`,
+      [runId],
+    );
+    inputHash = rows[0]?.request_hash ?? null;
+  }
+  return { rector, vigente, inputHash };
+}
+
 // ─────────────────────────── Vigencia y listados ───────────────────────────────
 
 function porRecientes(a: FilaDeRevision, b: FilaDeRevision): number {
@@ -1960,4 +1994,102 @@ function sintetizarLlamada(r: {
       outcome: 'ok',
     },
   ];
+}
+
+// ─────────────────────────── Resumen por versión (contexto del agente) ─────────
+
+/**
+ * Lo que el contexto del agente necesita saber de la ÚLTIMA versión de cada entregable: vigencia de su
+ * revisión, hallazgos por severidad (cifras; nunca el texto), cambios pedidos y si hay una propuesta de
+ * aprobación abierta. Solo cifras y estados.
+ */
+export interface ResumenDeContenidoDeVersion {
+  readonly versionId: string;
+  readonly vigencia: VigenciaDeRevision;
+  readonly kind: TipoDeRevision | null;
+  readonly findingsBySeverity: SeveridadesDeHallazgos;
+  readonly findingTotal: number;
+  /** Comentarios `change_request` registrados sobre esa versión. */
+  readonly requestedChanges: number;
+  /** Propuesta `script_version.approve` abierta (`pending`/`confirmed`, sin vencer) para esa versión. */
+  readonly pendingApproval: boolean;
+}
+
+/** Tope de versiones por llamada (un entregable por versión). */
+const MAX_VERSIONES_DE_RESUMEN = 200;
+
+/**
+ * Resumen de revisión de VARIAS versiones de una campaña en una sola pasada (sin N+1): tres consultas
+ * agregadas más el rector. Misma regla de vigencia que `obtenerRevisionVigente` (`elegirVigente`).
+ * Exige `script:read` sobre la organización de la campaña; una versión que no sea de la campaña no
+ * aparece en el resultado. Aditivo: no cambia ninguna otra función de este módulo.
+ */
+export async function resumenesDeContenidoDeVersiones(
+  actor: User,
+  campaignId: string,
+  versionIds: readonly string[],
+): Promise<Result<ReadonlyMap<string, ResumenDeContenidoDeVersion>>> {
+  if (!esUuid(campaignId)) return err(NO_ENCONTRADO_DE_CONTENIDO);
+  const { rows: campanas } = await getPool().query<{ organization_id: string }>(
+    `SELECT organization_id FROM campaigns WHERE id = $1`,
+    [campaignId],
+  );
+  if (campanas[0] === undefined) return err(NO_ENCONTRADO_DE_CONTENIDO);
+  const organizationId = campanas[0].organization_id;
+  const permitido = authorizeInternalResource(actor, 'script:read', organizationId);
+  if (!permitido.ok) return permitido;
+
+  const ids = [...new Set(versionIds.filter(esUuid))].slice(0, MAX_VERSIONES_DE_RESUMEN);
+  const salida = new Map<string, ResumenDeContenidoDeVersion>();
+  if (ids.length === 0) return ok(salida);
+
+  const [rector, revisiones, cambios, propuestas] = await Promise.all([
+    leerRector(getPool(), campaignId, organizationId),
+    getPool().query<FilaDeRevision>(
+      `${SELECT_REVISION}
+        WHERE r.script_version_id = ANY($1::uuid[]) AND r.campaign_id = $2 AND r.organization_id = $3
+        ORDER BY r.created_at DESC, r.id DESC`,
+      [ids, campaignId, organizationId],
+    ),
+    getPool().query<{ script_version_id: string; n: number }>(
+      `SELECT script_version_id, count(*)::int AS n FROM script_review_comments
+        WHERE script_version_id = ANY($1::uuid[]) AND campaign_id = $2 AND kind = 'change_request'
+        GROUP BY script_version_id`,
+      [ids, campaignId],
+    ),
+    getPool().query<{ resource_id: string }>(
+      `SELECT DISTINCT resource_id FROM proposed_actions
+        WHERE campaign_id = $2 AND organization_id = $3 AND resource_id = ANY($1::uuid[])
+          AND action_type = 'script_version.approve'
+          AND status IN ('pending', 'confirmed') AND expires_at > now()`,
+      [ids, campaignId, organizationId],
+    ),
+  ]);
+
+  const porVersion = new Map<string, FilaDeRevision[]>();
+  for (const f of revisiones.rows) {
+    const lista = porVersion.get(f.script_version_id) ?? [];
+    lista.push(f);
+    porVersion.set(f.script_version_id, lista);
+  }
+  const conCambios = new Map(cambios.rows.map((c) => [c.script_version_id, c.n]));
+  const conPropuesta = new Set(propuestas.rows.map((p) => p.resource_id));
+  // Solo las versiones que pertenecen a la campaña (las demás se descartan sin decir por qué).
+  const { rows: propias } = await getPool().query<{ id: string }>(
+    `SELECT id FROM script_versions WHERE id = ANY($1::uuid[]) AND campaign_id = $2 AND organization_id = $3`,
+    [ids, campaignId, organizationId],
+  );
+  for (const { id } of propias) {
+    const vigente = elegirVigente(porVersion.get(id) ?? [], rector);
+    salida.set(id, {
+      versionId: id,
+      vigencia: vigente.vigencia,
+      kind: vigente.kind,
+      findingsBySeverity: vigente.findingsBySeverity,
+      findingTotal: vigente.findingTotal,
+      requestedChanges: conCambios.get(id) ?? 0,
+      pendingApproval: conPropuesta.has(id),
+    });
+  }
+  return ok(salida);
 }

@@ -273,6 +273,15 @@ describe('matriz rol × operación', () => {
         ])
       )[0]!.n,
     );
+    const intrusos = [e.operativo.id, e.analista.id, e.legal.id, e.cliente.id, e.ajeno.id];
+    const auditoriaDeIntrusos = async () =>
+      (
+        await query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM audit_events WHERE action = 'deliverable.create' AND actor_id = ANY($1::uuid[])`,
+          [intrusos],
+        )
+      )[0]!.n;
+    const eventosAntes = await auditoriaDeIntrusos();
     for (const intruso of [e.operativo, e.analista, e.legal, e.cliente, e.ajeno]) {
       await crearEntregable(intruso, {
         campaignInfluencerId: e.participaciones.diego,
@@ -287,11 +296,8 @@ describe('matriz rol × operación', () => {
       )[0]!.n,
     );
     expect(despues).toBe(antes);
-    const [ev] = await query<{ n: string }>(
-      `SELECT count(*)::text AS n FROM audit_events WHERE action = 'deliverable.create' AND actor_id = ANY($1::uuid[])`,
-      [[e.operativo.id, e.analista.id, e.legal.id, e.cliente.id, e.ajeno.id]],
-    );
-    expect(ev!.n).toBe('0');
+    // delta, no absoluto: otras pruebas pueden usar los usuarios compartidos (p.ej. `ajeno`)
+    expect(await auditoriaDeIntrusos()).toBe(eventosAntes);
   });
 
   it('un actor «system» no muta (solo personas)', async () => {

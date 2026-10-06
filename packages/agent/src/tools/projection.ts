@@ -127,6 +127,16 @@ const DETALLES_SEGUROS: ReadonlySet<string> = new Set([
   'issues',
   'tool',
   'limit',
+  // V2 · Fase 7: escalares cortos (enums y códigos que fija el servidor; nunca un id, un nombre ni texto de documentos).
+  'from',
+  'latestStatus',
+  'briefStatus',
+  'failureCode',
+  'analysisStatus',
+  'outcome',
+  'sourceState',
+  'part',
+  'chars',
 ]);
 
 export function detallesSeguros(

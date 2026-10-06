@@ -3,7 +3,7 @@
  */
 
 import type { ObjectSchema, StringSchema } from '../schema.ts';
-import type { AnyToolDefinition, ToolDefinition } from '../types.ts';
+import type { AnyToolDefinition, ToolCtx, ToolDefinition } from '../types.ts';
 
 /** Identidad tipada: fija los tipos de entrada/salida de una tool sin cambiar nada. */
 export function definirTool<I extends Record<string, unknown>, V>(
@@ -50,3 +50,43 @@ export const PAGINA = {
     description: 'Cantidad máxima de filas (hasta 50).',
   },
 } as const;
+
+// ─────────────────────────── Contenido (F7): alias estrictos ────────────────────
+
+/**
+ * Alias de contenido que el modelo debe usar TAL CUAL (E entregable, V versión de guion, H hallazgo,
+ * C comentario, P participación, S fuente). Solo alias: un UUID no cumple el patrón y ni siquiera llega
+ * al caso de uso (`resolverAliasEstricto`).
+ */
+export function aliasEstricto(letra: string, descripcion: string): StringSchema {
+  return {
+    type: 'string',
+    pattern: `^[${letra.toUpperCase()}${letra.toLowerCase()}]\\d{1,5}$`,
+    minLength: 2,
+    maxLength: 7,
+    description: descripcion,
+  };
+}
+
+/** Registra (o reutiliza) el alias de un entregable. */
+export function aliasDeEntregable(ctx: ToolCtx, deliverableId: string, campaignInfluencerId: string): string {
+  return ctx.run.referencias.registrar({
+    kind: 'deliverable',
+    entityId: deliverableId,
+    parentId: campaignInfluencerId,
+  }).alias;
+}
+
+/** Registra (o reutiliza) el alias de una versión de guion. */
+export function aliasDeVersion(ctx: ToolCtx, versionId: string, deliverableId: string): string {
+  return ctx.run.referencias.registrar({
+    kind: 'script_version',
+    entityId: versionId,
+    parentId: deliverableId,
+  }).alias;
+}
+
+/** Registra (o reutiliza) el alias de una participación (misma clave que las tools de influencers). */
+export function aliasDeParticipacionPorId(ctx: ToolCtx, campaignInfluencerId: string): string {
+  return ctx.run.referencias.registrar({ kind: 'campaign_influencer', entityId: campaignInfluencerId }).alias;
+}

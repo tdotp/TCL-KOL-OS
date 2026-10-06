@@ -254,6 +254,9 @@ describe('V3 · ids de OTRA organización y de OTRA campaña (misma org) en CADA
         stepIndex: 1,
         referencias: t.referencias,
         textosDelActor: t.textos,
+        messageText: t.textos[0] ?? '',
+        adjuntosDelActor: [],
+        adjuntosPorMensaje: [],
       },
       call: { id: clave(), name: 'campaign_get', arguments: {} },
     });
@@ -270,6 +273,9 @@ describe('V3 · ids de OTRA organización y de OTRA campaña (misma org) en CADA
         stepIndex: 2,
         referencias: t.referencias,
         textosDelActor: t.textos,
+        messageText: t.textos[0] ?? '',
+        adjuntosDelActor: [],
+        adjuntosPorMensaje: [],
       },
       call: { id: clave(), name: 'campaign_get', arguments: {} },
     });
@@ -286,6 +292,9 @@ describe('V3 · ids de OTRA organización y de OTRA campaña (misma org) en CADA
         stepIndex: 3,
         referencias: t.referencias,
         textosDelActor: t.textos,
+        messageText: t.textos[0] ?? '',
+        adjuntosDelActor: [],
+        adjuntosPorMensaje: [],
       },
       call: { id: clave(), name: 'campaign_get', arguments: {} },
     });

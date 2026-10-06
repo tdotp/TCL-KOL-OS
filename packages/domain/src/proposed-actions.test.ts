@@ -161,7 +161,7 @@ function accionDeImportacion(
 describe('registro de tipos', () => {
   it('hay un spec por tipo, con su recurso y capacidades; un nombre heredado del prototipo no es un tipo', () => {
     expect(Object.keys(PROPOSED_ACTION_SPECS).sort()).toEqual(
-      ['brief.approve', ...TIPOS_DE_IMPORTACION].sort(),
+      ['brief.approve', ...TIPOS_DE_IMPORTACION, 'script_version.approve'].sort(),
     );
     for (const tipo of Object.keys(PROPOSED_ACTION_SPECS) as ProposedActionType[]) {
       expect(specDeAccion(tipo)?.type).toBe(tipo);
@@ -257,4 +257,61 @@ describe('importación: quién propone, confirma, ejecuta y cancela', () => {
       expect(puedeCancelar(user('cliente'), a).ok).toBe(false);
     });
   }
+});
+
+// ─────────────────────────── V2 · Fase 7: aprobar un guion ─────────────────────
+
+describe('script_version.approve (Fase 7)', () => {
+  const specGuion = PROPOSED_ACTION_SPECS['script_version.approve'];
+  const accionGuion = (overrides: Partial<ProposedAction> = {}) =>
+    accion({ type: 'script_version.approve', resourceType: 'script_version', ...overrides });
+
+  it('propone script:manage y confirma script:approve; el recurso es la versión de guion', () => {
+    expect(specGuion.resourceType).toBe('script_version');
+    expect(capacidadesDe(specGuion.proposeCapability)).toEqual(['script:manage']);
+    expect(capacidadesDe(specGuion.confirmCapability)).toEqual(['script:approve']);
+  });
+
+  it('propone admin, director y consultor (y el sistema, que prepara); no operativo, analista, legal ni cliente', () => {
+    expect(puedeProponer('system', specGuion).ok).toBe(true);
+    for (const rol of ['admin', 'director', 'consultor'] as const) {
+      expect(puedeProponer(user(rol), specGuion).ok, rol).toBe(true);
+      expect(rolPuedeProponer(rol, specGuion), rol).toBe(true);
+    }
+    for (const rol of ['operativo', 'analista', 'legal', 'cliente'] as const) {
+      expect(puedeProponer(user(rol), specGuion).ok, rol).toBe(false);
+      expect(rolPuedeProponer(rol, specGuion), rol).toBe(false);
+    }
+  });
+
+  it('confirma y ejecuta SOLO admin y director, por la interfaz; el consultor propone pero no confirma', () => {
+    for (const rol of ['admin', 'director'] as const) {
+      expect(rolPuedeConfirmar(rol, specGuion), rol).toBe(true);
+      expect(puedeConfirmar(user(rol), 'ui', accionGuion(), AHORA).ok, rol).toBe(true);
+    }
+    for (const rol of ['consultor', 'operativo', 'analista', 'legal', 'cliente'] as const) {
+      expect(rolPuedeConfirmar(rol, specGuion), rol).toBe(false);
+      const r = puedeConfirmar(user(rol), 'ui', accionGuion(), AHORA);
+      expect(r.ok, rol).toBe(false);
+      if (!r.ok) expect(r.error.code).toBe('FORBIDDEN_ROLE');
+    }
+  });
+
+  it('ni el chat ni el sistema confirman o ejecutan, aunque el actor sea un director', () => {
+    for (const canal of ['chat', 'system'] as const) {
+      const r = puedeConfirmar(user('director'), canal, accionGuion(), AHORA);
+      expect(r.ok, canal).toBe(false);
+      if (!r.ok) expect(r.error.code).toBe('HUMAN_CONFIRMATION_REQUIRED');
+    }
+    const s = puedeConfirmar('system', 'ui', accionGuion(), AHORA);
+    expect(s.ok).toBe(false);
+    if (!s.ok) expect(s.error.code).toBe('HUMAN_CONFIRMATION_REQUIRED');
+    const e = puedeEjecutar(
+      user('director'),
+      'chat',
+      accionGuion({ status: 'confirmed', confirmedBy: 'usr-director' }),
+      AHORA,
+    );
+    expect(e.ok).toBe(false);
+  });
 });

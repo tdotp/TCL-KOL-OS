@@ -327,8 +327,9 @@ describe('registro de handlers', () => {
     }
   });
 
-  it('la garantía de cada tipo está declarada: brief.approve atómico; la importación idempotente externa', () => {
+  it('la garantía de cada tipo está declarada: brief.approve y script_version.approve atómicos; la importación idempotente externa', () => {
     expect(HANDLERS['brief.approve'].modo).toBe('atomic');
+    expect(HANDLERS['script_version.approve'].modo).toBe('atomic');
     expect(HANDLERS['influencer_import.apply'].modo).toBe('idempotent_external');
     expect(HANDLERS['influencer_import.resolve_record'].modo).toBe('idempotent_external');
   });

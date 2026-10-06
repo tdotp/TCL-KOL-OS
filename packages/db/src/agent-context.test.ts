@@ -664,8 +664,8 @@ describe('contenido del contexto de un consultor', () => {
       expect(json).not.toContain(fragmento);
     }
     expect(c.informe).toMatchObject({
-      assemblerVersion: 'ctx-1',
-      budgetVersion: 'budget-1',
+      assemblerVersion: 'ctx-2',
+      budgetVersion: 'budget-2',
       policyVersion: 'policy-1',
       actor: { userId: consultor.id, role: 'consultor' },
       campaignId,

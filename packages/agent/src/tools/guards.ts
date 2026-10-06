@@ -92,3 +92,97 @@ export async function fuenteDeCampana(ctx: ToolCtx, valor: unknown): Promise<Res
 export function sinContenido(descripcion: string): string {
   return `La fuente no tiene contenido que se pueda leer: ${descripcion}.`;
 }
+
+// ─────────────────────────── Contenido (F7): alias estricto y cerco de campaña ──
+
+/**
+ * Alias del registro del run, y NADA más. A diferencia de `resolverId`, un UUID (aunque exista, aunque
+ * sea de la campaña) se trata como inexistente: un id que el modelo vio en un documento nunca llega a un
+ * caso de uso, y una versión solo puede proponerse para aprobar si ESTE run la mostró.
+ */
+export function resolverAliasEstricto(
+  ctx: ToolCtx,
+  valor: unknown,
+  kind: ContextReferenceKind,
+): Result<string> {
+  if (typeof valor !== 'string') return err(RECURSO_NO_ENCONTRADO);
+  const limpio = valor.trim();
+  if (!ALIAS.test(limpio)) return err(RECURSO_NO_ENCONTRADO);
+  const ref = ctx.run.referencias.resolver(limpio, kind);
+  if (!ref.ok) return err(RECURSO_NO_ENCONTRADO);
+  return ref.value.entityId === undefined ? err(RECURSO_NO_ENCONTRADO) : ok(ref.value.entityId);
+}
+
+/**
+ * Participación de LA campaña del run (cerco: otra campaña u otra organización ⇒ inexistente). Con
+ * `soloAlias` rechaza los UUID (las tools de contenido); sin él acepta alias o UUID (tools de influencers).
+ */
+export async function participacionDeCampana(
+  ctx: ToolCtx,
+  valor: unknown,
+  opciones: { readonly soloAlias?: boolean } = {},
+): ReturnType<typeof uc.obtenerCampaignInfluencer> {
+  const id =
+    opciones.soloAlias === true
+      ? resolverAliasEstricto(ctx, valor, 'campaign_influencer')
+      : resolverId(ctx, valor, 'campaign_influencer');
+  if (!id.ok) return id;
+  const r = await uc.obtenerCampaignInfluencer(ctx.actor, id.value);
+  if (!r.ok || r.value.campaignInfluencer.campaignId !== ctx.run.campaignId)
+    return err(RECURSO_NO_ENCONTRADO);
+  return r;
+}
+
+/**
+ * Entregable de LA campaña del run por alias `E…`. Dos capas de cerco: el caso de uso filtra por campaña
+ * (`alcance`) y aquí se vuelve a comprobar, de modo que un registro contaminado sigue verificándose.
+ */
+export async function entregableDeCampana(
+  ctx: ToolCtx,
+  valor: unknown,
+): Promise<Result<uc.EntregableDeCuenta>> {
+  const id = resolverAliasEstricto(ctx, valor, 'deliverable');
+  if (!id.ok) return id;
+  const r = await uc.obtenerEntregable(ctx.actor, id.value, { alcance: { campaignId: ctx.run.campaignId } });
+  if (!r.ok || r.value.projection !== 'cuenta' || r.value.deliverable.campaignId !== ctx.run.campaignId) {
+    return err(RECURSO_NO_ENCONTRADO);
+  }
+  return ok(r.value);
+}
+
+/** Versión de guion de LA campaña del run por alias `V…` (misma doble capa de cerco). */
+export async function versionDeGuionDeCampana(
+  ctx: ToolCtx,
+  valor: unknown,
+): Promise<Result<uc.VersionDeGuionDetalle>> {
+  const id = resolverAliasEstricto(ctx, valor, 'script_version');
+  if (!id.ok) return id;
+  const r = await uc.obtenerVersionDeGuion(ctx.actor, id.value, {
+    alcance: { campaignId: ctx.run.campaignId },
+  });
+  if (!r.ok || r.value.campaignId !== ctx.run.campaignId) return err(RECURSO_NO_ENCONTRADO);
+  return ok(r.value);
+}
+
+/**
+ * Nombres de archivo que SÍ pueden verse. La política de lectura para IA (QA-04) oculta el nombre de una fuente
+ * restringida (sensible) o de estado desconocido, aunque la versión de guion ya exista: la fuente pudo volverse
+ * sensible después de registrarse. Una fuente que el actor no ve tampoco tiene nombre. Una sola lectura de las
+ * fuentes de la campaña (con el alcance de la persona); si falla, ningún nombre se muestra.
+ */
+export async function nombresDeFuentesVisibles(
+  ctx: ToolCtx,
+  sourceIds: readonly string[],
+): Promise<ReadonlyMap<string, string>> {
+  const salida = new Map<string, string>();
+  const r = await uc.listSources(ctx.actor, ctx.run.campaignId);
+  if (!r.ok) return salida;
+  const pedidos = new Set(sourceIds);
+  for (const f of r.value) {
+    if (!pedidos.has(f.id)) continue;
+    const p = uc.preparacionDeFuente(f);
+    if (p === 'restricted' || p === 'unknown') continue;
+    salida.set(f.id, f.filename);
+  }
+  return salida;
+}
