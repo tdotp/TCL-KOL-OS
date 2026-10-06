@@ -120,6 +120,13 @@ Pipeline por llamada (sin caché): reclama la invocación → existe → esquema
 
 `AI_ENABLED` · `AI_WORKER_URL`/`WORKER_URL` · `AI_PROVIDER` · `AI_MODEL_EQUILIBRADO` · `AGENT_NONCE_SECRET` (cae a `SESSION_SECRET`; obligatorio en producción) · `AGENT_MAX_TOOL_STEPS` · `AGENT_RUN_DEADLINE_S` · `AGENT_MODEL_TIMEOUT_S` · `AGENT_MAX_TOKENS` · `CHAT_ATTACHMENT_MAX_MB`. Documentadas en `.env.example`; el servicio `web` de `docker-compose.yml` las recibe.
 
+## 8b. Ampliación de la Fase 7 (contenido)
+
+La Fase 7 añade 11 tools (25 → 36), la sección de contexto `content`, los alias E/V/H/C y el tipo HITL
+`script_version.approve`; el prompt pasa a `agente-cuenta-3`. Detalle, tabla tool → caso de uso y reglas
+(la IA nunca aprueba; no existe tool para aprobar, confirmar ni registrar revisión humana) en
+`CONTENT_V2.md` §4 y §6, y en DEC-048.
+
 ## 9. Deuda y riesgos declarados
 
 - Gateway del worker **sin autenticación** (secreto compartido pendiente).

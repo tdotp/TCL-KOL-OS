@@ -66,8 +66,11 @@ Las cabeceras se normalizan **solo** así: minúsculas, y espacios o guiones pas
 | `kpi_objetivo` | Texto libre. |
 | `condiciones` | Texto libre. |
 
-Estos valores quedan en el snapshot (con su hoja y rango) hasta que existan Acuerdos, Entregables y KPIs
-(Fases 7–8). **No** se crean esas entidades ni se vuelcan a `CampaignInfluencer`.
+Estos valores quedan en el snapshot (con su hoja y rango) hasta que existan Acuerdos y KPIs (Fase 8).
+La Fase 7 creó la entidad `Deliverable`, pero **no** materializa la columna `entregables` desde el Sheet: es
+texto libre y ambiguo (p. ej. «1 reel principal + 3 stories»), y materializarla exigiría inventar etiquetas y
+plataformas. Los Deliverables se crean por Cuenta (UI o chat); ver `CONTENT_V2.md` y DEC-048. **No** se
+vuelcan estos valores a `CampaignInfluencer`.
 
 ### Columnas desconocidas
 
