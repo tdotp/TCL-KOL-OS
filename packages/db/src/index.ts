@@ -139,6 +139,7 @@ export {
   obtenerEntregable,
   listarEntregablesDeCampana,
   bloquearEntregable,
+  esUuid,
 } from './deliverables.ts';
 export type {
   CrearEntregableInput,
@@ -154,6 +155,7 @@ export type {
 } from './deliverables.ts';
 export {
   registrarVersionDeGuion,
+  comprobarDestinoDeGuion,
   listarVersionesDeEntregable,
   obtenerVersionDeGuion,
   obtenerVersionVigente,

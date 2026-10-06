@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import {
   type VistaDeDeliverableDeCuenta,
   type VistaDeDeliverableDeEstado,
+  esUuid,
   getCampaign,
   obtenerDeliverableConVersiones,
 } from '@tcl-kol-os/db';
@@ -53,6 +54,8 @@ export default async function ContenidoDeEntregablePage({
 
   const { id, participacionId, deliverableId } = await params;
   const { v } = await searchParams;
+  // Un id que no es UUID es «no existe»: no llega a la base (getCampaign reventaría con 500).
+  if (!esUuid(id)) notFound();
   const campana = await getCampaign(user, id);
   if (!campana.ok || !roleCan(user.role, 'deliverable:read')) notFound();
   const { campaign } = campana.value;

@@ -567,6 +567,78 @@ async function comoCandidatos(
   }));
 }
 
+/**
+ * Comprobación PREVIA y sin efectos del destino de un guion: la misma resolución de participación y de
+ * entregable que `registrarVersionDeGuion` (reutiliza `resolverParticipacion` y `resolverEntregable`), sin
+ * necesitar la fuente. Sirve para validar ANTES de guardar los bytes de un archivo, de modo que un destino
+ * inválido, ambiguo o archivado no deje una fuente suelta. `ok` no garantiza el registro (hay carreras y
+ * reglas de la fuente que solo se conocen al guardarla); devuelve `needs_choice` o el error de dominio
+ * exactos que daría el registro.
+ */
+export async function comprobarDestinoDeGuion(
+  actor: User,
+  input: Pick<RegistrarVersionDeGuionInput, 'campaignId' | 'participation' | 'deliverable'>,
+  contexto?: ContextoDeAuditoria,
+): Promise<Result<{ readonly kind: 'ok' } | Extract<RegistroDeGuion, { kind: 'needs_choice' }>>> {
+  const persona = exigirPersona(actor, contexto);
+  if (!persona.ok) return persona;
+  if (!esUuid(input.campaignId)) return err(NO_ENCONTRADO_DE_CONTENIDO);
+  const { rows: campanas } = await getPool().query<{ organization_id: string; status: string }>(
+    `SELECT organization_id, status::text AS status FROM campaigns WHERE id = $1`,
+    [input.campaignId],
+  );
+  if (campanas[0] === undefined) return err(NO_ENCONTRADO_DE_CONTENIDO);
+  const organizationId = campanas[0].organization_id;
+  const permitido = authorizeInternalResource(actor, 'script:manage', organizationId);
+  if (!permitido.ok) return permitido;
+  if (campanas[0].status !== 'activa') {
+    return err({
+      code: 'RESOURCE_CONFLICT',
+      message: 'La campaña no está activa: no se registran guiones.',
+      details: { reason: 'campaign_not_active', campaignId: input.campaignId },
+    });
+  }
+
+  const client = await getPool().connect();
+  try {
+    const eleccion = await resolverParticipacion(client, actor, { ...input, sourceId: '' }, organizationId);
+    if ('needsChoice' in eleccion) {
+      return ok(eleccion.needsChoice as Extract<RegistroDeGuion, { kind: 'needs_choice' }>);
+    }
+    const participante = eleccion.participante;
+    if (participante.status !== 'activo') {
+      return err({
+        code: 'RESOURCE_CONFLICT',
+        message: 'El influencer está retirado de la campaña: reactívelo para trabajar su contenido.',
+        details: { reason: 'campaign_influencer_retired', campaignInfluencerId: participante.id },
+      });
+    }
+    const decision = await resolverEntregable(client, participante, input.deliverable);
+    if ('needsChoice' in decision) {
+      return ok(decision.needsChoice as Extract<RegistroDeGuion, { kind: 'needs_choice' }>);
+    }
+    if ('existente' in decision) {
+      const { rows } = await client.query<{ status: string }>(
+        `SELECT status::text AS status FROM deliverables WHERE id = $1`,
+        [decision.existente.id],
+      );
+      if (rows[0]?.status !== 'active') {
+        return err({
+          code: 'RESOURCE_CONFLICT',
+          message: 'El entregable está archivado: reactívelo para registrar versiones.',
+          details: { reason: 'deliverable_archived', deliverableId: decision.existente.id },
+        });
+      }
+    }
+    return ok({ kind: 'ok' });
+  } catch (error) {
+    if (error instanceof Abortar) return err(error.payload);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 type EleccionDeParticipacion =
   { readonly participante: ParticipanteDeCampana } | { readonly needsChoice: RegistroDeGuion };
 

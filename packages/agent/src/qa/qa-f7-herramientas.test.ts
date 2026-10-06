@@ -383,7 +383,9 @@ describe('QA-F7-12 · el contenido hostil no puede romper su sobre ni aunque con
         kind: 'editorial',
         body: c.slice(0, 1900),
       });
-      expect(rr.ok, c).toBe(true);
+      // Con los controles bidi/invisibles (RLO, ZWSP) el comentario ya NO se guarda (QA-F7-UI-05): se rechaza
+      // en la entrada; el resto, con cierres del nonce y controles de línea, sigue probando el sobre.
+      expect(rr.ok, c).toBe(!/[\u200b\u202e]/u.test(c));
     }
     const v = alias(t, 'script_version', versionId, m.e.entregables.reelDiego);
     const x = await llamar(r, t, 'review_comment_list', { versionId: v, limit: 25 });

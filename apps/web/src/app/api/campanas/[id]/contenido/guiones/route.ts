@@ -28,12 +28,13 @@
 
 import { revalidatePath } from 'next/cache';
 import {
+  comprobarDestinoDeGuion,
   getCampaign,
   obtenerEntregable,
   registrarAdjuntoDeArchivo,
   registrarVersionDeGuion,
 } from '@tcl-kol-os/db';
-import { roleCan } from '@tcl-kol-os/domain';
+import { quitarInvisiblesOBidi, roleCan } from '@tcl-kol-os/domain';
 import { limiteDeAdjuntoBytes } from '@/lib/chat-server';
 import { MENSAJE_GENERICO, mensajeDeContenido } from '@/lib/contenido-mensajes';
 import { currentUser } from '@/lib/session';
@@ -77,11 +78,11 @@ function origenPermitido(request: Request): boolean {
   return propios.some((p) => p !== null && p !== undefined && p !== '' && p === host);
 }
 
-/** Nombre de archivo sin ruta ni caracteres de control, acotado. */
+/** Nombre de archivo sin ruta, controles, invisibles ni bidi (RLO, ZWSP…: criterio único del dominio). */
 function nombreSeguro(nombre: string): string {
   const base = nombre.split(/[\\/]/).pop() ?? '';
   // eslint-disable-next-line no-control-regex
-  const limpio = base.replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  const limpio = quitarInvisiblesOBidi(base.replace(/[\u0000-\u001f\u007f]/g, '')).trim();
   return (limpio === '' ? 'archivo' : limpio).slice(0, 200);
 }
 
@@ -97,6 +98,24 @@ function estadoHttpDe(codigo: string): number {
     default:
       return 422;
   }
+}
+
+/** 409 NEEDS_CHOICE: falta una elección humana (entregable parecido o ambiguo); sin efecto sobre nada. */
+function respuestaDeEleccion(r: {
+  readonly reason: string;
+  readonly candidates: readonly object[];
+}): Response {
+  const candidatos = r.candidates.flatMap((c) =>
+    'label' in c && 'id' in c ? [{ id: String(c.id), nombre: String(c.label) }] : [],
+  );
+  return fallo(
+    'NEEDS_CHOICE',
+    r.reason === 'deliverable_ambiguous'
+      ? 'Ya hay un entregable parecido: elige uno de la lista en vez de crear uno nuevo.'
+      : 'Elige el entregable al que pertenece el guion.',
+    409,
+    { razon: r.reason, candidatos },
+  );
 }
 
 function texto(valor: FormDataEntryValue | null): string | undefined {
@@ -188,6 +207,22 @@ export async function POST(
       }
     }
 
+    // Misma resolución que el registro (participación de ESTA campaña y activa, etiqueta válida, entregable
+    // inequívoco), SIN guardar nada: un destino inválido o ambiguo no deja una fuente suelta (QA-F7-UI-06).
+    const destino = await comprobarDestinoDeGuion(
+      user,
+      {
+        campaignId,
+        participation: { participationId: participacionId },
+        deliverable: deliverableId !== undefined ? { id: deliverableId } : { label: etiqueta! },
+      },
+      { origin: 'ui' },
+    );
+    if (!destino.ok) {
+      return fallo(destino.error.code, mensajeDeContenido(destino.error), estadoHttpDe(destino.error.code));
+    }
+    if (destino.value.kind === 'needs_choice') return respuestaDeEleccion(destino.value);
+
     const contenido = new Uint8Array(await archivo.arrayBuffer());
     // Origen `ui`; tipo `otro` y visibilidad `interna` (por defecto de la fuente): no los decide la
     // petición. Un duplicado por hash vincula la fuente existente en vez de rechazarse.
@@ -226,16 +261,9 @@ export async function POST(
 
     const r = version.value;
     if (r.kind === 'needs_choice') {
-      // Sin efecto sobre las versiones: falta una elección humana (entregable parecido o ambiguo).
-      const candidatos = r.candidates.flatMap((c) => ('label' in c ? [{ id: c.id, nombre: c.label }] : []));
-      return fallo(
-        'NEEDS_CHOICE',
-        r.reason === 'deliverable_ambiguous'
-          ? 'Ya hay un entregable parecido: elige uno de la lista en vez de crear uno nuevo.'
-          : 'Elige el entregable al que pertenece el guion.',
-        409,
-        { razon: r.reason, candidatos },
-      );
+      // Solo por una carrera (el destino cambió entre la comprobación y el registro): sin efecto sobre
+      // las versiones; la fuente guardada queda ligada por hash y un reenvío del mismo archivo la reutiliza.
+      return respuestaDeEleccion(r);
     }
 
     revalidatePath(`/campanas/${campaignId}/contenido`, 'layout');

@@ -289,6 +289,11 @@ export const MANIFIESTO_DE_DB: Readonly<Record<string, ClasificacionDeExport>> =
   // Escrituras dentro de los permisos de la persona (`deliverable_create`, `script_version_register`).
   crearEntregable: W,
   registrarVersionDeGuion: W,
+  // Comprobación previa y sin efectos del destino de un guion (la usa la subida web antes de guardar bytes);
+  // ninguna tool la necesita: `script_version_register` ya resuelve el destino dentro del registro.
+  comprobarDestinoDeGuion: UI,
+  // Utilidad de formato de ids (no es un caso de uso): la usa la capa web para validar ids de la URL.
+  esUuid: UI,
   // Sin tool en F7: renombrar es de la UI; el primer acto de revisión lo hacen los casos de uso.
   actualizarEntregable: UI,
   iniciarRevisionDeVersion: UI,

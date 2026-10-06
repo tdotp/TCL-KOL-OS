@@ -120,6 +120,26 @@ export interface ScriptVersion {
   readonly supersededAt: string | undefined;
 }
 
+// ─────────────────────────── Invisibles y controles bidi ───────────────────────
+
+/**
+ * Formato Unicode (`\p{Cf}`: ZWSP U+200B, marcas direccionales U+200E/F, controles bidi U+202A–202E y
+ * U+2066–2069, BOM U+FEFF…): reordenan o esconden texto (p. ej. «Aprobado» + RLO). Se exceptúan el unidor
+ * (U+200D) y el no unidor (U+200C) de ancho cero, que componen emojis (👩‍💻) y varias escrituras: no
+ * reordenan nada. Criterio único para comentarios y nombres de archivo; etiquetas y nombres de influencer
+ * rechazan además todo `\p{Cc}` con su propia regla.
+ */
+const INVISIBLES_O_BIDI = /(?![\u200C\u200D])\p{Cf}/u;
+const INVISIBLES_O_BIDI_GLOBAL = new RegExp(INVISIBLES_O_BIDI.source, 'gu');
+
+export function tieneInvisiblesOBidi(texto: string): boolean {
+  return INVISIBLES_O_BIDI.test(texto);
+}
+
+export function quitarInvisiblesOBidi(texto: string): string {
+  return texto.replace(INVISIBLES_O_BIDI_GLOBAL, '');
+}
+
 // ─────────────────────────── Etiqueta del entregable ───────────────────────────
 
 const MAX_ETIQUETA = 120;

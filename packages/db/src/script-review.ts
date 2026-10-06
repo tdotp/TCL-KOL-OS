@@ -45,6 +45,7 @@ import {
   err,
   isOpenScriptVersion,
   ok,
+  tieneInvisiblesOBidi,
   validarLocalizador,
 } from '@tcl-kol-os/domain';
 import { recordAudit, sanitizeCorrelation } from './audit.ts';
@@ -241,7 +242,8 @@ function normalizarComentario(
   }
   const body = e['body'].trim();
   if (body === '') throw invalido(`${campo}.body`, 'empty_body', 'El comentario no puede estar vacío.');
-  if (body.includes('\u0000')) {
+  // El texto NO se altera (en el chat debe seguir siendo subcadena exacta del mensaje): se rechaza.
+  if (body.includes('\u0000') || tieneInvisiblesOBidi(body)) {
     throw invalido(`${campo}.body`, 'invalid_body', 'El comentario contiene caracteres no válidos.');
   }
   if (longitud(body) > MAX_LONGITUD_DE_COMENTARIO) {

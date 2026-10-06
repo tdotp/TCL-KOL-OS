@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
-import { getCampaign, listarContenidoDeCampana } from '@tcl-kol-os/db';
+import { esUuid, getCampaign, listarContenidoDeCampana } from '@tcl-kol-os/db';
 import { roleCan } from '@tcl-kol-os/domain';
 import { currentUser } from '@/lib/session';
 import { NavCampana } from '../NavCampana';
@@ -22,11 +22,13 @@ export default async function ContenidoDeParticipacionPage({
   if (user === undefined) redirect('/login');
 
   const { id, participacionId } = await params;
+  // Un id que no es UUID es «no existe»: no llega a la base (getCampaign reventaría con 500).
+  if (!esUuid(id)) notFound();
   const campana = await getCampaign(user, id);
   if (!campana.ok || !roleCan(user.role, 'deliverable:read')) notFound();
   const { campaign } = campana.value;
 
-  const lista = await listarContenidoDeCampana(user, campaign.id);
+  const lista = await listarContenidoDeCampana(user, campaign.id, { participacionId });
   if (!lista.ok) notFound();
   const participacion = lista.value.participaciones.find((p) => p.participacionId === participacionId);
   if (participacion === undefined) notFound();
@@ -55,6 +57,16 @@ export default async function ContenidoDeParticipacionPage({
           <div className="aviso" role="status" data-testid="contenido-campana-solo-lectura">
             <strong>Campaña {campaign.status}</strong>
             El contenido es de solo lectura.
+          </div>
+        )}
+
+        {lista.value.limiteDeEntregables !== undefined && (
+          <div className="aviso" role="status" data-testid="contenido-limite-de-entregables">
+            <strong>
+              Se muestran {lista.value.limiteDeEntregables.mostrados} de{' '}
+              {lista.value.limiteDeEntregables.total} entregables
+            </strong>
+            Esta influencer supera el máximo que la lista carga de una vez.
           </div>
         )}
 

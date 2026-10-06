@@ -26,6 +26,7 @@ import {
   aprobarScriptVersion,
   crearComentarioDeRevision,
   crearEntregable,
+  esUuid,
   getCampaign,
   obtenerCampaignInfluencer,
   registrarRevisionHumana,
@@ -71,7 +72,7 @@ async function personaConAcceso(
 ): Promise<{ readonly user: User; readonly campaignId: string } | ReturnType<typeof fallo>> {
   const user = await currentUser();
   if (user === undefined) return fallo('Tu sesión expiró. Inicia sesión de nuevo.', 'SESSION');
-  if (typeof campaignId !== 'string' || !roleCan(user.role, 'deliverable:read')) {
+  if (!esUuid(campaignId) || !roleCan(user.role, 'deliverable:read')) {
     return fallo(NO_ENCONTRADO, 'RESOURCE_NOT_FOUND');
   }
   const campana = await getCampaign(user, campaignId);

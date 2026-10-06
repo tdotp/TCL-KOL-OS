@@ -126,6 +126,11 @@ export interface VistaDeContenidoDeCampana {
   };
   /** Solo Cuenta. `null` = todavía no existe un Brief aprobado (no hay documento rector). */
   readonly briefRector: { readonly versionId: string; readonly numero: number } | null | undefined;
+  /**
+   * Presente SOLO si la campaña supera el tope duro de seguridad de la lista: se muestran `mostrados` de
+   * `total` entregables (los totales de arriba sí son los reales). Nunca se trunca sin avisar.
+   */
+  readonly limiteDeEntregables?: { readonly mostrados: number; readonly total: number } | undefined;
 }
 
 // ─────────────────────────── Tipos: detalle ────────────────────────────────────
@@ -406,6 +411,11 @@ function comoParticipacion(detalle: CampaignInfluencerDetail) {
 
 // ─────────────────────────── Lista de la campaña ───────────────────────────────
 
+/** Entregables por consulta al cargar la lista (el máximo de `listarEntregablesDeCampana`). */
+const TAMANO_DE_PAGINA_DE_ENTREGABLES = 200;
+/** Tope duro de seguridad de la lista de una campaña; por encima se avisa en `limiteDeEntregables`. */
+const TOPE_DE_ENTREGABLES_EN_LISTA = 2000;
+
 /**
  * Los entregables de la campaña agrupados por participación, con su estado derivado, última versión,
  * aprobada vigente y (solo Cuenta) el estado de revisión de la última versión. Operativo recibe la
@@ -414,15 +424,49 @@ function comoParticipacion(detalle: CampaignInfluencerDetail) {
 export async function listarContenidoDeCampana(
   actor: User,
   campaignId: string,
+  opciones: { readonly participacionId?: string | undefined } = {},
 ): Promise<Result<VistaDeContenidoDeCampana>> {
   if (!esUuid(campaignId)) return err(NO_ENCONTRADO_DE_CONTENIDO);
 
-  const pagina = await listarEntregablesDeCampana(actor, campaignId, {
+  // Se pagina hasta agotar `total` (cada página es una consulta, no una por pieza). Tope duro de seguridad:
+  // si la campaña lo supera, el DTO lo declara en `limiteDeEntregables`; nunca se trunca en silencio.
+  const primera = await listarEntregablesDeCampana(actor, campaignId, {
     incluirArchivados: true,
-    limite: 200,
+    limite: TAMANO_DE_PAGINA_DE_ENTREGABLES,
+    participationId: opciones.participacionId,
   });
-  if (!pagina.ok) return comoNoEncontrado(pagina);
-  const proyeccion = pagina.value.projection;
+  if (!primera.ok) return comoNoEncontrado(primera);
+  const proyeccion = primera.value.projection;
+  const totalReal = primera.value.total;
+  const entregables: (EntregableDeCuenta | EntregableDeEstado)[] = [...primera.value.items];
+  while (entregables.length < Math.min(totalReal, TOPE_DE_ENTREGABLES_EN_LISTA)) {
+    const siguiente = await listarEntregablesDeCampana(actor, campaignId, {
+      incluirArchivados: true,
+      limite: TAMANO_DE_PAGINA_DE_ENTREGABLES,
+      participationId: opciones.participacionId,
+      desde: entregables.length,
+    });
+    if (!siguiente.ok) return comoNoEncontrado(siguiente);
+    if (siguiente.value.items.length === 0) break;
+    entregables.push(...siguiente.value.items);
+  }
+  const truncada = entregables.length < totalReal;
+  // Con el tope alcanzado, los totales salen del recuento real (no de lo cargado).
+  let totalesDeEntregables = {
+    activos: entregables.filter((i) => estadoDe(i) === 'active').length,
+    archivados: entregables.filter((i) => estadoDe(i) === 'archived').length,
+  };
+  if (truncada) {
+    const soloActivos = await listarEntregablesDeCampana(actor, campaignId, {
+      limite: 1,
+      participationId: opciones.participacionId,
+    });
+    if (!soloActivos.ok) return comoNoEncontrado(soloActivos);
+    totalesDeEntregables = {
+      activos: soloActivos.value.total,
+      archivados: totalReal - soloActivos.value.total,
+    };
+  }
 
   const participantes = await listarInfluencersDeCampanaConConteo(actor, campaignId, {
     incluirRetirados: true,
@@ -444,7 +488,7 @@ export async function listarContenidoDeCampana(
   let briefNumeroDeRevision: ReadonlyMap<string, number | null> = new Map();
   let briefRector: VistaDeContenidoDeCampana['briefRector'];
   if (proyeccion === 'cuenta') {
-    const cuentas = pagina.value.items.filter((i): i is EntregableDeCuenta => i.projection === 'cuenta');
+    const cuentas = entregables.filter((i): i is EntregableDeCuenta => i.projection === 'cuenta');
     const idsDeUltimas = cuentas.flatMap((i) => (i.latest === null ? [] : [i.latest.id]));
     const r = await resumenesDeContenidoDeVersiones(actor, campaignId, idsDeUltimas);
     if (r.ok) resumenes = r.value;
@@ -461,7 +505,7 @@ export async function listarContenidoDeCampana(
   }
 
   const porParticipacion = new Map<string, VistaDeEntregableEnLista[]>();
-  for (const item of pagina.value.items) {
+  for (const item of entregables) {
     const lista =
       porParticipacion.get(
         item.projection === 'cuenta' ? item.deliverable.campaignInfluencerId : item.campaignInfluencerId,
@@ -479,21 +523,26 @@ export async function listarContenidoDeCampana(
 
   return ok({
     proyeccion,
-    participaciones: participantes.value.items.map((d) => ({
-      participacionId: d.campaignInfluencer.id,
-      influencerNombre: d.influencer.displayName,
-      cuentas: d.accounts.map((c) => `${c.platform} @${c.handle}`),
-      estadoDeParticipacion: d.campaignInfluencer.status,
-      productos: d.products.map(etiquetaDeProducto),
-      entregables: porParticipacion.get(d.campaignInfluencer.id) ?? [],
-    })),
+    participaciones: participantes.value.items
+      .filter(
+        (d) => opciones.participacionId === undefined || d.campaignInfluencer.id === opciones.participacionId,
+      )
+      .map((d) => ({
+        participacionId: d.campaignInfluencer.id,
+        influencerNombre: d.influencer.displayName,
+        cuentas: d.accounts.map((c) => `${c.platform} @${c.handle}`),
+        estadoDeParticipacion: d.campaignInfluencer.status,
+        productos: d.products.map(etiquetaDeProducto),
+        entregables: porParticipacion.get(d.campaignInfluencer.id) ?? [],
+      })),
     totales: {
-      entregablesActivos: pagina.value.items.filter((i) => estadoDe(i) === 'active').length,
-      entregablesArchivados: pagina.value.items.filter((i) => estadoDe(i) === 'archived').length,
+      entregablesActivos: totalesDeEntregables.activos,
+      entregablesArchivados: totalesDeEntregables.archivados,
       participacionesActivas: participantes.value.activos,
       participacionesRetiradas: participantes.value.retirados,
     },
     briefRector,
+    limiteDeEntregables: truncada ? { mostrados: entregables.length, total: totalReal } : undefined,
   });
 }
 

@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
-import { getCampaign, listarContenidoDeCampana } from '@tcl-kol-os/db';
+import { esUuid, getCampaign, listarContenidoDeCampana } from '@tcl-kol-os/db';
 import { roleCan } from '@tcl-kol-os/domain';
 import { currentUser } from '@/lib/session';
 import { NavCampana } from './NavCampana';
@@ -21,6 +21,8 @@ export default async function ContenidoDeCampanaPage({ params }: { params: Promi
   if (user === undefined) redirect('/login');
 
   const { id } = await params;
+  // Un id que no es UUID es «no existe»: no llega a la base (getCampaign reventaría con 500).
+  if (!esUuid(id)) notFound();
   const campana = await getCampaign(user, id);
   if (!campana.ok || !roleCan(user.role, 'deliverable:read')) notFound();
   const { campaign } = campana.value;
@@ -63,6 +65,16 @@ export default async function ContenidoDeCampanaPage({ params }: { params: Promi
           <div className="aviso" role="status" data-testid="contenido-campana-solo-lectura">
             <strong>Campaña {campaign.status}</strong>
             El contenido es de solo lectura: no se crean entregables ni se registran versiones.
+          </div>
+        )}
+        {vista.limiteDeEntregables !== undefined && (
+          <div className="aviso" role="status" data-testid="contenido-limite-de-entregables">
+            <strong>
+              Se muestran {vista.limiteDeEntregables.mostrados} de {vista.limiteDeEntregables.total}{' '}
+              entregables
+            </strong>
+            La campaña supera el máximo que esta lista carga de una vez; los totales de arriba son los reales.
+            Entra a cada influencer para ver el resto.
           </div>
         )}
         {esCuenta && vista.briefRector === null && (
