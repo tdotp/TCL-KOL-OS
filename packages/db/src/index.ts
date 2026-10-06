@@ -257,3 +257,23 @@ export type {
   VersionReemplazada,
   AprobacionDeScript,
 } from './script-approval.ts';
+export { listarContenidoDeCampana, obtenerDeliverableConVersiones } from './contenido-views.ts';
+export type {
+  ResumenDeRevisionEnLista,
+  VistaDeEntregableEnLista,
+  VistaDeParticipacionConContenido,
+  VistaDeContenidoDeCampana,
+  VistaDeVersionEnHistorial,
+  VistaDeArchivoDeVersion,
+  VistaDeRevisionDeVersion,
+  VistaDeRequisitoDelBrief,
+  VistaDeCitaDelGuion,
+  VistaDeHallazgoDelBrief,
+  VistaDeComentarioSmartPR,
+  VistaDeEvaluacionDeAprobacion,
+  VistaDeVersionElegida,
+  VistaDeDeliverableDeCuenta,
+  VistaDeDeliverableDeEstado,
+  VistaDeDeliverable,
+  OpcionesDeDeliverable,
+} from './contenido-views.ts';

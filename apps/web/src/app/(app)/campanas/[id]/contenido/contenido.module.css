@@ -1,0 +1,444 @@
+/**
+ * Estilos del contenido (V2 · Fase 7). CSS Module propio: no toca `globals.css`.
+ * Usa los tokens del sistema (`--brand`, `--line`, `--chip`, …) y las clases globales `.card`, `.btn`,
+ * `.pill`, `.aviso`, `.confirm-*` para verse como el resto de la app.
+ *
+ * Todo texto de documentos, del modelo y de personas es TEXTO PLANO: `white-space: pre-wrap` conserva los
+ * saltos de línea y `overflow-wrap: anywhere` evita que una cadena larga rompa el diseño.
+ */
+
+.pagina {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cabecera h1 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.nota {
+  margin: 6px 0 0;
+  max-width: 720px;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.texto {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.etiquetas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── Lista de participaciones y entregables ── */
+
+.participacion {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.participacionCabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 14px;
+}
+
+.participacionCabecera h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.entregables {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.entregable {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  min-width: 0;
+}
+
+.entregableTitulo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+}
+
+.entregableTitulo a {
+  font-weight: 650;
+  color: var(--ink);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.entregableTitulo a:hover {
+  color: var(--brand);
+  text-decoration: underline;
+}
+
+.vacio {
+  color: var(--muted);
+  font-size: 13.5px;
+  margin: 0;
+}
+
+/* ── Formularios ── */
+
+.formulario {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.formulario label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.formulario input[type='text'],
+.formulario select,
+.formulario textarea {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 400;
+}
+
+.formulario textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.formulario input[type='file'] {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  font-size: 12.5px;
+}
+
+.formularioEnLinea {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.formularioEnLinea label {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.checkbox {
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: flex-start;
+  gap: 8px !important;
+  font-weight: 500 !important;
+  color: var(--ink) !important;
+  font-size: 13px !important;
+  line-height: 1.4;
+}
+
+.checkbox input {
+  margin-top: 3px;
+  flex: none;
+}
+
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.error {
+  margin: 0;
+  color: var(--bad);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.exito {
+  margin: 0;
+  color: var(--ok);
+  font-size: 13px;
+}
+
+/* ── Detalle: historial de versiones ── */
+
+.detalle {
+  display: grid;
+  grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.historial {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.version {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  text-decoration: none;
+  color: inherit;
+  min-width: 0;
+}
+
+.version:hover {
+  border-color: var(--brand-mid);
+}
+
+.versionElegida {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(200, 0, 0, 0.06);
+}
+
+.versionTitulo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-weight: 650;
+}
+
+.versionArchivo {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.principal {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  min-width: 0;
+}
+
+/* ── Secciones separadas: hallazgos del Brief vs comentarios de SmartPR ── */
+
+.seccionBrief {
+  border-top: 3px solid #6b7fd7;
+}
+
+.seccionSmartPR {
+  border-top: 3px solid var(--brand);
+}
+
+.seccionCabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 14px;
+  margin-bottom: 10px;
+}
+
+.seccionCabecera h2 {
+  margin: 0;
+}
+
+.lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.item {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--chip);
+  min-width: 0;
+}
+
+.itemBrief {
+  border-left: 3px solid #6b7fd7;
+}
+
+.itemSmartPR {
+  border-left: 3px solid var(--brand);
+  background: var(--brand-soft);
+}
+
+.itemCabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.itemMeta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.referencias {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.referencia {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  font-size: 12.5px;
+}
+
+.referenciaTitulo {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.cita {
+  margin: 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--line);
+  color: var(--ink);
+  font-style: italic;
+}
+
+.subtitulo {
+  margin: 12px 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.datos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px 16px;
+  margin: 0;
+}
+
+.datos div {
+  min-width: 0;
+}
+
+.datos dt {
+  font-size: 11px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.datos dd {
+  margin: 2px 0 0;
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+
+.huella {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  background: var(--chip);
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+
+.dialogoLista {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  font-size: 13.5px;
+}
+
+.dialogoLista li {
+  margin-bottom: 4px;
+}
+
+.dialogoAvisos {
+  margin: 0 0 12px;
+  padding: 10px 12px 10px 28px;
+  border-left: 3px solid var(--warn);
+  background: var(--warn-soft);
+  border-radius: 0 8px 8px 0;
+  font-size: 13px;
+}
+
+.dialogoAncho {
+  max-width: 520px !important;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
+@media (max-width: 900px) {
+  .detalle {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .formularioEnLinea label {
+    flex-basis: 100%;
+  }
+}

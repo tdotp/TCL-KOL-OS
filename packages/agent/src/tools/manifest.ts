@@ -338,6 +338,12 @@ export const MANIFIESTO_DE_DB: Readonly<Record<string, ClasificacionDeExport>> =
   // persona confirma por la interfaz, o como aprobación directa de una persona desde la UI.
   aprobarScriptVersion: X,
   aprobarScriptVersionEnTransaccion: X,
+
+  // ── Fase 7 · contenido-views.ts ── (lecturas de presentación SOLO para la UI de Contenido)
+  // Componen casos de uso ya existentes y ramifican el DTO por rol dentro de la consulta; incluyen la
+  // evaluación y la huella de aprobación y la propuesta pendiente: jamás una tool del agente.
+  listarContenidoDeCampana: UI,
+  obtenerDeliverableConVersiones: UI,
 };
 
 /** Clasificación de un export (`prohibited` si no está clasificado). */

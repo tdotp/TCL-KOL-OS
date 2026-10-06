@@ -91,6 +91,11 @@ export default async function ChatDeCampanaPage({ params }: { params: Promise<{ 
         <a className="active" href={`/campanas/${campaign.id}/chat`} aria-current="page">
           Asistente
         </a>
+        {roleCan(user.role, 'deliverable:read') && (
+          <a href={`/campanas/${campaign.id}/contenido`} data-testid="contenido-nav-link">
+            Contenido
+          </a>
+        )}
       </nav>
 
       <div className={styles['pagina']}>

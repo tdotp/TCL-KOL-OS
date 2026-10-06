@@ -6,7 +6,7 @@ import {
   verCamposDeVersion,
   versionesDelBrief,
 } from '@tcl-kol-os/db';
-import { allowedTransitions, campoDelCatalogo, type BriefStatus } from '@tcl-kol-os/domain';
+import { allowedTransitions, campoDelCatalogo, roleCan, type BriefStatus } from '@tcl-kol-os/domain';
 import { currentUser } from '@/lib/session';
 import { ORDEN_DE_SECCIONES, TITULO_SECCION } from '@/lib/brief-sections';
 import { ESTADO_EN_ESPANOL, ETAPAS, TEXTO_DEL_BOTON, etapaDeStatus } from '@/lib/brief-ui';
@@ -32,6 +32,7 @@ function CabeceraBrief({
   category,
   status,
   cliente = false,
+  conContenido = false,
 }: {
   id: string;
   name: string;
@@ -39,6 +40,8 @@ function CabeceraBrief({
   category: string | null;
   status: BriefStatus | undefined;
   cliente?: boolean;
+  /** El rol puede ver el contenido de la campaña (V2 · Fase 7): se añade el enlace «Contenido». */
+  conContenido?: boolean;
 }) {
   const etapa = etapaDeStatus(status);
   const indice = ETAPAS.findIndex((e) => e.id === etapa);
@@ -79,6 +82,11 @@ function CabeceraBrief({
           Brief
         </a>
         {!cliente && <a href={`/campanas/${id}/brief/editar`}>Editar</a>}
+        {conContenido && (
+          <a href={`/campanas/${id}/contenido`} data-testid="contenido-nav-link">
+            Contenido
+          </a>
+        )}
       </nav>
       <div className="stepper campaign-stepper">
         {ETAPAS.map((item, i) => (
@@ -232,6 +240,7 @@ export default async function BriefPage({
         market={campana.value.campaign.market}
         category={campana.value.campaign.category}
         status={ultima?.status as BriefStatus | undefined}
+        conContenido={roleCan(user.role, 'deliverable:read')}
       />
       <div className="review-intro">
         <div className="eyebrow">Revisión estructurada</div>
