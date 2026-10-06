@@ -4,6 +4,7 @@ Plataforma interna de SmartPR para coordinar campañas de influencers (KOL) de T
 
 **Estado:** MVP 1 · cierre de Sprint 5 (ciclo completo del brief: de `internal_review` a `approved` — comentarios internos, fechas estructuradas, aprobación interna, revisión y decisión del cliente, versionado posterior a aprobación)
 **Documento rector:** [`TCL_KOL_OS_DOCUMENTO_MAESTRO_EJECUCION.md`](TCL_KOL_OS_DOCUMENTO_MAESTRO_EJECUCION.md)
+**Estado de V2 y por dónde continuar (rama `v2`):** [`docs/README.md`](docs/README.md) — el estado de arriba es de Sprint 5; el actual está en [`docs/project/V2_CURRENT_STATE.md`](docs/project/V2_CURRENT_STATE.md)
 
 ---
 

@@ -57,3 +57,16 @@ Thumbs.db
 # python-pptx, solo texto de prueba — ver fixtures/pipeline/README.md.
 !fixtures/pipeline/*.pptx
 .storage/
+
+# Volcados y copias de bases de datos; directorio temporal del harness de mutación del agente.
+*.dump
+*.bak
+qa-tmp-mutacion/
+packages/agent/qa-tmp-mutacion/
+
+# Credenciales locales de Google/OpenRouter con nombres no estándar (el patrón `*-service-account*.json`
+# de arriba ya cubre el habitual). NUNCA se sube una credencial (§27).
+*credentials*.json
+google-*.json
+!docs/**/*.json
+!fixtures/**/*.json
