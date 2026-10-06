@@ -1338,9 +1338,14 @@ export function validarSalidaDeAnalisis(cruda: unknown, ctx: ContextoDeValidacio
     if (h.claim_status !== regla.claimStatus) falla('claim_status_mismatch', `${ruta}.claim_status`);
 
     const descripcion = neutralizarTexto(h.description).replace(/\s+/gu, ' ').trim();
+    // Mínimo de CONTENIDO, no de longitud: los «rellenos» Unicode que se ven en blanco (Hangul filler U+3164,
+    // U+115F/U+1160/U+FFA0, braille en blanco U+2800, CGJ U+034F, U+17B4/U+17B5…) no son letras ni dígitos
+    // (QA-F7-13a): una descripción hecha de ellos no es un hallazgo.
+    const letrasODigitos = (descripcion.match(/[\p{L}\p{N}]/gu) ?? []).length;
     if (
       descripcion.length < LIMITES_DE_SALIDA.descripcionMin ||
-      descripcion.length > LIMITES_DE_SALIDA.descripcionMax
+      descripcion.length > LIMITES_DE_SALIDA.descripcionMax ||
+      letrasODigitos < LIMITES_DE_SALIDA.descripcionMin
     ) {
       falla('bad_description', `${ruta}.description`);
     }

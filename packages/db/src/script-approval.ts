@@ -184,6 +184,7 @@ interface FilaDeEvaluacion {
   readonly deliverable_status: string;
   readonly deliverable_label: string;
   readonly campaign_influencer_id: string;
+  readonly campaign_product_id: string | null;
   readonly campaign_status: string;
   readonly participation_status: string;
   readonly display_name: string;
@@ -201,7 +202,7 @@ async function cargarFila(db: Consultor, versionId: string): Promise<FilaDeEvalu
     `SELECT sv.id, sv.organization_id, sv.campaign_id, sv.deliverable_id, sv.version, sv.status,
             sv.source_document_id, sv.source_hash, s.hash AS source_live_hash,
             d.status AS deliverable_status, d.label AS deliverable_label, d.campaign_influencer_id,
-            c.status::text AS campaign_status, ci.status::text AS participation_status,
+            d.campaign_product_id, c.status::text AS campaign_status, ci.status::text AS participation_status,
             i.display_name, ${PRODUCTO_DE_ENTREGABLE} AS product_label
        FROM script_versions sv
        JOIN source_documents s ON s.id = sv.source_document_id
@@ -335,6 +336,15 @@ export async function evaluarAprobacionDeScript(
       code: 'SCRIPT_REVIEW_REQUIRED',
       message: 'Aprobar exige una revisión contra el Brief aprobado vigente, y aún no hay Brief aprobado.',
       details: { reason: 'brief_missing' },
+    });
+  } else if (revision !== null && insumos.insumosCambiaron) {
+    // QA-F7-04b: el Brief rector es el mismo, pero la proyección que se le dio a la revisión (productos en
+    // alcance de la participación) ya no es la de hoy: la revisión no corresponde a lo que rige ahora.
+    bloqueos.push({
+      code: 'SCRIPT_REVIEW_REQUIRED',
+      message:
+        'La revisión del guion se hizo con otros insumos que los vigentes (cambió el alcance de productos del influencer): hay que revisarlo de nuevo.',
+      details: { reason: 'stale', detail: 'inputs_changed', briefVersionId: rector.versionId },
     });
   } else if (revision === null) {
     const hayExitosa = insumos.vigente.vigencia === 'stale';

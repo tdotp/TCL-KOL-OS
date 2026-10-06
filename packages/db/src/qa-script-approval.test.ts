@@ -8,6 +8,7 @@
  * auditoría, y el aislamiento por organización.
  */
 
+import { CON_REVISION_DE_LA_VERSION, prepararRevisionPorSql } from './aprobacion-sql-test-support.ts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { User } from '@tcl-kol-os/domain';
 import { closePool, query, transaction } from './client.ts';
@@ -56,7 +57,8 @@ async function rechazo(sql: string, params: unknown[]): Promise<string | undefin
 }
 
 const APROBAR_POR_SQL = `UPDATE script_versions
-                            SET status = 'approved', approved_by = $2, approved_via_proposed_action_id = $3
+                            SET status = 'approved', approved_by = $2, approved_via_proposed_action_id = $3,
+                                ${CON_REVISION_DE_LA_VERSION}
                           WHERE id = $1`;
 
 // ─────────────────────────── Aprobar por SQL directo ───────────────────────────
@@ -80,6 +82,8 @@ describe('SQL directo: el trigger de 023 impone quién y cómo se aprueba', () =
   it('desde `received` no se aprueba (transición inválida) ni se salta la revisión', async () => {
     const deliverableId = await entregableNuevo(a.e);
     const versionId = await versionNueva(a.e, deliverableId);
+    // Con revisión citada (025): lo que se rechaza es la transición, no la falta de revisión.
+    await prepararRevisionPorSql(a.e, versionId);
     const m = await rechazo(APROBAR_POR_SQL, [versionId, a.e.director.id, null]);
     expect(m).toMatch(/Transición de versión de guion no válida/);
     expect(await estadoDeVersion(versionId)).toBe('received');

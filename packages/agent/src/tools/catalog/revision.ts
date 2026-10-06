@@ -317,6 +317,10 @@ export const scriptRequestChanges = definirTool<ComentarEntrada, uc.ResultadoDeC
   },
   campaignStatus: 'activa',
   grounding: { currentMessageQuote: { field: 'quote', minChars: CITA_MIN_CARACTERES } },
+  quota: {
+    perRun: 1,
+    why: 'Es una transición TERMINAL sin confirmación: una sola versión cerrada por turno acota el daño de una orden inyectada (QA-F7-12a). Residual: el grounding acredita PALABRAS de la persona, no su intención.',
+  },
   reuses: ['obtenerVersionDeGuion', 'solicitarCambiosDeScript'],
   reuseNote:
     'solicitarCambiosDeScript tal cual, con UN cambio (`body` = la cita exacta, `chatMessageId` = el mensaje del run) y sin nota; una transacción: el comentario `change_request` y la transición a `changes_requested` (terminal) o nada. La base exige que el texto sea subcadena exacta del mensaje de la persona.',

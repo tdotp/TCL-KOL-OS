@@ -616,8 +616,11 @@ describe('ledger (ai_runs) y aprobación', () => {
                 approved_brief_version_id = $4 WHERE id = $1`,
         [v, a.e.director.id, analisis, brief],
       );
-    // La revisión es de OTRA versión ⇒ la FK compuesta lo rechaza.
-    await expect(aprobar(deOtraVersion, a.brief.versionId)).rejects.toThrow(/script_versions_analisis_fkey/u);
+    // La revisión es de OTRA versión ⇒ la rechaza el trigger de 025 («no es una revisión … de esta versión»)
+    // o, si éste no existiera, la FK compuesta (defensa en profundidad doble).
+    await expect(aprobar(deOtraVersion, a.brief.versionId)).rejects.toThrow(
+      /script_versions_analisis_fkey|revisión terminada de esta versión/u,
+    );
     // Una revisión en curso (de otra versión, y además no terminada) tampoco.
     await expect(aprobar(enCurso, a.brief.versionId)).rejects.toThrow();
     // Contra otro Brief que el que se aprueba.

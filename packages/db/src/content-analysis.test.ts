@@ -6,6 +6,7 @@
  * vencido, kill-switch, auditoría, ledger y prompt injection. Datos sintéticos y desechables (INC-001A).
  */
 
+import { CON_REVISION_DE_LA_VERSION, prepararRevisionPorSql } from './aprobacion-sql-test-support.ts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   type PeticionDeAnalisis,
@@ -591,10 +592,11 @@ describe('ensure vs reanalyze', () => {
   it('el análisis de una versión ya APROBADA se permite y no la transiciona', async () => {
     const versionId = await versionNueva();
     await query(`UPDATE script_versions SET status = 'in_review' WHERE id = $1`, [versionId]);
-    await query(`UPDATE script_versions SET status = 'approved', approved_by = $2 WHERE id = $1`, [
-      versionId,
-      e.director.id,
-    ]);
+    await prepararRevisionPorSql(e, versionId, a.brief.versionId);
+    await query(
+      `UPDATE script_versions SET status = 'approved', approved_by = $2, ${CON_REVISION_DE_LA_VERSION} WHERE id = $1`,
+      [versionId, e.director.id],
+    );
     const cliente = clienteQueResponde([]);
     const r = valor(
       await solicitarAnalisisDeGuion(

@@ -584,7 +584,7 @@ interface Insumos {
  */
 async function productosEnAlcance(
   db: Consultor,
-  fila: FilaDeVersionParaRevision,
+  fila: Pick<FilaDeVersionParaRevision, 'campaign_id' | 'campaign_influencer_id' | 'campaign_product_id'>,
 ): Promise<{ productos: ProductoEnAlcance[]; scope: 'assigned' | 'all_campaign' }> {
   const comoProductos = (rows: { id: string; brand: string; model: string }[]): ProductoEnAlcance[] =>
     rows.map((r) => ({ id: r.id, nombre: `${r.brand} ${r.model}`.trim() }));
@@ -613,16 +613,32 @@ async function productosEnAlcance(
   return { productos: comoProductos(todos), scope: 'all_campaign' };
 }
 
-/** Los campos de la versión del Brief rector tal cual (valor ORIGINAL ES), listos para el dominio. */
-async function requisitosDelRector(rectorVersionId: string): Promise<BriefRequirementInput[]> {
-  const campos = await camposDeVersion(rectorVersionId);
-  return campos.map((c) => ({
+/**
+ * Los campos de la versión del Brief rector tal cual (valor ORIGINAL ES), listos para el dominio. Se lee con
+ * el `db` dado (el pool o el cliente de una transacción: la aprobación lo usa BAJO sus bloqueos); es la misma
+ * proyección de campos que `camposDeVersion` (sin evidencias, que no entran en la huella ni en el contexto).
+ */
+async function requisitosDelRector(db: Consultor, rectorVersionId: string): Promise<BriefRequirementInput[]> {
+  const { rows } = await db.query<{
+    id: string;
+    key: string;
+    campaign_product_id: string | null;
+    value: unknown;
+    status: string;
+    criticidad: string;
+  }>(
+    `SELECT bf.id, bf.key, bf.campaign_product_id, bf.value, bf.status::text AS status,
+            bf.criticidad::text AS criticidad
+       FROM brief_fields bf WHERE bf.brief_version_id = $1 ORDER BY bf.key`,
+    [rectorVersionId],
+  );
+  return rows.map((c) => ({
     campo: c.key,
     etiqueta: campoDelCatalogo(c.key)?.label ?? c.key,
     criticidad: c.criticidad as Criticality,
     status: c.status as FieldStatus,
     valor: c.value,
-    ...(c.campaignProductId === null ? {} : { productoId: c.campaignProductId }),
+    ...(c.campaign_product_id === null ? {} : { productoId: c.campaign_product_id }),
     fieldId: c.id,
   }));
 }
@@ -636,7 +652,7 @@ async function cargarInsumos(
   return {
     productos: alcance.productos,
     productScope: alcance.scope,
-    requisitos: await requisitosDelRector(rector.versionId),
+    requisitos: await requisitosDelRector(db, rector.versionId),
   };
 }
 
@@ -783,6 +799,27 @@ export async function huellaDeBriefRector(
 // ─────────────────────────── Insumos de la aprobación (W3a) ────────────────────
 
 /**
+ * Huella ACTUAL de la proyección del Brief rector para esta participación (la misma que guardan las
+ * revisiones). Sin memoria: se recalcula con el `db` dado (la aprobación corre bajo bloqueos).
+ */
+async function huellaVigenteDeProyeccion(
+  db: Consultor,
+  fila: Pick<FilaDeVersionParaRevision, 'campaign_id' | 'campaign_influencer_id' | 'campaign_product_id'>,
+  rector: BriefRector,
+): Promise<{ fingerprint: string; productScope: 'assigned' | 'all_campaign' }> {
+  const alcance = await productosEnAlcance(db, fila);
+  const h = huellaDe(
+    {
+      productos: alcance.productos,
+      productScope: alcance.scope,
+      requisitos: await requisitosDelRector(db, rector.versionId),
+    },
+    rector,
+  );
+  return { fingerprint: h.fingerprint, productScope: h.productScope };
+}
+
+/**
  * Lo que la aprobación de un guion necesita de este módulo, leído con un `db` cualquiera (el pool o el
  * cliente de una transacción: la aprobación lo usa BAJO los bloqueos, sin pedir otra conexión). Es la
  * MISMA definición de rector y de CURRENT/STALE que usan las lecturas (`leerRector`, `elegirVigente`); no
@@ -793,11 +830,25 @@ export interface InsumosDeRevisionParaAprobar {
   readonly vigente: RevisionVigente;
   /** `request_hash` de la revisión elegida (solo `ai_assisted`); `null` en una revisión humana o sin revisión. */
   readonly inputHash: string | null;
+  /**
+   * La revisión CURRENT se hizo con otros insumos que los de hoy aunque el Brief rector sea el mismo: la
+   * proyección del Brief para esta participación (productos en alcance) cambió después (QA-F7-04b). Solo se
+   * calcula al aprobar (cuesta una lectura de los campos del Brief); las lecturas y listados siguen
+   * derivando CURRENT/STALE solo por el Brief rector (limitación documentada).
+   */
+  readonly insumosCambiaron: boolean;
 }
 
 export async function leerInsumosDeRevisionParaAprobar(
   db: pg.Pool | pg.PoolClient,
-  version: { readonly id: string; readonly campaign_id: string; readonly organization_id: string },
+  version: {
+    readonly id: string;
+    readonly campaign_id: string;
+    readonly organization_id: string;
+    /** Opcionales: si el llamador ya los leyó, se evita una consulta más (la aprobación corre bajo carga). */
+    readonly campaign_influencer_id?: string;
+    readonly campaign_product_id?: string | null;
+  },
 ): Promise<InsumosDeRevisionParaAprobar> {
   const rector = await leerRector(db, version.campaign_id, version.organization_id);
   const filas = await filasDeVersion(db, version.id);
@@ -811,7 +862,25 @@ export async function leerInsumosDeRevisionParaAprobar(
     );
     inputHash = rows[0]?.request_hash ?? null;
   }
-  return { rector, vigente, inputHash };
+  let insumosCambiaron = false;
+  if (rector !== undefined && vigente.vigencia === 'current' && vigente.run !== null) {
+    const fila =
+      version.campaign_influencer_id !== undefined && version.campaign_product_id !== undefined
+        ? {
+            ...version,
+            campaign_influencer_id: version.campaign_influencer_id,
+            campaign_product_id: version.campaign_product_id,
+          }
+        : await cargarVersion(db, version.id);
+    if (fila !== undefined) {
+      const actual = await huellaVigenteDeProyeccion(db, fila, rector);
+      const guardada = vigente.run;
+      insumosCambiaron =
+        guardada.briefFingerprint !== actual.fingerprint ||
+        (guardada.productScope !== undefined && guardada.productScope !== actual.productScope);
+    }
+  }
+  return { rector, vigente, inputHash, insumosCambiaron };
 }
 
 // ─────────────────────────── Vigencia y listados ───────────────────────────────

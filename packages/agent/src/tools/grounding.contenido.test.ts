@@ -118,10 +118,24 @@ describe('verificarAsociacionDeGuion', () => {
     ).toEqual({ ok: false, motivo: 'archivo_sin_nombrar' });
   });
 
-  it('con dos adjuntos, nombrar el archivo (completo o sin extensión) deja el mapeo explícito', () => {
+  it('con dos adjuntos, nombrar el archivo COMPLETO (con extensión, literal) deja el mapeo explícito', () => {
+    const cita = 'guion_valentina_v2.docx es de Valentina';
+    expect(
+      verificarAsociacionDeGuion({
+        ...base,
+        mencion: 'Valentina',
+        cita,
+        mensajesConAdjuntos: [{ texto: cita, sourceIds: ['S-1', 'S-2'] }],
+        nombresDeOtrosAdjuntos: ['guion_diego.docx'],
+      }),
+    ).toEqual({ ok: true, via: 'archivo_nombrado' });
+  });
+
+  it('QA-F7-12b: la raíz sin extensión, otra capitalización o el nombre truncado NO nombran el archivo', () => {
     for (const cita of [
-      'guion_valentina_v2.docx es de Valentina',
       'El GUION_VALENTINA_V2 es el de Valentina',
+      'guion_valentina_v2.DOCX es de Valentina',
+      'el guion_valentina_v2 es de Valentina',
     ]) {
       expect(
         verificarAsociacionDeGuion({
@@ -132,7 +146,7 @@ describe('verificarAsociacionDeGuion', () => {
           nombresDeOtrosAdjuntos: ['guion_diego.docx'],
         }),
         cita,
-      ).toEqual({ ok: true, via: 'archivo_nombrado' });
+      ).toEqual({ ok: false, motivo: 'archivo_sin_nombrar' });
     }
   });
 
@@ -210,12 +224,19 @@ describe('verificarAsociacionDeGuion', () => {
 });
 
 describe('archivoNombradoPorLaPersona', () => {
-  it('el nombre (≥4 caracteres) o su raíz aparece en un mensaje de la persona, sin mayúsculas ni acentos', () => {
-    expect(archivoNombradoPorLaPersona('Guion_Valentina_V2.docx', ['usa el guion_valentina_v2.DOCX'])).toBe(
+  it('solo el nombre COMPLETO con extensión, literal (sin plegar), cuenta como nombrar el archivo', () => {
+    expect(archivoNombradoPorLaPersona('Guion_Valentina_V2.docx', ['usa el Guion_Valentina_V2.docx'])).toBe(
       true,
     );
-    expect(archivoNombradoPorLaPersona('Guion_Valentina_V2.docx', ['usa el guion_valentina_v2'])).toBe(true);
+    expect(archivoNombradoPorLaPersona('Guion_Valentina_V2.docx', ['usa el guion_valentina_v2.DOCX'])).toBe(
+      false,
+    );
+    expect(archivoNombradoPorLaPersona('Guion_Valentina_V2.docx', ['usa el guion_valentina_v2'])).toBe(false);
     expect(archivoNombradoPorLaPersona('Guion_Valentina_V2.docx', ['otro archivo'])).toBe(false);
+    // QA-F7-12b: la raíz de «guion.md» es el vocabulario del propio mensaje.
+    expect(archivoNombradoPorLaPersona('guion.md', ['Te dejo el guion de Diego'])).toBe(false);
+    expect(archivoNombradoPorLaPersona('brief.pdf', ['revisa el brief'])).toBe(false);
+    expect(archivoNombradoPorLaPersona('guion.md', ['usa guion.md'])).toBe(true);
     expect(archivoNombradoPorLaPersona('x.c', ['x.c'])).toBe(false); // demasiado corto para ser una señal
     expect(archivoNombradoPorLaPersona('', ['cualquier cosa'])).toBe(false);
   });

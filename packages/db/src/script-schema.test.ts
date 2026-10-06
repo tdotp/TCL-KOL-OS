@@ -369,7 +369,7 @@ describe('aislamiento por SQL directo: deliverables', () => {
     ).toMatch(/nace activo/);
   });
 
-  it('last_version solo avanza de uno en uno (nadie la fija a mano)', async () => {
+  it('last_version solo avanza de uno en uno y solo al registrar una versión (nadie la fija a mano)', async () => {
     const [{ id } = { id: '' }] = await query<{ id: string }>(
       INSERTAR_ENTREGABLE,
       base({ 5: `contador-${Date.now()}` }),
@@ -377,8 +377,11 @@ describe('aislamiento por SQL directo: deliverables', () => {
     expect(await rechazo(`UPDATE deliverables SET last_version = 5 WHERE id = $1`, [id])).toMatch(
       /de uno en uno/,
     );
-    expect(await rechazo(`UPDATE deliverables SET last_version = 1 WHERE id = $1`, [id])).toBe('');
-    expect(await rechazo(`UPDATE deliverables SET last_version = 0 WHERE id = $1`, [id])).toMatch(
+    // 025 · QA-F7-01b: avanzar de uno en uno SIN registrar la versión deja un hueco: se rechaza al cerrar la transacción.
+    expect(await rechazo(`UPDATE deliverables SET last_version = 1 WHERE id = $1`, [id])).toMatch(
+      /debe coincidir con la mayor versión/,
+    );
+    expect(await rechazo(`UPDATE deliverables SET last_version = 2 WHERE id = $1`, [id])).toMatch(
       /de uno en uno/,
     );
   });

@@ -6,6 +6,7 @@
  * ni la evidencia del Brief (el análisis se haría contra un Brief alimentado por el propio guion).
  */
 
+import { CON_REVISION_DE_LA_VERSION, prepararRevisionPorSql } from './aprobacion-sql-test-support.ts';
 import type pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { Result } from '@tcl-kol-os/domain';
@@ -163,6 +164,7 @@ describe('una fuente de guion no aprobado no se expone a TCL', () => {
     const v2 = await registrar('reemplazo-2');
     await fijarAprobada(v1.versionId);
     await setSourceVisibility(e.admin, v1.sourceId, 'tcl');
+    await prepararRevisionPorSql(e, v2.versionId);
     await conBypass(async (c) => {
       await c.query(`UPDATE script_versions SET status = 'in_review' WHERE id = $1`, [v2.versionId]);
     });
@@ -174,10 +176,10 @@ describe('una fuente de guion no aprobado no se expone a TCL', () => {
     valor(await setSourceVisibility(e.admin, v1.sourceId, 'interna'));
     await transaction(async (c) => {
       await c.query(aReemplazar, [v1.versionId, v2.versionId]);
-      await c.query(`UPDATE script_versions SET status = 'approved', approved_by = $2 WHERE id = $1`, [
-        v2.versionId,
-        e.director.id,
-      ]);
+      await c.query(
+        `UPDATE script_versions SET status = 'approved', approved_by = $2, ${CON_REVISION_DE_LA_VERSION} WHERE id = $1`,
+        [v2.versionId, e.director.id],
+      );
     });
     // la versión reemplazada ya no es la vigente: su fuente no se vuelve a exponer
     const r = await setSourceVisibility(e.admin, v1.sourceId, 'tcl');
@@ -325,6 +327,7 @@ describe('el Operativo no lee guiones que no están aprobados', () => {
     const v2 = await registrar('v2');
     await fijarAprobada(v1.versionId);
     expect(valor(await getSource(e.operativo, v1.sourceId)).id).toBe(v1.sourceId);
+    await prepararRevisionPorSql(e, v2.versionId);
     await conBypass(async (c) => {
       await c.query(`UPDATE script_versions SET status = 'in_review' WHERE id = $1`, [v2.versionId]);
     });
@@ -333,10 +336,10 @@ describe('el Operativo no lee guiones que no están aprobados', () => {
         `UPDATE script_versions SET status = 'superseded', superseded_by_version_id = $2 WHERE id = $1`,
         [v1.versionId, v2.versionId],
       );
-      await c.query(`UPDATE script_versions SET status = 'approved', approved_by = $2 WHERE id = $1`, [
-        v2.versionId,
-        e.director.id,
-      ]);
+      await c.query(
+        `UPDATE script_versions SET status = 'approved', approved_by = $2, ${CON_REVISION_DE_LA_VERSION} WHERE id = $1`,
+        [v2.versionId, e.director.id],
+      );
     });
     // la reemplazada ya no es la vigente: el Operativo ya no la lee; la nueva aprobada, sí
     expect(codigo(await getSource(e.operativo, v1.sourceId))).toBe('RESOURCE_NOT_FOUND');

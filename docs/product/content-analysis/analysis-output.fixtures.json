@@ -1378,6 +1378,36 @@
    }
   },
   {
+   "name": "descripcion_solo_rellenos_unicode_en_blanco",
+   "context": "estandar",
+   "output": {
+    "schema_version": "analisis-guion-salida-1",
+    "findings": [
+     {
+      "id": "h1",
+      "category": "cta_missing",
+      "basis": "absence",
+      "claim_status": null,
+      "description": "ㅤ⠀ᅟᅠﾠ͏឴឵ㅤ⠀ㅤㅤ",
+      "brief_refs": [
+       "R5"
+      ],
+      "script_quotes": []
+     }
+    ]
+   },
+   "expected": {
+    "shape": "valid",
+    "semantic": {
+     "ok": false,
+     "reasons": [
+      "bad_description"
+     ]
+    }
+   },
+   "nota": "QA-F7-13a: 12 rellenos Unicode que se ven en blanco (no son letras ni dígitos) pasan la cota de longitud 10–400 pero no son un hallazgo: la descripción exige al menos 10 letras o dígitos."
+  },
+  {
    "name": "descripcion_demasiado_larga_para_negocio",
    "context": "estandar",
    "output": {

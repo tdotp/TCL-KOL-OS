@@ -5,6 +5,7 @@
  * aprobar (igual que la asistida) pero SIN hallazgos; queda STALE si cambia el Brief rector.
  */
 
+import { CON_REVISION_DE_LA_VERSION, prepararRevisionPorSql } from './aprobacion-sql-test-support.ts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Result, User } from '@tcl-kol-os/domain';
 import { closePool, query } from './client.ts';
@@ -200,10 +201,11 @@ describe('registrar la revisión humana (solo ui)', () => {
   it('una versión ya APROBADA se puede revisar (útil con un Brief nuevo) y no se transiciona', async () => {
     const versionId = await versionNueva();
     await query(`UPDATE script_versions SET status = 'in_review' WHERE id = $1`, [versionId]);
-    await query(`UPDATE script_versions SET status = 'approved', approved_by = $2 WHERE id = $1`, [
-      versionId,
-      a.e.director.id,
-    ]);
+    await prepararRevisionPorSql(a.e, versionId, a.brief.versionId);
+    await query(
+      `UPDATE script_versions SET status = 'approved', approved_by = $2, ${CON_REVISION_DE_LA_VERSION} WHERE id = $1`,
+      [versionId, a.e.director.id],
+    );
     const r = valor(await registrarRevisionHumana(a.e.consultor, versionId));
     expect(r.run.kind).toBe('human');
     expect(await estadoDe(versionId)).toBe('approved');

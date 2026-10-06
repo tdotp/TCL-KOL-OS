@@ -17,6 +17,7 @@ import {
 } from '@tcl-kol-os/domain';
 import { asociarInfluencerACampana, retirarInfluencerDeCampana } from './campaign-influencers.ts';
 import { closePool, getPool, query, transaction } from './client.ts';
+import { CON_REVISION_DE_LA_VERSION, prepararRevisionPorSql } from './aprobacion-sql-test-support.ts';
 import { archivarEntregable, crearEntregable } from './deliverables.ts';
 import { crearInfluencer } from './influencers.ts';
 import {
@@ -95,6 +96,7 @@ async function entregableConVersiones(n: number): Promise<{ deliverableId: strin
       d.id,
     );
     versiones.push(r.version.id);
+    await prepararRevisionPorSql(e, r.version.id);
   }
   return { deliverableId: d.id, versiones };
 }
@@ -838,10 +840,10 @@ describe('máquina de estados: matriz 5×5 contra Postgres', () => {
     try {
       await c.query('BEGIN');
       if (hacia === 'approved') {
-        await c.query(`UPDATE script_versions SET status = 'approved', approved_by = $2 WHERE id = $1`, [
-          v1,
-          e.director.id,
-        ]);
+        await c.query(
+          `UPDATE script_versions SET status = 'approved', approved_by = $2, ${CON_REVISION_DE_LA_VERSION} WHERE id = $1`,
+          [v1, e.director.id],
+        );
       } else if (hacia === 'superseded') {
         await c.query(
           `UPDATE script_versions SET status = 'superseded', superseded_by_version_id = $2 WHERE id = $1`,
@@ -894,7 +896,7 @@ describe('una sola versión aprobada vigente', () => {
       await c.query(`UPDATE script_versions SET status = 'in_review' WHERE id = $1`, [versiones[1]]);
     });
     const mensaje = await rechazo(
-      `UPDATE script_versions SET status = 'approved', approved_by = $2 WHERE id = $1`,
+      `UPDATE script_versions SET status = 'approved', approved_by = $2, ${CON_REVISION_DE_LA_VERSION} WHERE id = $1`,
       [versiones[1], e.director.id],
     );
     expect(mensaje).toMatch(/script_versions_aprobada_vigente_key|duplicate key/);
@@ -913,10 +915,10 @@ describe('una sola versión aprobada vigente', () => {
         `UPDATE script_versions SET status = 'superseded', superseded_by_version_id = $2 WHERE id = $1`,
         [versiones[0], versiones[1]],
       );
-      await c.query(`UPDATE script_versions SET status = 'approved', approved_by = $2 WHERE id = $1`, [
-        versiones[1],
-        e.director.id,
-      ]);
+      await c.query(
+        `UPDATE script_versions SET status = 'approved', approved_by = $2, ${CON_REVISION_DE_LA_VERSION} WHERE id = $1`,
+        [versiones[1], e.director.id],
+      );
     });
     const v1 = await estado(versiones[0]!);
     const v2 = await estado(versiones[1]!);
@@ -939,10 +941,10 @@ describe('una sola versión aprobada vigente', () => {
     });
     for (const v of [versiones[0], versiones[1]]) {
       expect(
-        await rechazo(`UPDATE script_versions SET status = 'approved', approved_by = $2 WHERE id = $1`, [
-          v,
-          e.admin.id,
-        ]),
+        await rechazo(
+          `UPDATE script_versions SET status = 'approved', approved_by = $2, ${CON_REVISION_DE_LA_VERSION} WHERE id = $1`,
+          [v, e.admin.id],
+        ),
       ).toMatch(/hacia atrás/);
     }
     // tampoco después de que V3 pase a superseded por una V4 aprobada (el hecho «V3 fue aprobada» persiste)
@@ -960,10 +962,10 @@ describe('una sola versión aprobada vigente', () => {
       );
     });
     expect(
-      await rechazo(`UPDATE script_versions SET status = 'approved', approved_by = $2 WHERE id = $1`, [
-        versiones[1],
-        e.admin.id,
-      ]),
+      await rechazo(
+        `UPDATE script_versions SET status = 'approved', approved_by = $2, ${CON_REVISION_DE_LA_VERSION} WHERE id = $1`,
+        [versiones[1], e.admin.id],
+      ),
     ).toMatch(/hacia atrás/);
   });
 
@@ -1016,17 +1018,17 @@ describe('aprobar: quién, con qué fuente y por qué acción propuesta (la base
     const v = await enRevision();
     for (const intruso of [e.consultor, e.operativo, e.analista, e.legal, e.cliente, e.ajeno]) {
       const mensaje = await rechazo(
-        `UPDATE script_versions SET status = 'approved', approved_by = $2 WHERE id = $1`,
+        `UPDATE script_versions SET status = 'approved', approved_by = $2, ${CON_REVISION_DE_LA_VERSION} WHERE id = $1`,
         [v, intruso.id],
       );
       expect(mensaje, intruso.role).not.toBe('');
     }
     expect((await estado(v)).status).toBe('in_review');
     expect(
-      await rechazo(`UPDATE script_versions SET status = 'approved', approved_by = $2 WHERE id = $1`, [
-        v,
-        e.director.id,
-      ]),
+      await rechazo(
+        `UPDATE script_versions SET status = 'approved', approved_by = $2, ${CON_REVISION_DE_LA_VERSION} WHERE id = $1`,
+        [v, e.director.id],
+      ),
     ).toBe('');
   });
 
@@ -1034,10 +1036,10 @@ describe('aprobar: quién, con qué fuente y por qué acción propuesta (la base
     const v = await enRevision();
     expect(await rechazo(`UPDATE script_versions SET status = 'approved' WHERE id = $1`, [v])).not.toBe('');
     expect(
-      await rechazo(`UPDATE script_versions SET status = 'approved', approved_by = $2 WHERE id = $1`, [
-        v,
-        e.ajeno.id,
-      ]),
+      await rechazo(
+        `UPDATE script_versions SET status = 'approved', approved_by = $2, ${CON_REVISION_DE_LA_VERSION} WHERE id = $1`,
+        [v, e.ajeno.id],
+      ),
     ).not.toBe('');
   });
 
@@ -1053,10 +1055,10 @@ describe('aprobar: quién, con qué fuente y por qué acción propuesta (la base
         [v],
       );
       await expect(
-        c.query(`UPDATE script_versions SET status = 'approved', approved_by = $2 WHERE id = $1`, [
-          v,
-          e.director.id,
-        ]),
+        c.query(
+          `UPDATE script_versions SET status = 'approved', approved_by = $2, ${CON_REVISION_DE_LA_VERSION} WHERE id = $1`,
+          [v, e.director.id],
+        ),
       ).rejects.toThrow(/original de la fuente cambió/);
     } finally {
       await c.query('ROLLBACK');
@@ -1075,10 +1077,10 @@ describe('aprobar: quién, con qué fuente y por qué acción propuesta (la base
       await rechazo(`UPDATE script_versions SET status = 'changes_requested' WHERE id = $1`, [v]),
     ).toMatch(/archivado/);
     expect(
-      await rechazo(`UPDATE script_versions SET status = 'approved', approved_by = $2 WHERE id = $1`, [
-        v,
-        e.director.id,
-      ]),
+      await rechazo(
+        `UPDATE script_versions SET status = 'approved', approved_by = $2, ${CON_REVISION_DE_LA_VERSION} WHERE id = $1`,
+        [v, e.director.id],
+      ),
     ).toMatch(/archivado/);
     expect((await estado(v)).status).toBe('in_review');
   });
@@ -1111,7 +1113,7 @@ describe('aprobar: quién, con qué fuente y por qué acción propuesta (la base
     }
     const aprobar = (v: string, pa: string, por: User = e.director) =>
       rechazo(
-        `UPDATE script_versions SET status = 'approved', approved_by = $2, approved_via_proposed_action_id = $3 WHERE id = $1`,
+        `UPDATE script_versions SET status = 'approved', approved_by = $2, approved_via_proposed_action_id = $3, ${CON_REVISION_DE_LA_VERSION} WHERE id = $1`,
         [v, por.id, pa],
       );
 

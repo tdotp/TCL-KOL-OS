@@ -118,8 +118,7 @@ const DETALLES_SEGUROS: ReadonlySet<string> = new Set([
   'campaignStatus',
   'status',
   'to',
-  'runId',
-  'sourceId',
+  // `runId` y `sourceId` NO: son UUID internos y el modelo solo ve alias (QA-F7-C1).
   'planId',
   'recordId',
   'kind',

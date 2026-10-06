@@ -350,6 +350,12 @@ export async function registrarVersionDeGuion(
       const existente = await versionDeFuente(client, input.sourceId);
       if (existente !== undefined) return await comoDeduplicada(client, existente, sourceState);
 
+      // Punto de retorno: si dos registros simultáneos de la MISMA fuente hacia entregables distintos (cada
+      // uno bajo su propio mutex) llegan a insertar, la base (025 · UNIQUE (source_document_id)) deja pasar a
+      // uno y rechaza al otro con 23505; el perdedor deshace SOLO lo suyo (incluido un entregable implícito
+      // recién creado) y devuelve la versión ya registrada como `deduplicated`.
+      await client.query(`SAVEPOINT registro_de_guion`);
+
       // ── Participación inequívoca ──
       const eleccion = await resolverParticipacion(client, actor, input, organizationId);
       if ('needsChoice' in eleccion) return eleccion.needsChoice;
@@ -394,17 +400,30 @@ export async function registrarVersionDeGuion(
 
       // Con el entregable bloqueado, otra solicitud simultánea con la misma fuente ya pudo registrarla.
       const carrera = await versionDeFuente(client, input.sourceId);
-      if (carrera !== undefined) return await comoDeduplicada(client, carrera, sourceState);
+      if (carrera !== undefined) {
+        // También deshace un entregable implícito recién creado: no queda uno vacío huérfano.
+        await client.query(`ROLLBACK TO SAVEPOINT registro_de_guion`);
+        return await comoDeduplicada(client, carrera, sourceState);
+      }
 
-      const version = await conReglasDeBase(async () => {
-        const { rows } = await client.query<FilaDeVersion>(
-          `INSERT INTO script_versions (organization_id, campaign_id, deliverable_id, source_document_id, created_by)
-           VALUES ($1, $2, $3, $4, $5)
-           RETURNING ${COLUMNAS_DE_VERSION}`,
-          [entregable.organization_id, entregable.campaign_id, entregable.id, input.sourceId, actor.id],
-        );
-        return comoVersion(rows[0]!);
-      });
+      let version: ScriptVersion;
+      try {
+        version = await conReglasDeBase(async () => {
+          const { rows } = await client.query<FilaDeVersion>(
+            `INSERT INTO script_versions (organization_id, campaign_id, deliverable_id, source_document_id, created_by)
+             VALUES ($1, $2, $3, $4, $5)
+             RETURNING ${COLUMNAS_DE_VERSION}`,
+            [entregable.organization_id, entregable.campaign_id, entregable.id, input.sourceId, actor.id],
+          );
+          return comoVersion(rows[0]!);
+        });
+      } catch (error) {
+        if (!esViolacionDeFuenteUnica(error)) throw error;
+        await client.query(`ROLLBACK TO SAVEPOINT registro_de_guion`);
+        const ganadora = await versionDeFuente(client, input.sourceId);
+        if (ganadora === undefined) throw error;
+        return await comoDeduplicada(client, ganadora, sourceState);
+      }
       await recordAudit(
         client,
         auditoriaDe(actor, contexto, {
@@ -439,6 +458,17 @@ export async function registrarVersionDeGuion(
       message: 'La versión cambió mientras se registraba: reintente.',
       details: { reason: 'concurrent_update' },
     },
+  );
+}
+
+/** La restricción de la 025 que impone «una fuente es versión de un solo entregable». */
+function esViolacionDeFuenteUnica(error: unknown): boolean {
+  const e = error as { code?: unknown; constraint?: unknown } | null;
+  return (
+    typeof e === 'object' &&
+    e !== null &&
+    e.code === '23505' &&
+    e.constraint === 'script_versions_fuente_unica_key'
   );
 }
 

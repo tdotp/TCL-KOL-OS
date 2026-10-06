@@ -362,11 +362,16 @@ const palabrasLargas = (t: string, minimo: number): string[] =>
     .split(/[^\p{L}\p{N}]+/u)
     .filter((p) => p.length >= minimo);
 
+/** El nombre COMPLETO del archivo (con extensión), literal y sin plegar mayúsculas ni acentos, dentro del texto. */
+function nombreCompletoLiteral(filename: string, texto: string): boolean {
+  return filename.trim().length >= 4 && sinExtension(filename) !== filename && texto.includes(filename);
+}
+
 /**
  * Decide si la frase de la persona asocia INEQUÍVOCAMENTE este archivo con ese influencer (pura, sin E/S).
  *
  *  1. La cita debe contener la mención (sin acentos ni mayúsculas): la persona dijo de quién es.
- *  2. Si la cita nombra el archivo (nombre completo o sin extensión, ≥4 caracteres) o un fragmento
+ *  2. Si la cita nombra el archivo (nombre COMPLETO con extensión, literal) o un fragmento
  *     DISTINTIVO del nombre (palabra ≥6 caracteres que no es de la mención ni aparece en el nombre de
  *     otro adjunto), el mapeo archivo↔persona es explícito.
  *  3. Si no, solo vale cuando el archivo es el ÚNICO adjunto en juego: el de los mensajes que contienen
@@ -380,14 +385,10 @@ export function verificarAsociacionDeGuion(e: EntradaDeAsociacionDeGuion): Resul
   const mencion = plano(e.mencion).replace(/^@/u, '');
   if (mencion.length < 2 || !cita.includes(mencion)) return { ok: false, motivo: 'mencion_ausente' };
 
-  const nombre = plano(e.filename);
-  const raiz = plano(sinExtension(e.filename));
   const deOtros = e.nombresDeOtrosAdjuntos.map((n) => plano(n));
-  // El nombre COMPLETO es explícito; la raíz sin extensión solo si no es también la de otro adjunto
-  // («valentina.docx» y «valentina_otro.docx» comparten «valentina»: «el de Valentina» no distingue).
-  const nombraElArchivo =
-    (nombre.length >= 4 && cita.includes(nombre)) ||
-    (raiz.length >= 4 && cita.includes(raiz) && !deOtros.some((o) => o.includes(raiz)));
+  // El NOMBRE COMPLETO con extensión, literal (sin plegar): la raíz sin extensión («guion» de guion.md) es
+  // vocabulario corriente del propio mensaje y no prueba que la persona nombrara ESE archivo (QA-F7-12b).
+  const nombraElArchivo = nombreCompletoLiteral(e.filename, e.cita);
   if (nombraElArchivo) return { ok: true, via: 'archivo_nombrado' };
 
   const palabrasDeLaMencion = new Set(palabrasLargas(e.mencion, 1));
@@ -404,12 +405,10 @@ export function verificarAsociacionDeGuion(e: EntradaDeAsociacionDeGuion): Resul
   return { ok: false, motivo: 'archivo_sin_nombrar' };
 }
 
-/** ¿Aparece el nombre del archivo (≥4 caracteres) literal en algún mensaje de la persona? */
+/**
+ * ¿Escribió la persona el nombre COMPLETO del archivo (con extensión, literal, sin plegar) en algún mensaje
+ * suyo? La raíz sin extensión no basta: «guion» o «brief» son vocabulario del propio mensaje (QA-F7-12b).
+ */
 export function archivoNombradoPorLaPersona(filename: string, textosDelActor: readonly string[]): boolean {
-  const nombre = plano(filename);
-  const raiz = plano(sinExtension(filename));
-  return textosDelActor.some((t) => {
-    const p = plano(t);
-    return (nombre.length >= 4 && p.includes(nombre)) || (raiz.length >= 4 && p.includes(raiz));
-  });
+  return textosDelActor.some((t) => nombreCompletoLiteral(filename, t));
 }
