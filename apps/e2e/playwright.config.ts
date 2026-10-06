@@ -54,6 +54,7 @@ const ENV_BASE = {
  *   · 3013 `chat-ia-off`     `AI_ENABLED=false` (kill-switch): el chat se muestra pero no envía.
  *   · 3014 `chat-worker-caido` IA encendida pero con `AI_WORKER_URL` en 8012, donde NO arranca nadie:
  *     el spec levanta (y apaga) ese worker a mano para probar «cae → reintentar → completa».
+ *   · 3015 `contenido` (V2 · Fase 7) IA encendida contra el mismo worker 8011.
  *   · 8011 worker `uvicorn app.main:app` (venv local del servicio) con el modelo falso
  *     determinista: es el proceso REAL de `POST /modelo/turno`, sin red ni clave.
  * Ninguno toca la base de desarrollo: `DATABASE_URL` es la de esta corrida (`_test`).
@@ -127,6 +128,16 @@ export default defineConfig({
       timeout: 120_000,
       testMatch: /chat-(acceso|conversacion|herramientas|hitl|adjuntos)\.spec\.ts$/,
       use: { baseURL: 'http://localhost:3012' },
+    },
+    {
+      // V2 · Fase 7 — Contenido (guiones, revisión y aprobación). Mismo patrón que `chat`: IA falsa
+      // determinista en el worker 8011. `chat-contenido` (E2E-16) también corre aquí: el servidor
+      // del chat (3012) no es necesario, pero este puerto trae la misma configuración.
+      name: 'contenido',
+      // Compilación bajo demanda de `next dev` en la primera visita (ver nota en `src/nav.ts`): holgura de arranque.
+      timeout: 120_000,
+      testMatch: /(contenido-(flujo|aprobacion|acceso|sin-brief|inyeccion)|chat-contenido)\.spec\.ts$/,
+      use: { baseURL: 'http://localhost:3015' },
     },
     {
       name: 'chat-ia-off',
@@ -214,6 +225,17 @@ export default defineConfig({
       cwd: '../../',
       url: 'http://localhost:3014/login',
       env: { ...ENV_CHAT, WEB_PORT: '3014', AI_WORKER_URL: `http://127.0.0.1:${PUERTO_WORKER_CAIDO}` },
+      reuseExistingServer: reutilizar,
+      timeout: 600_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+    {
+      // V2 · Fase 7 — proyecto `contenido`: IA encendida contra el worker real 8011 (modelo falso).
+      command: 'npm run dev --workspace=@tcl-kol-os/web',
+      cwd: '../../',
+      url: 'http://localhost:3015/login',
+      env: { ...ENV_CHAT, WEB_PORT: '3015', AI_WORKER_URL: `http://127.0.0.1:${PUERTO_WORKER}` },
       reuseExistingServer: reutilizar,
       timeout: 600_000,
       stdout: 'pipe',
