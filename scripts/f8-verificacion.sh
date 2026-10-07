@@ -12,6 +12,8 @@ cd "$(dirname "$0")/.."
 L="${1:-./.f8-verificacion}"; mkdir -p "$L"; : > "$L/summary.txt"
 B="${DB_BASE:-postgresql://tclkolos:devpassword@localhost:5432}"
 PY="${PY:-services/ai-worker/.venv/bin/python}"
+# El intérprete se usa tras `cd services/ai-worker`: una ruta relativa dejaría de existir ahí (exit 127).
+case "$PY" in /*) ;; *) PY="$PWD/$PY" ;; esac
 export PGPASSWORD="${PGPASSWORD:-devpassword}"
 export DATABASE_URL="$B/tclkolos_test" TEST_DATABASE_URL="$B/tclkolos_test" E2E_DATABASE_URL="$B/tclkolos_test"
 step() { n=$1; shift; "$@" > "$L/$n.log" 2>&1; echo "$n exit=$?" >> "$L/summary.txt"; }
@@ -47,12 +49,32 @@ HASHQ="SELECT table_name, (xpath('/row/h/text()', query_to_xml(format('select md
 psql "$B/tmp_upg_test" -At -c "$HASHQ" > "$L/upg-before.txt" 2>&1
 DATABASE_URL="$B/tmp_upg_test" npm run migrate --workspace @tcl-kol-os/db >> "$L/upg.log" 2>&1; echo "upg-migrate exit=$?" >> "$L/summary.txt"
 psql "$B/tmp_upg_test" -At -c "$HASHQ" > "$L/upg-after.txt" 2>&1
-join -t'|' <(sort "$L/upg-before.txt") <(sort "$L/upg-after.txt") | awk -F'|' '$2!=$3' > "$L/upg-diff.txt"
+# `schema_migrations` es el libro de migraciones: gana una fila por cada migración nueva, así que cambia POR DISEÑO
+# y no se compara (las demás tablas previas deben quedar idénticas).
+join -t'|' <(sort "$L/upg-before.txt") <(sort "$L/upg-after.txt") | awk -F'|' '$1!="schema_migrations" && $2!=$3' > "$L/upg-diff.txt"
 echo "upg-tablas-previas=$(wc -l < "$L/upg-before.txt") cambiadas=$(wc -l < "$L/upg-diff.txt") (esperado: cambiadas=0)" >> "$L/summary.txt"
 psql "$B/postgres" -c "DROP DATABASE tmp_upg_test" >> "$L/upg.log" 2>&1
 
 # --- Prettier sobre lo tocado en F8 y E2E oficial completo (~20 min)
-git diff --name-only a4a8dd5 HEAD -- '*.ts' '*.tsx' '*.json' '*.md' | xargs -r ls 2>/dev/null > "$L/tocados.txt"
+# Deuda heredada de Prettier (17 archivos anteriores a V2; NO se reformatean hasta cerrar el rediseño frontend):
+LEGACY='apps/web/src/app/(app)/campanas/TablaCampanas.tsx
+apps/web/src/app/(app)/campanas/[id]/brief/editar/AlertaPreguntasCriticas.tsx
+apps/web/src/app/(app)/campanas/[id]/brief/editar/EditorBrief.tsx
+apps/web/src/app/(app)/campanas/[id]/brief/editar/NavegacionSecciones.tsx
+apps/web/src/app/(app)/campanas/[id]/brief/editar/PanelComentarios.tsx
+apps/web/src/app/(app)/campanas/[id]/brief/editar/page.tsx
+apps/web/src/app/(app)/campanas/[id]/fuentes/FormularioFuente.tsx
+apps/web/src/app/(app)/campanas/[id]/fuentes/TablaFuentes.tsx
+apps/web/src/app/(app)/campanas/[id]/fuentes/page.tsx
+apps/web/src/app/(app)/campanas/nueva/FormularioCampana.tsx
+apps/web/src/app/(app)/campanas/nueva/page.tsx
+apps/web/src/app/(app)/campanas/page.tsx
+apps/web/src/app/(app)/page.tsx
+apps/web/src/app/globals.css
+apps/web/src/app/login/page.tsx
+apps/web/src/components/AppShell.tsx
+docker-compose.yml'
+git diff --name-only a4a8dd5 HEAD -- '*.ts' '*.tsx' '*.json' '*.md' | grep -vxF "$LEGACY" | xargs -r ls 2>/dev/null > "$L/tocados.txt"
 step prettier bash -c "xargs npx prettier --check < '$L/tocados.txt'"
 step e2e bash -c 'cd apps/e2e && npx playwright test'
 echo "FIN (revisar $L/summary.txt)" | tee -a "$L/summary.txt"
