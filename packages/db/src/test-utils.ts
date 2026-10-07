@@ -21,7 +21,11 @@
  */
 
 import { createHash } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { type Result, type Role, type User, campoDelCatalogo } from '@tcl-kol-os/domain';
+import { type AcuerdoVista, crearAcuerdo } from './agreements.ts';
 import { asociarInfluencerACampana, asociarProductoAInfluencer } from './campaign-influencers.ts';
 import { query, transaction } from './client.ts';
 import { crearEntregable } from './deliverables.ts';
@@ -633,4 +637,149 @@ export async function crearBriefHijoDePrueba(
     ]);
   }
   return { versionId: r.value.versionId, version: r.value.version };
+}
+
+// ─────────────────────────── Escenario de operación (V2 · Fase 8) ──────────────
+
+export type ModoDeAcuerdoDePrueba = 'fee' | 'barter' | 'mixed';
+export type ParticipacionDePrueba = 'valentinaRios' | 'valentinaGomez' | 'diego';
+
+export interface AcuerdoDeEscenario {
+  readonly mode: ModoDeAcuerdoDePrueba;
+  /** Participación del acuerdo. Por defecto `valentinaRios` (tiene el P80 asignado). */
+  readonly participacion?: ParticipacionDePrueba | undefined;
+  /** fee/mixed: monto (por defecto 1500000) y moneda (por defecto COP). */
+  readonly amount?: number | string | undefined;
+  readonly currency?: string | undefined;
+  /** barter/mixed: cantidad comprometida del producto asignado (por defecto 2). */
+  readonly quantity?: number | undefined;
+}
+
+export interface OpcionesDeEscenarioDeOperacion {
+  /** Acuerdo inicial creado con `crearAcuerdo`. Sin esto no hay acuerdo (las pruebas lo crean). */
+  readonly acuerdo?: ModoDeAcuerdoDePrueba | AcuerdoDeEscenario | undefined;
+  /** Crea además un acuerdo fee en la organización AJENA (para pruebas de aislamiento). Por defecto `true`. */
+  readonly conAcuerdoAjeno?: boolean | undefined;
+}
+
+export interface EscenarioDeOperacion extends EscenarioDeContenido {
+  /** Acuerdo inicial (vista del admin, con dinero) si se pidió. */
+  readonly acuerdo: AcuerdoVista | undefined;
+  /** Participación del acuerdo inicial. */
+  readonly acuerdoParticipacion: string | undefined;
+  /** Organización AJENA: participación (campaña de `ajeno`) y su acuerdo fee (si `conAcuerdoAjeno`). */
+  readonly ajena: { readonly participacion: string; readonly acuerdoId: string | undefined };
+  /** Directorio temporal de los originales de evidencia (`STORAGE_LOCAL_PATH` apunta aquí hasta limpiar). */
+  readonly directorioDeOriginales: string;
+  readonly estadoPrevioDeStorage: string | undefined;
+}
+
+let secuenciaDeOperacion = 0;
+
+/** Clave de idempotencia única para pruebas de la operación. */
+export function claveDePrueba(prefijo = 'k'): string {
+  return `${prefijo}-${++secuenciaDeOperacion}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+}
+
+/**
+ * Crea un acuerdo con el caso de uso (`crearAcuerdo`) y lanza si falla. barter/mixed comprometen el producto
+ * indicado (`campaignProductId`) en la cantidad pedida; fee no compromete producto.
+ */
+export async function crearAcuerdoDePrueba(
+  actor: User,
+  o: {
+    readonly campaignInfluencerId: string;
+    readonly mode: ModoDeAcuerdoDePrueba;
+    readonly campaignProductId?: string | undefined;
+    readonly amount?: number | string | undefined;
+    readonly currency?: string | undefined;
+    readonly quantity?: number | undefined;
+    readonly conditions?: string | undefined;
+  },
+): Promise<AcuerdoVista> {
+  const r = await crearAcuerdo(actor, {
+    campaignInfluencerId: o.campaignInfluencerId,
+    compensationType: o.mode,
+    ...(o.mode === 'barter' ? {} : { feeAmount: o.amount ?? 1_500_000, feeCurrency: o.currency ?? 'COP' }),
+    ...(o.conditions === undefined ? {} : { conditions: o.conditions }),
+    commitments:
+      o.mode === 'fee' || o.campaignProductId === undefined
+        ? []
+        : [{ campaignProductId: o.campaignProductId, quantity: o.quantity ?? 2 }],
+    idempotencyKey: claveDePrueba('acuerdo'),
+  });
+  if (!r.ok) throw new Error(`crearAcuerdoDePrueba: ${r.error.code}: ${r.error.message}`);
+  return r.value.acuerdo;
+}
+
+/**
+ * Escenario de operación sobre `crearEscenarioDeContenido` (agencia con admin, director, consultor, operativo,
+ * analista, legal; cliente TCL; admin de otra agencia): campaña ACTIVA con dos productos (`productos.p80` asignado
+ * a `valentinaRios`, `productos.pro` a `valentinaGomez`; `diego` sin productos), tres participaciones y, a
+ * pedido, un acuerdo inicial creado con `crearAcuerdo`. En la organización ajena crea una participación y
+ * (por defecto) un acuerdo fee. Los originales de evidencia van a un directorio temporal.
+ * Limpiar SIEMPRE con `limpiarEscenarioDeOperacion` (usa `eliminarCampanaDePrueba`, que ya borra las tablas F8).
+ */
+export async function crearEscenarioDeOperacion(
+  nombre: string,
+  opciones: OpcionesDeEscenarioDeOperacion = {},
+): Promise<EscenarioDeOperacion> {
+  const estadoPrevioDeStorage = process.env['STORAGE_LOCAL_PATH'];
+  const directorioDeOriginales = mkdtempSync(join(tmpdir(), 'tcl-ops-'));
+  process.env['STORAGE_LOCAL_PATH'] = directorioDeOriginales;
+  const base = await crearEscenarioDeContenido(nombre);
+  const { admin, ajeno, sufijo } = base;
+
+  // Organización ajena: una participación (y su acuerdo fee) en la campaña de la otra agencia.
+  const identidadAjena = exito(
+    await crearInfluencer(ajeno, {
+      displayName: 'Ajena Operación',
+      cuentas: [{ platform: 'instagram', handle: `ajena.operacion.${sufijo}` }],
+    }),
+  );
+  base.influencerIds.push(identidadAjena.influencer.id);
+  const participacionAjena = exito(
+    await asociarInfluencerACampana(ajeno, {
+      campaignId: base.campanaAjenaId,
+      influencerId: identidadAjena.influencer.id,
+    }),
+  ).id;
+  const acuerdoAjeno =
+    opciones.conAcuerdoAjeno === false
+      ? undefined
+      : await crearAcuerdoDePrueba(ajeno, { campaignInfluencerId: participacionAjena, mode: 'fee' });
+
+  let acuerdo: AcuerdoVista | undefined;
+  let acuerdoParticipacion: string | undefined;
+  if (opciones.acuerdo !== undefined) {
+    const a: AcuerdoDeEscenario =
+      typeof opciones.acuerdo === 'string' ? { mode: opciones.acuerdo } : opciones.acuerdo;
+    const quien = a.participacion ?? 'valentinaRios';
+    acuerdoParticipacion = base.participaciones[quien];
+    const producto = quien === 'valentinaGomez' ? base.productos.pro : base.productos.p80;
+    acuerdo = await crearAcuerdoDePrueba(admin, {
+      campaignInfluencerId: acuerdoParticipacion,
+      mode: a.mode,
+      campaignProductId: producto,
+      amount: a.amount,
+      currency: a.currency,
+      quantity: a.quantity,
+    });
+  }
+  return {
+    ...base,
+    acuerdo,
+    acuerdoParticipacion,
+    ajena: { participacion: participacionAjena, acuerdoId: acuerdoAjeno?.id },
+    directorioDeOriginales,
+    estadoPrevioDeStorage,
+  };
+}
+
+/** Limpia un `EscenarioDeOperacion`: campañas con TODO lo F8 (`eliminarCampanaDePrueba`), identidades y el directorio temporal. */
+export async function limpiarEscenarioDeOperacion(op: EscenarioDeOperacion): Promise<void> {
+  await limpiarEscenarioDeContenido(op);
+  if (op.estadoPrevioDeStorage === undefined) delete process.env['STORAGE_LOCAL_PATH'];
+  else process.env['STORAGE_LOCAL_PATH'] = op.estadoPrevioDeStorage;
+  rmSync(op.directorioDeOriginales, { recursive: true, force: true });
 }

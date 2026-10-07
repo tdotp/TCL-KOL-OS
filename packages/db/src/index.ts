@@ -344,3 +344,25 @@ export type {
   EvidenciaVista,
   AdjuntarEvidenciaInput,
 } from './ops-evidence.ts';
+// Fase 8 (W1d)
+export {
+  crearAcuerdo,
+  registrarVersionDeAcuerdo,
+  cancelarAcuerdo,
+  obtenerAcuerdo,
+  listarVersionesDeAcuerdo,
+} from './agreements.ts';
+// Fase 8 (W1d)
+export type {
+  AcuerdoVista,
+  VersionDeAcuerdoVista,
+  CompromisoDeProductoVista,
+  ObligacionDeAcuerdoVista,
+  TerminosDeAcuerdoInput,
+  CrearAcuerdoInput,
+  RegistrarVersionInput,
+  CancelarAcuerdoInput,
+  AcuerdoRegistrado,
+  VersionRegistrada,
+  AcuerdoCancelado,
+} from './agreements.ts';
