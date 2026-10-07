@@ -12,6 +12,16 @@ fragmento por celda sería ilegible. El contrato aquí:
   · Cada fragmento lleva su localizador de rango (`{"kind": "range", "sheet",
     "range": "A12:H16", ...}`), así que se vuelve al punto exacto del original.
 
+Excepción deliberada: el Sheet de influencers del esquema `TCL_KOL_OS_INFLUENCERS_V1`
+(marcador en A1) trae columnas financieras (`fee`, `canje`, `condiciones`) que
+JAMÁS deben llegar a TCL, al agente ni a quien no tiene `finance:read` (DEC-014,
+DEC-049), y los fragmentos son lo que leen todos ellos. Su texto se arma con una
+LISTA BLANCA de columnas no sensibles (ver `COLUMNAS_DE_TEXTO_V1`): lo que no está
+en la lista —`fee`, `canje`, `condiciones` y cualquier columna desconocida o
+futura— no entra al texto. Los valores siguen íntegros en la rejilla del snapshot
+(`source_snapshot_rows`), que es donde los usan la validación y el plan de
+importación; el localizador de cada fragmento conserva su rango real.
+
 La detección de cabecera es una heurística declarada (la primera fila cuyas
 celdas no vacías son todas texto, con al menos dos): el resultado queda en el
 manifiesto (`headerRow`, `headers`) para que quien lo consuma pueda
@@ -21,6 +31,7 @@ contradecirla. Una hoja con varias tablas usa la cabecera de la primera.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -85,6 +96,84 @@ def limpiar(texto: str) -> str:
     return " ".join(texto.split())
 
 
+# ─────────────────── Esquema de influencers V1 (lista blanca) ─────────────────
+
+#: Prefijo del marcador de A1 (`TCL_KOL_OS_INFLUENCERS_V1`). Se compara cualquier
+#: versión: ante una versión futura o desconocida, mejor filtrar que volcar.
+PREFIJO_MARCADOR_INFLUENCERS = "TCL_KOL_OS_INFLUENCERS"
+FILA_MARCADOR_V1 = 1
+FILA_CABECERA_V1 = 2
+
+#: Columnas (cabecera canónica, igual que `normalizeHeader` de
+#: packages/domain/src/influencer-sheet.ts) cuyo valor SÍ puede ir al texto de un
+#: fragmento. NO es una lista de exclusión: `fee`, `canje`, `condiciones` y
+#: cualquier columna que no figure aquí (teléfono, dirección, cédula…) quedan fuera.
+COLUMNAS_DE_TEXTO_V1 = frozenset(
+    {
+        "clave_influencer",
+        "nombre",
+        "plataforma",
+        "handle",
+        "producto",
+        "entregables",
+        "tipo_acuerdo",
+        "fecha_inicio",
+        "fecha_fin",
+        "kpi_objetivo",
+    }
+)
+#: `tipo_acuerdo` solo entra si su valor es una de estas etiquetas (no revela montos).
+TIPOS_DE_ACUERDO_V1 = frozenset({"fee", "canje", "mixto"})
+
+
+def cabecera_canonica(texto: str) -> str:
+    """Misma normalización que el dominio: NFKC, recorte, minúsculas, espacios/guiones → `_`."""
+    return re.sub(r"[\s-]+", "_", unicodedata.normalize("NFKC", texto).strip().lower())
+
+
+def es_hoja_influencers_v1(hoja: Hoja) -> bool:
+    """¿Lleva la hoja el marcador del esquema de influencers en A1?"""
+    marcador = hoja.filas.get(FILA_MARCADOR_V1, {}).get(1)
+    if marcador is None:
+        return False
+    texto = unicodedata.normalize("NFKC", limpiar(marcador.texto)).upper()
+    return texto.startswith(PREFIJO_MARCADOR_INFLUENCERS)
+
+
+def columnas_de_texto_v1(hoja: Hoja, fila_cabecera: int | None) -> dict[int, str]:
+    """columna → cabecera canónica, SOLO de las columnas cuyo valor puede ir al texto."""
+    if fila_cabecera is None:
+        return {}
+    permitidas: dict[int, str] = {}
+    for col, celda in hoja.filas[fila_cabecera].items():
+        canonica = cabecera_canonica(celda.texto)
+        if canonica in COLUMNAS_DE_TEXTO_V1:
+            permitidas[col] = canonica
+    return permitidas
+
+
+def _celdas_visibles_v1(
+    numero: int,
+    celdas: dict[int, Celda],
+    permitidas: dict[int, str],
+    fila_cabecera: int | None,
+) -> dict[int, Celda]:
+    """Las celdas de una fila que pueden ir al texto del fragmento (lista blanca)."""
+    if fila_cabecera is None or numero <= fila_cabecera:
+        # Marcador (y cualquier fila previa a las cabeceras): solo A1; el resto de la
+        # fila 1 «se ignora» según el esquema y no es contenido de la fuente.
+        return {c: v for c, v in celdas.items() if numero == FILA_MARCADOR_V1 and c == 1}
+    visibles: dict[int, Celda] = {}
+    for col, celda in celdas.items():
+        canonica = permitidas.get(col)
+        if canonica is None:
+            continue
+        if canonica == "tipo_acuerdo" and limpiar(celda.texto).lower() not in TIPOS_DE_ACUERDO_V1:
+            continue
+        visibles[col] = celda
+    return visibles
+
+
 # ─────────────────────────── Cabeceras ────────────────────────────────────────
 
 
@@ -131,9 +220,21 @@ def _texto_de_fila(
 
 def fragmentar_hoja(hoja: Hoja, ordinal_inicial: int) -> tuple[list[Fragment], dict[str, Any]]:
     """Fragmentos de una hoja y su entrada del manifiesto."""
-    cabecera = detectar_cabecera(hoja)
+    influencers_v1 = es_hoja_influencers_v1(hoja)
+    # El esquema V1 fija la cabecera en la fila 2 (no se adivina).
+    cabecera = (
+        (FILA_CABECERA_V1 if FILA_CABECERA_V1 in hoja.filas else None)
+        if influencers_v1
+        else detectar_cabecera(hoja)
+    )
     nombres = nombres_de_cabecera(hoja, cabecera)
+    permitidas = columnas_de_texto_v1(hoja, cabecera) if influencers_v1 else {}
     filas = [n for n in sorted(hoja.filas) if n != cabecera]
+
+    def celdas_de_texto(n: int) -> dict[int, Celda]:
+        if not influencers_v1:
+            return hoja.filas[n]
+        return _celdas_visibles_v1(n, hoja.filas[n], permitidas, cabecera)
 
     fragmentos: list[Fragment] = []
     ordinal = ordinal_inicial
@@ -149,7 +250,7 @@ def fragmentar_hoja(hoja: Hoja, ordinal_inicial: int) -> tuple[list[Fragment], d
         col_ini, col_fin = min(columnas), max(columnas)
         fila_ini, fila_fin = grupo[0], grupo[-1]
         etiqueta_filas = f"fila {fila_ini}" if fila_ini == fila_fin else f"filas {fila_ini}–{fila_fin}"
-        cuerpo = "\n".join(_texto_de_fila(n, hoja.filas[n], nombres, cabecera) for n in grupo)
+        cuerpo = "\n".join(_texto_de_fila(n, celdas_de_texto(n), nombres, cabecera) for n in grupo)
         fragmentos.append(
             Fragment(
                 ordinal=ordinal,
@@ -181,7 +282,7 @@ def fragmentar_hoja(hoja: Hoja, ordinal_inicial: int) -> tuple[list[Fragment], d
         tamano = 0
 
     for numero in filas:
-        texto = _texto_de_fila(numero, hoja.filas[numero], nombres, cabecera)
+        texto = _texto_de_fila(numero, celdas_de_texto(numero), nombres, cabecera)
         # Un hueco entre filas corta el fragmento: su rango debe ser contiguo, para
         # que declarar «filas 7–10» signifique que están TODAS ahí. La fila de
         # cabecera no cuenta como hueco (no es una fila de datos, vive en `headers`).
@@ -216,6 +317,15 @@ def fragmentar_hoja(hoja: Hoja, ordinal_inicial: int) -> tuple[list[Fragment], d
         "truncatedCells": hoja.celdas_recortadas,
         "fragmentCount": len(fragmentos),
     }
+    if influencers_v1:
+        # Declarado, no silencioso: qué columnas llegan al texto de los fragmentos.
+        entrada["fragmentTextAllowlist"] = {
+            "schema": PREFIJO_MARCADOR_INFLUENCERS,
+            "columns": sorted(set(permitidas.values())),
+            "columnsWithheld": sum(
+                1 for c in (hoja.filas[cabecera] if cabecera is not None else {}) if c not in permitidas
+            ),
+        }
     return fragmentos, entrada
 
 

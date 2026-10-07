@@ -6,7 +6,8 @@
  * fragmentos no conocen esas columnas. Aquí: la búsqueda textual (consultor, TCL) y el insumo que `extraerCampos`
  * envía al LLM del worker para rellenar el Brief (que TCL puede leer con `brief:read`).
  *
- * `it.fails` = vulnerabilidad CONFIRMADA («abierto»): al corregirla, quitar `.fails`.
+ * Corregido: `fragmentar_hoja` arma el texto con una LISTA BLANCA de columnas del esquema V1 (sin `fee`, `canje`,
+ * `condiciones` ni columnas desconocidas). El fragmento sembrado es la salida REAL del worker para esta hoja.
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { closePool, query } from './client.ts';
@@ -24,8 +25,13 @@ const FEE = 'FEE-QA8-SHEET-9876543';
 let op: EscenarioDeOperacion;
 let sourceId = '';
 
-/** Texto EXACTO de `fragmentar_hoja` (services/ai-worker/app/parsers/tabular.py) para una fila con fee. */
-const TEXTO_DEL_WORKER = `Hoja «Influencers» · filas 1–3\nFila 3\nclave_influencer: INF-001\nnombre: Valentina Rios\nfee: ${FEE}\ncanje: lavadora\nkpi_objetivo: Alcanzar 50.000 vistas`;
+/**
+ * Salida REAL de `fragmentar_hoja` (services/ai-worker/app/parsers/tabular.py) para una hoja V1 con las columnas
+ * clave_influencer, nombre, plataforma, handle, producto, fee, canje y kpi_objetivo (fee = FEE, canje = lavadora).
+ * Generada con el worker: el fee y el canje de la hoja NO aparecen en el texto.
+ */
+const TEXTO_DEL_WORKER =
+  'Hoja «Influencers» · filas 1–3\nFila 1\nA: TCL_KOL_OS_INFLUENCERS_V1\nFila 3\nclave_influencer: INF-001\nnombre: Valentina Rios\nplataforma: instagram\nhandle: val.rios\nproducto: P80\nkpi_objetivo: Alcanzar 50.000 vistas';
 
 beforeAll(async () => {
   op = await crearEscenarioDeOperacion('QA F8 sheet fee db', { conAcuerdoAjeno: false });
@@ -51,40 +57,39 @@ afterAll(async () => {
   await closePool();
 });
 
-describe('CONTROL: el fee está en el fragmento vigente de una fuente procesada', () => {
-  it('hay exactamente un fragmento con «fee: …»', async () => {
+describe('CONTROL: el fragmento vigente de una fuente procesada es el del worker, sin columnas financieras', () => {
+  it('hay exactamente un fragmento con la identidad del influencer y ninguno con «fee: …» ni «canje: …»', async () => {
     const [f] = await query<{ n: string }>(
       `SELECT count(*) AS n FROM source_fragments WHERE source_id = $1 AND text LIKE $2`,
-      [sourceId, `%fee: ${FEE}%`],
+      [sourceId, '%nombre: Valentina Rios%'],
     );
     expect(Number(f!.n)).toBe(1);
+    const [g] = await query<{ n: string }>(
+      `SELECT count(*) AS n FROM source_fragments WHERE source_id = $1 AND (text LIKE $2 OR text LIKE $3)`,
+      [sourceId, '%fee:%', '%canje:%'],
+    );
+    expect(Number(g!.n)).toBe(0);
   });
 });
 
-describe('ABIERTO P0 · búsqueda textual', () => {
-  it.fails(
-    'el consultor (sin finance:read) no encuentra ni lee el monto del fee buscando «fee»',
-    async () => {
-      const r = await buscarTextoEnFuentes(op.consultor, { campaignId: op.campanaId, texto: 'fee' });
-      expect(r.ok).toBe(true);
-      expect(JSON.stringify(r)).not.toContain(FEE);
-    },
-  );
+describe('P0 corregido · búsqueda textual', () => {
+  it('el consultor (sin finance:read) no encuentra ni lee el monto del fee buscando «fee»', async () => {
+    const r = await buscarTextoEnFuentes(op.consultor, { campaignId: op.campanaId, texto: 'fee' });
+    expect(r.ok).toBe(true);
+    expect(JSON.stringify(r)).not.toContain(FEE);
+  });
 
-  it.fails(
-    'TCL (cliente), con campaña y fuente compartidas, no encuentra el fee buscando «fee»',
-    async () => {
-      await query(`UPDATE campaigns SET visibility = 'tcl' WHERE id = $1`, [op.campanaId]);
-      expect((await setSourceVisibility(op.admin, sourceId, 'tcl')).ok).toBe(true);
-      const r = await buscarTextoEnFuentes(op.cliente, { campaignId: op.campanaId, texto: 'fee' });
-      expect(r.ok).toBe(true);
-      expect(JSON.stringify(r)).not.toContain(FEE);
-    },
-  );
+  it('TCL (cliente), con campaña y fuente compartidas, no encuentra el fee buscando «fee»', async () => {
+    await query(`UPDATE campaigns SET visibility = 'tcl' WHERE id = $1`, [op.campanaId]);
+    expect((await setSourceVisibility(op.admin, sourceId, 'tcl')).ok).toBe(true);
+    const r = await buscarTextoEnFuentes(op.cliente, { campaignId: op.campanaId, texto: 'fee' });
+    expect(r.ok).toBe(true);
+    expect(JSON.stringify(r)).not.toContain(FEE);
+  });
 });
 
-describe('ABIERTO P0 · extracción del Brief (insumo del LLM; el Brief lo lee TCL)', () => {
-  it.fails('extraerCampos no envía el fee del Sheet al worker', async () => {
+describe('P0 corregido · extracción del Brief (insumo del LLM; el Brief lo lee TCL)', () => {
+  it('extraerCampos no envía el fee del Sheet al worker', async () => {
     await query(`UPDATE source_documents SET visibility = 'interna' WHERE id = $1`, [sourceId]);
     let enviado = '';
     vi.stubGlobal(

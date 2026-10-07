@@ -11,7 +11,9 @@
  * (`cliente`) si SmartPR comparte campaña y fuente, y al AGENTE (`source_read_content`, `source_search_text`
  * ), aunque F8 declara «ni el agente ni quien no tiene finance:read ve un monto».
  *
- * Las pruebas `it.fails` son vulnerabilidades CONFIRMADAS («abierto»): cuando se corrijan, quitar `.fails`.
+ * Corregido: `fragmentar_hoja` arma el texto con una LISTA BLANCA de columnas del esquema V1 (sin `fee`, `canje`,
+ * `condiciones` ni columnas desconocidas); el fee SIGUE en `source_snapshot_rows` (rejilla inmutable) y solo
+ * dejó de volcarse al texto de los fragmentos. El fragmento sembrado es la salida REAL del worker.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { closePool, getFragments, getSnapshotFragments, query, setSourceVisibility } from '@tcl-kol-os/db';
@@ -29,9 +31,12 @@ let m: MundoDeOperacion;
 let sourceId = '';
 let snapshotId = '';
 
-/** El texto EXACTO que produce `fragmentar_hoja` para una fila del Sheet con fee, canje y kpi_objetivo. */
-const textoDelWorker = (fee: string): string =>
-  `Hoja «Influencers» · filas 1–3\nFila 1\nA: TCL_KOL_OS_INFLUENCERS_V1\nFila 3\nclave_influencer: INF-001\nnombre: Valentina Rios\nplataforma: instagram\nhandle: val.rios\nproducto: P80\nfee: ${fee}\ncanje: lavadora\nkpi_objetivo: Alcanzar 50.000 vistas`;
+/**
+ * Salida REAL de `fragmentar_hoja` (services/ai-worker/app/parsers/tabular.py) para la hoja que siembra
+ * `snapshotConFee` (fee y canje incluidos en la rejilla): el texto ya no lleva `fee`, `canje` ni `condiciones`.
+ */
+const TEXTO_DEL_WORKER =
+  'Hoja «Influencers» · filas 1–3\nFila 1\nA: TCL_KOL_OS_INFLUENCERS_V1\nFila 3\nclave_influencer: INF-001\nnombre: Valentina Rios\nplataforma: instagram\nhandle: val.rios\nproducto: P80\nkpi_objetivo: Alcanzar 50.000 vistas';
 
 const LOCALIZADOR =
   '{"kind":"range","sheet":"Influencers","range":"A1:H3","rowStart":1,"rowEnd":3,"colStart":1,"colEnd":8}';
@@ -81,7 +86,7 @@ async function snapshotConFee(sequence: number, fee: string): Promise<string> {
   await query(
     `INSERT INTO source_fragments (source_id, snapshot_id, ordinal, section, text, locator)
      VALUES ($1, $2, 1, 'Influencers', $3, $4::jsonb)`,
-    [sourceId, s!.id, textoDelWorker(fee), LOCALIZADOR],
+    [sourceId, s!.id, TEXTO_DEL_WORKER, LOCALIZADOR],
   );
   return s!.id;
 }
@@ -102,32 +107,39 @@ afterAll(async () => {
   await closePool();
 });
 
-describe('CONTROL: el fee SÍ está en los fragmentos del Sheet (no es un falso negativo)', () => {
-  it('el fragmento del snapshot trae «fee: …» y la fuente es legible para la IA', async () => {
+describe('CONTROL: el fee SÍ está en la rejilla del snapshot pero NO en los fragmentos (no es un falso negativo)', () => {
+  it('la rejilla conserva el fee y el fragmento trae la identidad del influencer sin «fee: …»', async () => {
+    const [rejilla] = await query<{ n: string }>(
+      `SELECT count(*) AS n FROM source_snapshot_rows WHERE snapshot_id = $1 AND cells::text LIKE $2`,
+      [snapshotId, `%${FEE_DEL_SHEET}%`],
+    );
+    expect(Number(rejilla!.n)).toBe(1);
     const [f] = await query<{ n: string }>(
       `SELECT count(*) AS n FROM source_fragments WHERE snapshot_id = $1 AND text LIKE $2`,
-      [snapshotId, `%fee: ${FEE_DEL_SHEET}%`],
+      [snapshotId, '%nombre: Valentina Rios%'],
     );
     expect(Number(f!.n)).toBe(1);
+    const [g] = await query<{ n: string }>(
+      `SELECT count(*) AS n FROM source_fragments WHERE snapshot_id = $1 AND (text LIKE $2 OR text LIKE $3)`,
+      [snapshotId, '%fee:%', `%${FEE_DEL_SHEET}%`],
+    );
+    expect(Number(g!.n)).toBe(0);
   });
 });
 
-describe('ABIERTO P0 · el fee del Sheet sale por getFragments / getSnapshotFragments (sin finance:read)', () => {
+describe('P0 corregido · el fee del Sheet sale por getFragments / getSnapshotFragments (sin finance:read)', () => {
   for (const rol of ['consultor', 'analista', 'legal'] as const) {
-    it.fails(
-      `${rol} (sin finance:read) no debe leer el monto del fee en los fragmentos del Sheet`,
-      async () => {
-        const a = await getFragments(m.op[rol], sourceId);
-        const b = await getSnapshotFragments(m.op[rol], snapshotId);
-        expect(JSON.stringify(a)).not.toContain(FEE_DEL_SHEET);
-        expect(JSON.stringify(b)).not.toContain(FEE_DEL_SHEET);
-      },
-    );
+    it(`${rol} (sin finance:read) no debe leer el monto del fee en los fragmentos del Sheet`, async () => {
+      const a = await getFragments(m.op[rol], sourceId);
+      const b = await getSnapshotFragments(m.op[rol], snapshotId);
+      expect(JSON.stringify(a)).not.toContain(FEE_DEL_SHEET);
+      expect(JSON.stringify(b)).not.toContain(FEE_DEL_SHEET);
+    });
   }
 });
 
-describe('ABIERTO P0 · TCL (cliente) lee el fee del Sheet cuando SmartPR comparte campaña y fuente', () => {
-  it.fails('getFragments(cliente) no debe traer fee, canje ni condiciones', async () => {
+describe('P0 corregido · TCL (cliente) lee el fee del Sheet cuando SmartPR comparte campaña y fuente', () => {
+  it('getFragments(cliente) no debe traer fee, canje ni condiciones', async () => {
     await query(`UPDATE campaigns SET visibility = 'tcl' WHERE id = $1`, [m.op.campanaId]);
     const v = await setSourceVisibility(m.op.admin, sourceId, 'tcl');
     expect(v.ok).toBe(true);
@@ -136,17 +148,14 @@ describe('ABIERTO P0 · TCL (cliente) lee el fee del Sheet cuando SmartPR compar
   });
 });
 
-describe('ABIERTO P0 · el AGENTE recibe el fee del Sheet', () => {
-  it.fails(
-    'source_read_content y source_search_text no deben entregar el monto del fee al modelo',
-    async () => {
-      await query(`UPDATE source_documents SET visibility = 'interna' WHERE id = $1`, [sourceId]);
-      const t = await abrirTurno(m.op.consultor, m.op.campanaId, 'Lee el Sheet de influencers');
-      await llamar(r, t, 'source_list', {});
-      const leido = await llamar(r, t, 'source_read_content', { sourceId: 'S1' });
-      const buscado = await llamar(r, t, 'source_search_text', { text: 'fee' });
-      expect(leido.content).not.toContain(FEE_DEL_SHEET);
-      expect(buscado.content).not.toContain(FEE_DEL_SHEET);
-    },
-  );
+describe('P0 corregido · el AGENTE recibe el fee del Sheet', () => {
+  it('source_read_content y source_search_text no deben entregar el monto del fee al modelo', async () => {
+    await query(`UPDATE source_documents SET visibility = 'interna' WHERE id = $1`, [sourceId]);
+    const t = await abrirTurno(m.op.consultor, m.op.campanaId, 'Lee el Sheet de influencers');
+    await llamar(r, t, 'source_list', {});
+    const leido = await llamar(r, t, 'source_read_content', { sourceId: 'S1' });
+    const buscado = await llamar(r, t, 'source_search_text', { text: 'fee' });
+    expect(leido.content).not.toContain(FEE_DEL_SHEET);
+    expect(buscado.content).not.toContain(FEE_DEL_SHEET);
+  });
 });
