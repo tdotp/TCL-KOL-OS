@@ -1,19 +1,19 @@
-# TCL KOL OS V2 — Estado técnico actual (checkpoint de la Fase 7)
+# TCL KOL OS V2 — Estado técnico actual (checkpoint de la Fase 8)
 
 > Es un **estado técnico**, no un segundo workflow funcional. El workflow aprobado vive en
 > [`docs/product/TCL_KOL_OS_V2_WORKFLOW_FUNCIONAL.md`](../product/TCL_KOL_OS_V2_WORKFLOW_FUNCIONAL.md) y no se reinterpreta aquí.
 
 | | |
 |---|---|
-| **Fecha del checkpoint** | 6 de octubre de 2026 |
+| **Fecha del checkpoint** | 7 de octubre de 2026 |
 | **Rama de desarrollo** | `v2` (nunca `main`) |
-| **Tag** | `v2-f7-complete` (el commit que contiene este documento) |
-| **Último commit de CÓDIGO** | `2e4b864` (cierre de código de la Fase 7). Los commits posteriores son solo documentación |
+| **Tag** | `v2-f7-complete` (intacto). **`v2-f8-complete` aún NO existe**: se crea tras certificar el gate completo en local (ver `HANDOFF-Fase-9` §2b) |
+| **Último commit de CÓDIGO** | `94ca0a3` (cierre de código de la Fase 8). Los commits posteriores son solo documentación |
 | **Baseline de código previo a V2** | `3dd9da2` (DEC-042) |
 | **`origin/main`** | `2452283` («Rediseño v3»): lo que estaba publicado antes de V2. **No se toca** |
-| **Última migración** | `025_endurecimiento_contenido.sql` (siguiente: **026**) |
-| **Última decisión** | **DEC-048** (siguiente: **DEC-049**) |
-| **Siguiente fase** | **F8 — Operación + KPIs** (no iniciada, no diseñada) |
+| **Última migración** | `033_endurecimiento_operacion.sql` (siguiente: **034**) |
+| **Última decisión** | **DEC-049** (siguiente: **DEC-050**) |
+| **Siguiente fase** | **F9 — Dashboard TCL, solo lectura** (no iniciada, no diseñada; se retoma en una sesión local) |
 
 ## 1. Roadmap
 
@@ -27,39 +27,44 @@
 | 5 | Google Sheet de influencers: snapshots inmutables, esquema V1, importación con plan y resolución humana | ✅ | DEC-046 · [`GOOGLE_SHEETS_IMPORT_V2`](../product/GOOGLE_SHEETS_IMPORT_V2.md), [`INFLUENCER_SHEET_V1`](../product/INFLUENCER_SHEET_V1.md) |
 | 6 · 6.1 | Chat y agente de Cuenta (runtime híbrido, 25 tools, HITL extendido) y endurecimiento en la base | ✅ | DEC-047 · [`CHAT_AGENT_V2`](../product/CHAT_AGENT_V2.md) |
 | 7 | Contenido: entregables, guiones versionados, revisión contra el Brief, aprobación humana, 11 tools | ✅ | DEC-048 · [`CONTENT_V2`](../product/CONTENT_V2.md) |
-| **8** | **Operación + KPIs** | ➡️ siguiente | — |
-| 9 | Dashboard TCL (solo lectura) | pendiente | — |
+| 8 | Operación + KPIs: acuerdos, logística, facturación/pagos como seguimiento, PII separada, KPIs, workspace de Operativo, 6 tools | ✅ | DEC-049 · [`OPERATIONS_KPI_V2`](../product/OPERATIONS_KPI_V2.md) |
+| **9** | **Dashboard TCL (solo lectura)** | ➡️ siguiente | — |
 | 10 | Limpieza / deprecación (legacy, rutas, roles, docs históricas) | pendiente | — |
 
 ## 2. Arquitectura principal (resumen; el detalle está en las DEC y notas técnicas)
 
-Monorepo: `apps/web` (Next.js 15 + React 19), `apps/e2e` (Playwright), `packages/domain` (reglas puras), `packages/db` (Postgres: repositorios y casos de uso), `packages/agent` (registro de tools y runtime del agente de Cuenta), `services/ai-worker` (Python/FastAPI: parsing, Google Sheets, extracción, endpoints de modelo `/modelo/turno` y `/modelo/analisis`). Idioma de UI y docs: español.
+Monorepo: `apps/web` (Next.js 15 + React 19), `apps/e2e` (Playwright), `packages/domain` (reglas puras), `packages/db` (Postgres: repositorios y casos de uso), `packages/agent` (registro de tools y runtime del agente de Cuenta; 42 tools), `services/ai-worker` (Python/FastAPI: parsing, Google Sheets, extracción, endpoints de modelo `/modelo/turno` y `/modelo/analisis`). Idioma de UI y docs: español.
 
-- **Actores:** Cuenta SmartPR (`admin`/`director`/`consultor`) construye y decide; Operativo SmartPR ejecuta y registra; TCL (`cliente`) observa en solo lectura.
+- **Actores:** Cuenta SmartPR (`admin`/`director`/`consultor`) construye y decide; Operativo SmartPR ejecuta y registra (F8: acuerdos, logística, seguimiento de facturación y pagos, KPIs reales, PII de entrega); TCL (`cliente`) observa en solo lectura y hoy no recibe nada de operación.
 - **Capas:** el dominio y la base DECIDEN (permisos, tenant, estados, versionado, HITL, provenance); el runtime del agente solo ORQUESTA; las tools son adaptadores finos de casos de uso; el worker hace llamadas de modelo sin estado y sin BD.
 - **Aislamiento por organización** impuesto en la base con claves foráneas compuestas; `audit_events` append-only con `origin = ui | chat | system` y `correlation`.
 - **Provenance:** `source_documents` es LA entidad de fuente (original preservado por hash), `SourceLocator`, evidencia que hereda el localizador, snapshots inmutables de Google Sheets.
 - **Versionado:** Brief = una versión lógica con representaciones ES/EN (sin estado propio); ScriptVersion = entidad propia, nunca se sobrescribe.
 - **HITL:** `proposed_actions` con un registro de handlers por tipo (`brief.approve`, `influencer_import.apply`, `influencer_import.resolve_record`, `script_version.approve`); confirma una persona por canal `ui` con la huella mostrada.
+- **Operación (F8):** todo cambio de estado de envío, documento de cobro y obligación de pago entra por un `operational_events` append-only (idempotente, `expected_seq`, solo persona por `ui`); **payment tracking ≠ payment execution**; barter puro ⇒ pago `not_applicable`; PII cifrada y separada (AES-256-GCM en la aplicación); evidencia = `source_documents` tipo `soporte_operativo` (sensible, interna, sin extracción); KPI objetivo ≠ medición (inmutables, corrección = fila nueva). Detalle en [`OPERATIONS_KPI_V2`](../product/OPERATIONS_KPI_V2.md).
 - **IA:** nunca es requisito ni decide. Todo texto de documentos va en sobres no confiables; las salidas del modelo se validan por código; un `ai_runs` por llamada.
 
 ## 3. Migraciones (forward-only; no se editan las aplicadas)
 
-`001_core` · `002_sources` · `003_localizador_seccion` · `004_briefs` · `005_producto_preguntas_y_revision` · `006_excepcion_por_producto` · `007_comentarios_internos` · `008_claim_exige_evidencia_excepcion_manual` · `009_inmutabilidad_historica` · `010_inmutabilidad_bypass_restringido` · `011_rol_operativo` · `012_auditoria_con_origen` · `013_acciones_propuestas` · `014_modelo_bilingue_v2` · `015_influencers` · `016_campaign_influencers` · `017_estado_por_resolver` · `018_fuentes_enlazadas_y_localizador` · `019_snapshots_fuentes_enlazadas` · `020_importacion_influencers` · `021_chat_agente` · `022_endurecimiento_chat` · `023_contenido_guiones` · `024_analisis_de_contenido` · `025_endurecimiento_contenido`.
+`001_core` · `002_sources` · `003_localizador_seccion` · `004_briefs` · `005_producto_preguntas_y_revision` · `006_excepcion_por_producto` · `007_comentarios_internos` · `008_claim_exige_evidencia_excepcion_manual` · `009_inmutabilidad_historica` · `010_inmutabilidad_bypass_restringido` · `011_rol_operativo` · `012_auditoria_con_origen` · `013_acciones_propuestas` · `014_modelo_bilingue_v2` · `015_influencers` · `016_campaign_influencers` · `017_estado_por_resolver` · `018_fuentes_enlazadas_y_localizador` · `019_snapshots_fuentes_enlazadas` · `020_importacion_influencers` · `021_chat_agente` · `022_endurecimiento_chat` · `023_contenido_guiones` · `024_analisis_de_contenido` · `025_endurecimiento_contenido` · `026_tipo_fuente_soporte_operativo` · `027_acuerdos` · `028_pii_kol` · `029_envios` · `030_facturacion_pagos` · `031_eventos_operativos` · `032_kpis` · `033_endurecimiento_operacion`.
 
 Una migración nueva debe: ser aditiva, probarse **desde base vacía** (1→N + seed) y como **upgrade con datos** (md5 por tabla), y ejecutarse también sobre la base de pruebas. `ALTER TYPE … ADD VALUE` va en su propia migración.
 
-## 4. Baseline de pruebas al cierre de la Fase 7
+## 4. Baseline de pruebas al cierre de la Fase 8
 
-| Suite | Resultado |
-|---|---|
-| `packages/domain` | 678 / 678 |
-| `packages/db` | 1490 / 1490 (77 archivos) |
-| `packages/agent` | 505 / 505 (45 archivos, incluye `src/qa/**` y el test estático de frontera D15) |
-| Worker Python (`pytest`) | 769 passed |
-| E2E Playwright (corrida oficial completa) | **51 / 51** (34 de F0–F6.1 + 17 de F7) |
-| `npm run lint` · `typecheck` · `build` · `ruff check app tests` · `mypy app` | verdes |
-| Prettier sobre archivos tocados | verde; la deuda de Prettier legacy se lista en §6 |
+Certificación **parcial** (el gate final completo se interrumpió; el resto debe repetirse en local, ver `HANDOFF-Fase-9` §2b):
+
+| Suite | Resultado | Cuándo |
+|---|---|---|
+| `packages/domain` | **823 / 823** (26 archivos) | gate final, sobre `94ca0a3` |
+| `packages/agent` | **584 / 584** (50 archivos) | gate final, sobre `94ca0a3` |
+| `apps/web` (vitest) | **121 / 121** (5 archivos) | gate final, sobre `94ca0a3` |
+| `npm run lint` · `typecheck` | verdes | gate final, sobre `94ca0a3` |
+| `packages/db` | **1822 / 1822** (96 archivos) en el gate de la Wave 2; tras el QA y la 033: **391 / 391** en los 23 archivos de F8 | suite completa NO repetida tras la 033 |
+| Migraciones | 001→033 + seed desde cero: OK (corrida del agente de correcciones); 032→033 como upgrade sobre la base de pruebas: OK | upgrade 025→033 con md5 por tabla: NO ejecutado |
+| Worker Python | **799 passed**; `ruff check app tests` y `mypy app` limpios | tras la corrección del P0 (FIX-A) |
+| E2E Playwright | proyecto `operacion`: **27 / 27**; `contenido` (smoke): 7 / 7 | corrida oficial completa (51 previos + 27) NO ejecutada |
+| `npm run build` · Prettier sobre lo tocado | NO ejecutados en el gate final | pendientes |
 
 Pruebas con fallo **intermitente conocido bajo carga** (pasan aisladas): `packages/agent/src/qa/qa-hitl.test.ts` (H2) y `packages/db/src/qa-f7-estres.test.ts`. Un E2E completo bajo carga alta puede dar timeouts de login; repetir con la máquina en calma.
 
@@ -75,18 +80,22 @@ DATABASE_URL=postgresql://tclkolos:devpassword@localhost:5434/<base> npm run mig
 # 3) Pruebas (EXPORTA CADA VARIABLE POR SEPARADO; en zsh `export A=x B=$A` deja B vacío):
 export DATABASE_URL=postgresql://tclkolos:devpassword@localhost:5434/tclkolos_test
 export TEST_DATABASE_URL=postgresql://tclkolos:devpassword@localhost:5434/tclkolos_test
+npm run seed --workspace @tcl-kol-os/db      # una base de pruebas sin sembrar hace fallar a packages/db
+python fixtures/spreadsheets/generar_fixtures.py   # el .xlsx de prueba está en .gitignore (sin él fallan 3 pruebas)
 npm run lint && npm run typecheck && npm run test && npm run build
 (cd services/ai-worker && .venv/bin/ruff check app tests && .venv/bin/mypy app && .venv/bin/python -m pytest -q)
-# 4) E2E (BD con sufijo _test; puertos 3010–3015 y worker 8011/8012; Google Chrome real; ~11 min completo):
+# 4) E2E (BD con sufijo _test; puertos 3010–3016 y worker 8011/8012; Google Chrome real; ~11 min completo):
 (cd apps/e2e && E2E_DATABASE_URL=$TEST_DATABASE_URL npx playwright test)
 # 5) Al terminar:  docker compose stop db
 ```
 
-Trampas: `timeout` no existe en macOS y `sed -i` es BSD; el estado del shell no persiste entre llamadas y un `cd` desplaza el cwd (usa rutas absolutas); no uses `git stash`; una base sembrada rechaza `seed`; si añades una migración, migra también `tclkolos_test`; una migración aplicada no se edita (rehacerla en pruebas: `CREATE DATABASE … TEMPLATE`, sin conexiones activas a la plantilla); el bypass de inmutabilidad solo existe en bases `_test`; el worker local usa un venv de **Python 3.9** (escribe `Optional[...]` en modelos Pydantic y `(int, float)` en `isinstance`; necesita `google-auth` y `requests`); un E2E con worker real exige ese venv (pide `REDIS_URL` ficticio y `AI_MODEL_*` aunque el proveedor sea el falso); el modelo falso del chat solo responde a un marcador `[[fake:tool nombre {json plano}]]` en el último mensaje del usuario (una tool plana por turno) y el del análisis a `[[fake:analisis <modo>]]` dentro del texto del guion; los tests de `packages/agent/src/qa` que usan el harness de mutación copian el árbol de `HEAD` (`git archive`) salvo que se pida `'arbol'`.
+Trampas: las pruebas de PII (F8) usan claves de prueba que `packages/db/vitest.setup.ts` y el E2E fijan SOLO si la base termina en `_test`; fuera de ahí `PII_ENCRYPTION_KEYS`/`PII_INDEX_KEY` son obligatorias y no hay valor por defecto; un E2E del proyecto `operacion` levanta el servidor 3016; `timeout` no existe en macOS y `sed -i` es BSD; el estado del shell no persiste entre llamadas y un `cd` desplaza el cwd (usa rutas absolutas); no uses `git stash`; una base sembrada rechaza `seed`; si añades una migración, migra también `tclkolos_test`; una migración aplicada no se edita (rehacerla en pruebas: `CREATE DATABASE … TEMPLATE`, sin conexiones activas a la plantilla); el bypass de inmutabilidad solo existe en bases `_test`; el worker local usa un venv de **Python 3.9** (escribe `Optional[...]` en modelos Pydantic y `(int, float)` en `isinstance`; necesita `google-auth` y `requests`); un E2E con worker real exige ese venv (pide `REDIS_URL` ficticio y `AI_MODEL_*` aunque el proveedor sea el falso); el modelo falso del chat solo responde a un marcador `[[fake:tool nombre {json plano}]]` en el último mensaje del usuario (una tool plana por turno) y el del análisis a `[[fake:analisis <modo>]]` dentro del texto del guion; los tests de `packages/agent/src/qa` que usan el harness de mutación copian el árbol de `HEAD` (`git archive`) salvo que se pida `'arbol'`.
 
 Datos sintéticos sembrados: usuarios `gerardo@smartpr.co` (admin), `director@smartpr.co`, `consultor@smartpr.co`, `operativo@smartpr.co`, `marena@tcl.com` (cliente), `ajeno@otraagencia.co` (otra agencia); organizaciones SmartPR, TCL Colombia, Agencia Ajena; campañas «Lanzamiento línea P80», «Lanzamiento C7L» y «Campaña confidencial de otra agencia»; productos P80, P80 Pro, P80 Ultra, C7L, X11L, Soundbar S64. Fixtures de pruebas en `@tcl-kol-os/db/test-utils` (`crearEscenarioDeChat`, `crearEscenarioDeContenido`, `crearBriefAprobadoDePrueba`, …). Nunca se usan campañas reales ni `.env`/`.storage/` en pruebas.
 
-## 6. Deudas conocidas (heredadas y de la Fase 7)
+## 6. Deudas conocidas (heredadas y de la Fase 8)
+
+- **F8 (operación):** cripto-borrado y política de retención de PII (DEC-013) sin implementar; rotación de claves sin procedimiento; originales de evidencia sin cifrar en almacenamiento (mitigado: `sensible`, internos, sin extracción); snapshots del Sheet creados antes de la corrección del P0 conservan `fee/canje/condiciones` en sus fragmentos (cambiar el Sheet, re-sincronizar y purgar los snapshots antiguos); pagos en cuotas/parciales no modelados; un acuerdo cancelado bloquea uno nuevo en la participación; idempotencia de versiones de acuerdo y de guardado de PII por contenido; KPI por CSV/Sheets/APIs sociales diferidos; sin topes por sujeto de eventos, documentos y mediciones; sin `retractarEvidencia` en la UI ni descarga de originales; oráculo por hash en `uploadSource`; archivos huérfanos en disco si una transacción aborta; el nav muestra «Editar» al Operativo (el servidor lo niega); `kpi_target_register` con grounding conservador.
 
 - **Smoke real contra el proveedor de modelo NO ejecutado** (tool calling del chat con `tool_choice`/`require_parameters` y `/modelo/analisis` con JSON mode): todo lo cubierto usa proveedor falso. Con el modo todo-o-nada del análisis, un modelo real podría dar tasa alta de salidas inválidas.
 - **Gateway del worker sin autenticación** (secreto compartido pendiente). `after()` no es durable (cubierto por un barrido perezoso). Sin límite de tasa por usuario, sin kill-switch por organización, `/extraccion` sin kill-switch (`AI_ENABLED` solo aplica al chat y a los endpoints de modelo). Sin streaming ni resumen de conversación.

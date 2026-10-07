@@ -87,7 +87,10 @@ Acciones `agreement.*`, `shipment.*`, `billing.*`, `payment.*`, `pii.*`, `ops_ev
 
 ## 10. Verificación
 
-Se completa al cierre con las cifras del gate final, el QA adversarial y las mutaciones (ver el reporte de la fase).
+- **QA adversarial independiente** (un subagente que no implementó; 18 vectores obligatorios + extras): **1 P0, 2 P1, 6 P2 y varios P3**, todos corregidos con pruebas de regresión (`qa-f8-*`): P0 = `fee/canje/condiciones` del Sheet V1 entraban a `source_fragments.text` (arreglo: allowlist de columnas en el worker); P1 = `guardarPii`/`revelarPii` aceptaban origen chat y la historia de un envío entregado se podía reescribir (arreglo en la aplicación y migración 033). **Cierre: 0 P0 y 0 P1 abiertos.** Lo no corregido está en §11.
+- **Mutaciones** (rompo la regla, corro la prueba dirigida, confirmo que falla y restauro con `git checkout`; árbol restaurado): 9 de 10 detectadas directamente (guard de tenant en envíos, claves prohibidas de TCL, secciones del agente sin finanzas, aplicabilidad del barter, grafo de envíos, inmutabilidad de KPI —trigger eliminado en una base clon—, Operativo con `script:approve`, idempotencia del evento, permiso `agreement:manage`). La #7 original (el caso de uso de reportar pago con una capacidad más laxa) **no se detectó** porque una defensa independiente de la base (`operaciones_exigir_rol`) rechaza igual al director; se sustituyó por una mutación equivalente sobre el mismo límite de actor/origen (`exigirPersonaPorUi` aceptando chat), que sí fue detectada (2 pruebas fallan).
+- **E2E** (proyecto `operacion`, servidor real y worker con modelo falso): E2E-22 a E2E-28 (27 pruebas) en verde: acceso, flujo mixto de punta a punta, canje puro, KPIs con correcciones, separación de roles y de PII, TCL sin fugas y agente sin dinero ni PII.
+- El gate global completo y el E2E oficial completo quedan pendientes de repetirse en local (ver `HANDOFF-Fase-9` §2b); las cifras están en `V2_CURRENT_STATE` §4.
 
 ## 11. Deuda y riesgos declarados
 
