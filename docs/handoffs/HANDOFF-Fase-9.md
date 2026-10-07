@@ -31,6 +31,8 @@ Baseline de pruebas (detalle y límites de la certificación en `V2_CURRENT_STAT
 
 ### 2b. Verificación pendiente de la F8 (hacerla en local ANTES de etiquetar y de empezar la F9)
 
+Scripts versionados que automatizan esta verificación: [`scripts/f8-verificacion.sh`](../../scripts/f8-verificacion.sh) (todos los pasos de abajo, con logs y `summary.txt`) y [`scripts/f8-mutaciones.py`](../../scripts/f8-mutaciones.py) (las 10 mutaciones críticas, restaurando el árbol con `git checkout`).
+
 El gate final **completo** se interrumpió por falta de saldo cloud (y una caída del Postgres de la VM). Lo que sí se certificó después del último cambio de código (`94ca0a3`): lint, typecheck, domain, agent y web. Falta repetir una vez, en una sesión local, lo siguiente (es mecánico; ninguna prueba conocida falla):
 
 ```bash
