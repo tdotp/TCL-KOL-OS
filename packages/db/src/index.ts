@@ -279,3 +279,68 @@ export type {
   VistaDeDeliverable,
   OpcionesDeDeliverable,
 } from './contenido-views.ts';
+// Fase 8 (W1c)
+export { guardarPii, revelarPii, obtenerPiiResumen } from './pii.ts';
+// Fase 8 (W1c)
+export type { GuardarPiiInput, GuardarPiiResultado, PiiRevelada } from './pii.ts';
+// Fase 8 (W1c)
+export { SQL_FUENTE_SIN_EVIDENCIA_OPERATIVA, esEvidenciaOperativa } from './ops-source-scope.ts';
+// Fase 8 (W1b)
+export {
+  aplicarEventoOperativo,
+  listarEventosOperativos,
+  transaccionOperativa,
+} from './operational-events.ts';
+// Fase 8 (W1b)
+export type {
+  AplicarEventoInput,
+  EventoOperativo,
+  ResultadoDeEvento,
+  SujetoBloqueado,
+  EvidenciaPorAdjuntar,
+} from './operational-events.ts';
+// Fase 8 (W1b)
+export { crearEnvio, transicionarEnvio, listarEnviosDeParticipacion, obtenerEnvio } from './shipments.ts';
+// Fase 8 (W1b)
+export type {
+  CrearEnvioInput,
+  TransicionarEnvioInput,
+  EnvioVista,
+  EnvioRegistrado,
+  EnvioTransicionado,
+} from './shipments.ts';
+// Fase 8 (W1b)
+export {
+  registrarDocumentoDeCobro,
+  validarDocumento,
+  rechazarDocumento,
+  anularDocumento,
+  reportarPago,
+  cancelarObligacionDePago,
+  registrarNotaDeCorreccionDePago,
+  obtenerSeguimientoDePago,
+  listarDocumentosDeCobro,
+} from './billing-payment.ts';
+// Fase 8 (W1b)
+export type {
+  RegistrarDocumentoDeCobroInput,
+  ReportarPagoInput,
+  DocumentoDeCobroVista,
+  ObligacionDePagoVista,
+  SeguimientoDePago,
+} from './billing-payment.ts';
+// Fase 8 (W1b)
+export {
+  subirEvidenciaOperativa,
+  adjuntarEvidenciaOperativa,
+  retractarEvidencia,
+  listarEvidenciaDeEvento,
+  listarEvidenciaDeSujeto,
+} from './ops-evidence.ts';
+// Fase 8 (W1b)
+export type {
+  ArchivoDeEvidencia,
+  EvidenciaSubida,
+  EvidenciaVista,
+  AdjuntarEvidenciaInput,
+} from './ops-evidence.ts';

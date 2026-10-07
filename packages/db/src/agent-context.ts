@@ -73,6 +73,7 @@ import { resumenesDeContenidoDeVersiones } from './content-analysis.ts';
 import { listarEntregablesDeCampana } from './deliverables.ts';
 import { listImportPlans } from './influencer-import.ts';
 import { buscarEvidenciaComoActor, buscarTextoEnFuentes } from './search.ts';
+import { esEvidenciaOperativa } from './ops-source-scope.ts';
 import { listSyncRuns } from './source-sync.ts';
 import {
   type SourceRow,
@@ -119,6 +120,8 @@ export function preparacionDeFuente(row: SourceRow, syncActive = false): Prepara
 
 /** ¿Puede esta fuente llegar a un modelo? Misma política que usa el ensamblador. */
 export function esLegibleParaIA(row: SourceRow): boolean {
+  // V2 · Fase 8: la evidencia operativa nunca llega a un modelo (defensa en profundidad: ya es `sensible`).
+  if (esEvidenciaOperativa(row.type)) return false;
   return fuenteLegibleParaIA({
     origin: row.origin,
     status: row.status,

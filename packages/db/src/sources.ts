@@ -28,6 +28,11 @@ import { recordAudit } from './audit.ts';
 import { type ContextoDeAuditoria, auditoriaDe, exigirPersona } from './audit-context.ts';
 import { SQL_FRAGMENTO_VIGENTE_SIN_ALIAS } from './fragment-scope.ts';
 import { localizadorDeFila } from './locators.ts';
+import {
+  SQL_FUENTE_SIN_EVIDENCIA_OPERATIVA,
+  SQL_FUENTE_SIN_EVIDENCIA_OPERATIVA_SIN_ALIAS,
+  esEvidenciaOperativa,
+} from './ops-source-scope.ts';
 import { sqlFuenteSinGuionNoAprobado } from './script-scope.ts';
 import { guardarOriginal, rutaAbsoluta } from './storage.ts';
 import { Abortar, transaccionConResultado } from './tx-result.ts';
@@ -124,6 +129,11 @@ export interface AlcanceDeFuentes {
    * quien tiene `source:read` pero no `script:read` (el Operativo) y, defensivamente, TCL.
    */
   readonly excluirGuionesNoAprobados: boolean;
+  /**
+   * V2 · Fase 8: la evidencia operativa (`soporte_operativo`) no se lee por las fuentes para NINGÚN rol;
+   * solo los casos de uso de evidencia operativa la exponen. Siempre `true`.
+   */
+  readonly excluirEvidenciaOperativa: true;
 }
 
 export async function resolverAlcanceDeFuentes(
@@ -140,6 +150,7 @@ export async function resolverAlcanceDeFuentes(
       organizationId: actor.organizationId,
       soloVisibleParaTcl: false,
       excluirGuionesNoAprobados: !roleCan(actor.role, 'script:read'),
+      excluirEvidenciaOperativa: true,
     });
   }
 
@@ -168,6 +179,7 @@ export async function resolverAlcanceDeFuentes(
       organizationId: campana.organization_id,
       soloVisibleParaTcl: true,
       excluirGuionesNoAprobados: true,
+      excluirEvidenciaOperativa: true,
     });
   }
 
@@ -209,6 +221,7 @@ export async function listSources(actor: User, campaignId: string): Promise<Resu
       WHERE s.campaign_id = $1 AND s.organization_id = $2
         AND ($3::boolean = false OR s.visibility IN ('tcl', 'compartida'))
         AND ${sqlFuenteSinGuionNoAprobado('$4')}
+        AND ${SQL_FUENTE_SIN_EVIDENCIA_OPERATIVA}
       ORDER BY s.created_at DESC`,
     [
       campaignId,
@@ -246,8 +259,9 @@ async function autorizarLecturaDeFuente(
     organization_id: string;
     visibility: Visibility;
     guion_no_aprobado: boolean;
+    type: string;
   }>(
-    `SELECT campaign_id, organization_id, visibility,
+    `SELECT campaign_id, organization_id, visibility, type::text AS type,
             EXISTS (SELECT 1 FROM script_versions sv WHERE sv.source_document_id = source_documents.id
                      AND sv.status <> 'approved') AS guion_no_aprobado
        FROM source_documents WHERE id = $1`,
@@ -265,6 +279,8 @@ async function autorizarLecturaDeFuente(
     });
   }
   if (!fuente) return err(NO_ENCONTRADO);
+  // V2 · Fase 8: la evidencia operativa no se lee como fuente (para ningún rol).
+  if (esEvidenciaOperativa(fuente.type)) return err(NO_ENCONTRADO);
 
   const alcance = await resolverAlcanceDeFuentes(actor, fuente.campaign_id);
   if (!alcance.ok) return err(NO_ENCONTRADO);
@@ -285,7 +301,10 @@ export async function getSource(actor: User, sourceId: string): Promise<Result<S
   const alcance = await autorizarLecturaDeFuente(actor, sourceId);
   if (!alcance.ok) return err({ code: alcance.error.code, message: alcance.error.message });
 
-  const { rows } = await getPool().query<SourceRow>(`${SELECT_SOURCES} WHERE s.id = $1`, [sourceId]);
+  const { rows } = await getPool().query<SourceRow>(
+    `${SELECT_SOURCES} WHERE s.id = $1 AND ${SQL_FUENTE_SIN_EVIDENCIA_OPERATIVA}`,
+    [sourceId],
+  );
   const fila = rows[0];
   if (!fila) return err(NO_ENCONTRADO);
   return ok(
@@ -478,7 +497,8 @@ export async function setSourceVisibility(
   }
 
   const { rows } = await getPool().query<{ visibility: Visibility; filename: string }>(
-    `SELECT visibility, filename FROM source_documents WHERE id = $1 AND organization_id = $2`,
+    `SELECT visibility, filename FROM source_documents s
+      WHERE id = $1 AND organization_id = $2 AND ${SQL_FUENTE_SIN_EVIDENCIA_OPERATIVA}`,
     [sourceId, actor.organizationId],
   );
   const fuente = rows[0];
@@ -520,6 +540,14 @@ export async function setSourceVisibility(
 }
 
 // ─────────────────────────── Carga ────────────────────────────────────────────
+
+function tipoReservado(): Result<never> {
+  return err({
+    code: 'VALIDATION_FAILED',
+    message: 'El tipo de fuente no es válido.',
+    details: { field: 'type', reason: 'reserved_source_type' },
+  });
+}
 
 export interface UploadInput {
   readonly campaignId: string;
@@ -567,6 +595,9 @@ export async function uploadSource(
   const permitido = assertCapability(actor, 'source:upload');
   if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
 
+  // V2 · Fase 8: el tipo `soporte_operativo` lo crea solo el caso de uso de evidencia operativa.
+  if (esEvidenciaOperativa(String(input.type))) return tipoReservado();
+
   if (!(await campanaPropia(actor, input.campaignId))) {
     return err({ code: 'RESOURCE_NOT_FOUND', message: 'El recurso no existe o no está disponible.' });
   }
@@ -593,11 +624,20 @@ export async function uploadSource(
   const almacenado = await guardarOriginal(input.contenido, actor.organizationId, input.filename);
 
   // Duplicado en la misma campaña (E4-3): se detecta por hash, no por nombre.
-  const { rows: existentes } = await getPool().query<{ id: string; filename: string }>(
-    `SELECT id, filename FROM source_documents WHERE campaign_id = $1 AND hash = $2`,
+  const { rows: existentes } = await getPool().query<{ id: string; filename: string; type: string }>(
+    `SELECT id, filename, type::text AS type FROM source_documents WHERE campaign_id = $1 AND hash = $2`,
     [input.campaignId, almacenado.hash],
   );
   const duplicado = existentes[0];
+  // V2 · Fase 8: el mismo contenido ya es evidencia operativa de la campaña. Ni se vincula (adjuntos del
+  // chat) ni se revelan su id o su nombre: es un conflicto genérico.
+  if (duplicado !== undefined && esEvidenciaOperativa(duplicado.type)) {
+    return err({
+      code: 'SOURCE_ALREADY_EXISTS',
+      message: 'Este archivo ya está cargado en la campaña (mismo contenido).',
+      details: { reason: 'same_content' },
+    });
+  }
   if (duplicado !== undefined && input.vincularSiDuplicado === true) {
     return ok({ id: duplicado.id, mimeType, encolado: false, deduplicated: true });
   }
@@ -723,6 +763,9 @@ export async function registerLinkedSource(
   const permitido = assertCapability(actor, 'source:upload');
   if (!permitido.ok) return err({ code: permitido.error.code, message: permitido.error.message });
 
+  // V2 · Fase 8: el tipo `soporte_operativo` lo crea solo el caso de uso de evidencia operativa.
+  if (esEvidenciaOperativa(String(input.type))) return tipoReservado();
+
   if (!(await campanaPropia(actor, input.campaignId))) return err(NO_ENCONTRADO);
 
   const enlace = analizarEnlaceDeFuente(input.url);
@@ -802,7 +845,8 @@ export async function retrySource(actor: User, sourceId: string): Promise<Result
   }>(
     `SELECT id, filename, origin::text AS origin, status::text AS status,
             EXISTS (SELECT 1 FROM script_versions sv WHERE sv.source_document_id = source_documents.id) AS ligada_a_guion
-       FROM source_documents WHERE id = $1 AND organization_id = $2`,
+       FROM source_documents WHERE id = $1 AND organization_id = $2
+        AND ${SQL_FUENTE_SIN_EVIDENCIA_OPERATIVA_SIN_ALIAS}`,
     [sourceId, actor.organizationId],
   );
   const fuente = rows[0];

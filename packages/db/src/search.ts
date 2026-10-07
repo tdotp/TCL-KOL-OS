@@ -25,6 +25,7 @@ import { err, ok } from '@tcl-kol-os/domain';
 import { query } from './client.ts';
 import { SQL_FRAGMENTO_VIGENTE } from './fragment-scope.ts';
 import { localizadorDeFila } from './locators.ts';
+import { SQL_FUENTE_SIN_EVIDENCIA_OPERATIVA } from './ops-source-scope.ts';
 import { SQL_FUENTE_SIN_GUION, sqlFuenteSinGuionNoAprobado } from './script-scope.ts';
 import { resolverAlcanceDeFuentes } from './sources.ts';
 
@@ -126,6 +127,7 @@ export async function buscarEvidencia(opciones: BusquedaOpciones): Promise<Evide
         AND ($6::boolean = false OR s.visibility IN ('tcl', 'compartida'))
         AND ${SQL_FRAGMENTO_VIGENTE}
         AND ${SQL_FUENTE_SIN_GUION}
+        AND ${SQL_FUENTE_SIN_EVIDENCIA_OPERATIVA}
         AND f.embedding IS NOT NULL
         AND (f.embedding <=> $3::vector) <= $4
       ORDER BY f.embedding <=> $3::vector
@@ -191,7 +193,8 @@ export async function estadoDelIndice(
             count(*) FILTER (WHERE s.confidentiality_level = 'sensible') AS excluidos
        FROM source_fragments f
        JOIN source_documents s ON s.id = f.source_id
-      WHERE s.organization_id = $1 AND s.campaign_id = $2 AND ${SQL_FRAGMENTO_VIGENTE}`,
+      WHERE s.organization_id = $1 AND s.campaign_id = $2 AND ${SQL_FRAGMENTO_VIGENTE}
+        AND ${SQL_FUENTE_SIN_EVIDENCIA_OPERATIVA}`,
     [organizationId, campaignId],
   );
 
@@ -254,6 +257,7 @@ export async function buscarTextoEnFuentes(
         AND ($5::boolean = false OR s.visibility IN ('tcl', 'compartida'))
         AND ${SQL_FRAGMENTO_VIGENTE}
         AND ${sqlFuenteSinGuionNoAprobado('$6')}
+        AND ${SQL_FUENTE_SIN_EVIDENCIA_OPERATIVA}
         AND f.text ILIKE $3 ESCAPE '\\'
       ORDER BY s.created_at, s.id, f.ordinal
       LIMIT $4`,

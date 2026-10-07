@@ -53,3 +53,13 @@ if (!PATRON_BASE_DE_PRUEBAS.test(testUrl)) {
 // A partir de aquí, y solo para este proceso de prueba, `DATABASE_URL` es
 // `TEST_DATABASE_URL`. `client.ts` lo lee tal cual, sin saber la diferencia.
 process.env['DATABASE_URL'] = testUrl;
+
+// V2 · Fase 8 (DEC-013): claves de cifrado de PII SOLO DE PRUEBA, deterministas, y solo cuando la base es
+// de pruebas (`_test`, validado arriba). Nunca hay valores por defecto fuera de aquí: sin claves, la
+// aplicación falla con PII_NOT_CONFIGURED. Si el entorno ya las define, se respetan.
+if (!process.env['PII_ENCRYPTION_KEYS']?.trim()) {
+  process.env['PII_ENCRYPTION_KEYS'] = `prueba-1:${Buffer.alloc(32, 0x11).toString('base64')}`;
+}
+if (!process.env['PII_INDEX_KEY']?.trim()) {
+  process.env['PII_INDEX_KEY'] = Buffer.alloc(32, 0x22).toString('base64');
+}

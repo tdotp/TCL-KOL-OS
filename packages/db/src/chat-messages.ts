@@ -43,6 +43,7 @@ import {
 } from './chat-conversations.ts';
 import { chatCerrarRunsCaducados, chatInsertarRun, chatUltimoRunDeMensaje } from './agent-runs.ts';
 import { getPool } from './client.ts';
+import { esEvidenciaOperativa } from './ops-source-scope.ts';
 import { Abortar, transaccionConResultado } from './tx-result.ts';
 
 const CONFLICTO_MENSAJE = {
@@ -192,13 +193,14 @@ export async function publicarMensaje(
     //    son de otra campaña o de otra organización: no se revela cuál).
     if (adjuntos.value.length > 0) {
       const { rows: validas } = await client
-        .query<{ id: string }>(
-          `SELECT id FROM source_documents
+        .query<{ id: string; type: string }>(
+          `SELECT id, type::text AS type FROM source_documents
             WHERE id = ANY($1::uuid[]) AND organization_id = $2 AND campaign_id = $3`,
           [adjuntos.value, conversacion.organizationId, conversacion.campaignId],
         )
         .catch((error: unknown) => {
-          if ((error as { code?: string }).code === '22P02') return { rows: [] as { id: string }[] };
+          if ((error as { code?: string }).code === '22P02')
+            return { rows: [] as { id: string; type: string }[] };
           throw error;
         });
       if (validas.length !== adjuntos.value.length) {
@@ -206,6 +208,14 @@ export async function publicarMensaje(
           code: 'RESOURCE_NOT_FOUND',
           message: 'Una de las fuentes adjuntas no existe o no está disponible en esta campaña.',
           details: { reason: CHAT_CONFLICT_REASONS.attachmentScope },
+        });
+      }
+      // V2 · Fase 8: la evidencia operativa (soporte_operativo) no se adjunta al chat ni llega al agente.
+      if (validas.some((f) => esEvidenciaOperativa(f.type))) {
+        throw new Abortar({
+          code: 'VALIDATION_FAILED',
+          message: 'Una de las fuentes adjuntas no se puede adjuntar al chat.',
+          details: { reason: 'attachment_operational_evidence' },
         });
       }
     }

@@ -539,6 +539,18 @@ export async function asociarProductoAInfluencer(
   }, CONFLICTO_ASIGNACION);
 }
 
+/**
+ * ¿La base rechazó la desasignación por uso (migración 029)? Distingue acuerdo vigente de envío abierto por el
+ * mensaje de la guarda; cualquier otro error no se reinterpreta.
+ */
+function productoEnUso(error: unknown): 'agreement' | 'shipment' | undefined {
+  const mensaje = (error as { message?: unknown } | null)?.message;
+  if (typeof mensaje !== 'string') return undefined;
+  if (mensaje.startsWith('El producto está comprometido en el acuerdo vigente')) return 'agreement';
+  if (mensaje.startsWith('El producto está en un envío abierto')) return 'shipment';
+  return undefined;
+}
+
 /** Quita el vínculo con el producto. No borra el producto ni la participación. */
 export async function desasociarProducto(
   actor: User,
@@ -559,10 +571,27 @@ export async function desasociarProducto(
       );
       if (rows[0] === undefined) throw new Abortar(NO_ENCONTRADO);
 
-      await client.query(
-        `DELETE FROM campaign_influencer_products WHERE campaign_influencer_id = $1 AND campaign_product_id = $2`,
-        [participacion.id, input.campaignProductId],
-      );
+      try {
+        await client.query(
+          `DELETE FROM campaign_influencer_products WHERE campaign_influencer_id = $1 AND campaign_product_id = $2`,
+          [participacion.id, input.campaignProductId],
+        );
+      } catch (error) {
+        // V2 · Fase 8 (migración 029): un producto comprometido en el acuerdo vigente o incluido en un
+        // envío abierto no se desasigna. La base lo impone; aquí se devuelve un error tipado.
+        const motivo = productoEnUso(error);
+        if (motivo !== undefined) {
+          throw new Abortar({
+            code: 'RESOURCE_CONFLICT',
+            message:
+              motivo === 'agreement'
+                ? 'El producto está comprometido en el acuerdo vigente de esta participación: no se desasigna.'
+                : 'El producto está en un envío abierto de esta participación: no se desasigna.',
+            details: { reason: 'product_in_use', blockedBy: motivo },
+          });
+        }
+        throw error;
+      }
       await recordAudit(
         client,
         auditoriaDe(actor, contexto, {

@@ -47,6 +47,24 @@ export async function eliminarCampanaDePrueba(idOids: string | readonly string[]
     // `source_documents` se borra, ya no hay ninguna `evidence` que lo
     // referencie.
     for (const id of ids) {
+      // V2 · Fase 8: la operación cuelga (RESTRICT) de la participación y de la campaña, y sus eventos y
+      // sujetos se referencian entre sí con FK DIFERIDAS (se resuelven al cerrar la transacción). Primero:
+      // evidencia → eventos → ítems/envíos → documentos de cobro → obligaciones → compromisos/versiones/
+      // acuerdos → fuentes `soporte_operativo` (referenciadas por la evidencia y los documentos de cobro).
+      // Solo posible con el bypass de bases `_test`; ninguna ruta real borra estas tablas.
+      await client.query(`DELETE FROM operational_evidence WHERE campaign_id = $1`, [id]);
+      await client.query(`DELETE FROM operational_events WHERE campaign_id = $1`, [id]);
+      await client.query(`DELETE FROM shipment_items WHERE campaign_id = $1`, [id]);
+      await client.query(`DELETE FROM shipments WHERE campaign_id = $1`, [id]);
+      await client.query(`DELETE FROM billing_documents WHERE campaign_id = $1`, [id]);
+      await client.query(`DELETE FROM payment_obligations WHERE campaign_id = $1`, [id]);
+      await client.query(`DELETE FROM agreement_product_commitments WHERE campaign_id = $1`, [id]);
+      await client.query(`DELETE FROM agreement_versions WHERE campaign_id = $1`, [id]);
+      await client.query(`DELETE FROM agreements WHERE campaign_id = $1`, [id]);
+      await client.query(
+        `DELETE FROM source_documents WHERE campaign_id = $1 AND type = 'soporte_operativo'`,
+        [id],
+      );
       // V2 · Fase 7: comentarios de revisión → versiones de guion → entregables. Primero: los
       // comentarios apuntan a los mensajes del chat, y las versiones a las fuentes y a las
       // acciones propuestas (todo RESTRICT); el entregable cuelga de la participación.
@@ -112,6 +130,9 @@ export async function eliminarInfluencersDePrueba(idOids: string | readonly stri
   await transaction(async (client) => {
     await client.query(`SET LOCAL tclkolos.permitir_borrado_historico = 'on'`);
     for (const id of ids) {
+      // V2 · Fase 8: los datos personales cifrados cuelgan (RESTRICT) del influencer; los envíos que los
+      // referencian ya se borraron con su campaña (`eliminarCampanaDePrueba`).
+      await client.query(`DELETE FROM influencer_pii_records WHERE influencer_id = $1`, [id]);
       // V2 · Fase 5: bindings y decisiones que apuntan a la persona.
       await client.query(`DELETE FROM influencer_import_effects WHERE entity_id = $1`, [id]);
       await client.query(`DELETE FROM influencer_source_bindings WHERE influencer_id = $1`, [id]);
