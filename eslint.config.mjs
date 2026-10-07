@@ -17,6 +17,9 @@ export default tseslint.config(
       // Entorno virtual de Python del worker: dependencias de terceros, no código del
       // proyecto (urllib3, instalada con `requests`, trae un archivo .js propio).
       '**/.venv/**',
+      // Copias temporales del árbol que crea el harness de mutación del agente (`qa/testing/mutacion.ts`): si una
+      // corrida las deja (proceso cortado o sin limpiar), no son código del proyecto ni deben romper el lint.
+      '**/qa-tmp-mutacion/**',
     ],
   },
 
