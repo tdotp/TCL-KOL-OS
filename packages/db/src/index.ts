@@ -366,3 +366,68 @@ export type {
   VersionRegistrada,
   AcuerdoCancelado,
 } from './agreements.ts';
+// Fase 8 (W2a)
+export { registrarKpiObjetivo, retirarKpiObjetivo } from './kpi-targets.ts';
+export type {
+  SugerenciaDeSheet,
+  RegistrarKpiObjetivoInput,
+  ObjetivoRegistrado,
+  ObjetivoRetirado,
+} from './kpi-targets.ts';
+export { registrarMedicionKpi, corregirMedicionKpi } from './kpi-measurements.ts';
+export type {
+  RegistrarMedicionKpiInput,
+  CorregirMedicionKpiInput,
+  MedicionRegistrada,
+} from './kpi-measurements.ts';
+export { obtenerKpiDeParticipacion, obtenerHistorialDeKpi, obtenerResumenKpiDeCampana } from './kpi-views.ts';
+export type {
+  KpiPublico,
+  KpiInterno,
+  KpiDeParticipacion,
+  HistorialDeKpi,
+  ObjetivoHistorialPublico,
+  ObjetivoHistorialInterno,
+  MedicionHistorialPublica,
+  MedicionHistorialInterna,
+} from './kpi-views.ts';
+export { obtenerKpiPactadoDelSheet } from './kpi-sheet-pactado.ts';
+export type { KpiPactadoDelSheet } from './kpi-sheet-pactado.ts';
+export type { ObjetivoDeKpiVista, MedicionDeKpiVista, EstadoDeObjetivo } from './kpi-shared.ts';
+// Fase 8 (W2b)
+export {
+  obtenerResumenOperativoDeCampana,
+  obtenerEstadoOperativoDeParticipacion,
+} from './operativo-views.ts';
+export type {
+  SeccionKpi,
+  ProveedoresOperativos,
+  OpcionesDeResumenOperativo,
+  FiltrosDeResumenOperativo,
+  ParticipacionOperativa,
+  ConteosOperativos,
+  ResumenOperativoDeCampana,
+  DetalleDeAcuerdo,
+  DetalleDeEnvio,
+  DetalleDeLogistica,
+  DetalleDeFacturacion,
+  DetalleDePago,
+  DetalleDeContenido,
+  EstadoOperativoDeParticipacion,
+} from './operativo-views.ts';
+export {
+  obtenerResumenOperativoParaAgente,
+  obtenerEstadoOperativoParaAgente,
+} from './operativo-agent-view.ts';
+export type {
+  TextoNoConfiable,
+  ProductoParaAgente,
+  AcuerdoParaAgente,
+  LogisticaParaAgente,
+  ContenidoParaAgente,
+  ParticipacionParaAgente,
+  ConteosParaAgente,
+  ResumenOperativoParaAgente,
+  EstadoOperativoParaAgente,
+  FiltrosParaAgente,
+} from './operativo-agent-view.ts';

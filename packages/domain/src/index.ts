@@ -37,3 +37,9 @@ export * from './shipments';
 export * from './billing-payment';
 export * from './operational-events';
 export * from './pii';
+export * from './kpi-metrics';
+export * from './kpi-compare';
+export * from './kpi';
+// Fase 8 (W2b)
+export * from './operational-summary';
+export * from './tcl-projection-operacion';

@@ -56,6 +56,10 @@ export async function eliminarCampanaDePrueba(idOids: string | readonly string[]
       // evidencia → eventos → ítems/envíos → documentos de cobro → obligaciones → compromisos/versiones/
       // acuerdos → fuentes `soporte_operativo` (referenciadas por la evidencia y los documentos de cobro).
       // Solo posible con el bypass de bases `_test`; ninguna ruta real borra estas tablas.
+      // V2 · Fase 8 (KPIs): mediciones y objetivos cuelgan (RESTRICT) de la participación y del entregable. Cada
+      // tabla se vacía en UNA sentencia (las FK `supersedes_id` son NO ACTION: se evalúan al final de la sentencia).
+      await client.query(`DELETE FROM kpi_measurements WHERE campaign_id = $1`, [id]);
+      await client.query(`DELETE FROM kpi_targets WHERE campaign_id = $1`, [id]);
       await client.query(`DELETE FROM operational_evidence WHERE campaign_id = $1`, [id]);
       await client.query(`DELETE FROM operational_events WHERE campaign_id = $1`, [id]);
       await client.query(`DELETE FROM shipment_items WHERE campaign_id = $1`, [id]);
