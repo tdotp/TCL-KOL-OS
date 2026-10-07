@@ -6,7 +6,7 @@
 
 1. [Workflow funcional V2](product/TCL_KOL_OS_V2_WORKFLOW_FUNCIONAL.md) — qué hace cada usuario (Cuenta, Operativo, TCL), qué ve y qué no. Fuente funcional aprobada; no se reinterpreta.
 2. [Estado técnico actual](project/V2_CURRENT_STATE.md) — rama, tag, migraciones, decisiones, roadmap, baseline de pruebas, entorno, deudas y reglas.
-3. [Handoff de la Fase 9](handoffs/HANDOFF-Fase-9.md) — punto de partida del «Dashboard TCL» (solo lectura): invariantes congeladas, lo que dejó la F8 y los contratos listos. (El [handoff de la Fase 8](handoffs/HANDOFF-Fase-8.md) queda como histórico.)
+3. [Handoff de la Fase 9](handoffs/HANDOFF-Fase-9.md) — **punto de partida de la F9** («Dashboard TCL», solo lectura): baseline, invariantes congeladas, lo que dejó la F8, y el marco oficial de la F9 (proyección positiva para TCL, deuda de seguridad heredada, estrategia austera de agentes, pruebas y QA). (El [handoff de la Fase 8](handoffs/HANDOFF-Fase-8.md) queda como histórico.)
 4. [Registro de decisiones](decisions/decision-log.md) — DEC-042 a DEC-049 gobiernan V2 (cliente de solo lectura, bilingüe, Influencer/CampaignInfluencer, fuentes y Sheets, chat y agente, contenido, operación y KPIs).
 5. [Política de ejecución con agentes](project/AGENT_EXECUTION_POLICY.md) — subagentes, modelo/esfuerzo, QA adversarial, Git y la regla anti-duplicación.
 

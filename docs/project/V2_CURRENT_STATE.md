@@ -6,8 +6,8 @@
 | | |
 |---|---|
 | **Fecha del checkpoint** | 7 de octubre de 2026 |
-| **Rama de desarrollo** | `v2` (nunca `main`) |
-| **Tag** | `v2-f7-complete` (intacto) y **`v2-f8-complete`** (el commit final de `v2` que contiene este documento; certificado con el gate completo, ver §4) |
+| **Rama de desarrollo** | `v2` (nunca `main`); el siguiente trabajo (F9) parte de `git switch v2 && git pull --ff-only` |
+| **Tag** | `v2-f7-complete` → `a4a8dd5` (intacto) y **`v2-f8-complete` → `91e2aad9c850f313dc25171cdf43ef3a0cdfba22`** (cierre certificado de la F8, ver §4). Los commits de `v2` posteriores a un tag son solo documentación de handoff: **los tags no se mueven** |
 | **Último commit de CÓDIGO** | `7afdab7` (cierre de la Fase 8: los fragmentos de snapshots históricos del Sheet no se leen). Los posteriores son solo herramientas (script del gate, ESLint) y documentación |
 | **Baseline de código previo a V2** | `3dd9da2` (DEC-042) |
 | **`origin/main`** | `2452283` («Rediseño v3»): lo que estaba publicado antes de V2. **No se toca** |
@@ -28,8 +28,8 @@
 | 6 · 6.1 | Chat y agente de Cuenta (runtime híbrido, 25 tools, HITL extendido) y endurecimiento en la base | ✅ | DEC-047 · [`CHAT_AGENT_V2`](../product/CHAT_AGENT_V2.md) |
 | 7 | Contenido: entregables, guiones versionados, revisión contra el Brief, aprobación humana, 11 tools | ✅ | DEC-048 · [`CONTENT_V2`](../product/CONTENT_V2.md) |
 | 8 | Operación + KPIs: acuerdos, logística, facturación/pagos como seguimiento, PII separada, KPIs, workspace de Operativo, 6 tools | ✅ | DEC-049 · [`OPERATIONS_KPI_V2`](../product/OPERATIONS_KPI_V2.md) |
-| **9** | **Dashboard TCL (solo lectura)** | ➡️ siguiente | — |
-| 10 | Limpieza / deprecación (legacy, rutas, roles, docs históricas) | pendiente | — |
+| **9** | **Dashboard TCL (solo lectura)** | ➡️ siguiente | marco oficial en [`HANDOFF-Fase-9`](../handoffs/HANDOFF-Fase-9.md) §6 (proyección positiva para TCL, deuda de seguridad heredada, plan austero) |
+| 10 | Limpieza, deprecación y endurecimiento final de V2 (legacy, rutas, roles, docs históricas) | pendiente | no se diseña todavía |
 
 ## 2. Arquitectura principal (resumen; el detalle está en las DEC y notas técnicas)
 

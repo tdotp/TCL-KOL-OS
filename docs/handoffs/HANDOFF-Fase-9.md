@@ -2,7 +2,7 @@
 
 Documento autosuficiente. **Reemplaza en vigencia** al [handoff de la Fase 8](HANDOFF-Fase-8.md) (histórico) y a `HANDOFF.md` (24-sep, anterior a V2). Léelo completo antes de tocar nada; después, el workflow funcional.
 
-> **Estado: la Fase 9 NO se ha iniciado ni diseñado.** Este documento fija el punto de partida, las invariantes y los contratos que deja la F8. La F9 se retoma **desde una sesión local** de Claude Code sobre el repositorio; nada de lo que sigue depende de un entorno cloud.
+> **Estado: la Fase 9 NO se ha iniciado ni diseñado.** Este documento fija el punto de partida, las invariantes, los contratos que deja la F8 y el **marco oficial** de la F9 (§6: objetivo, frontera TCL, deuda de seguridad heredada, estrategia de agentes, pruebas y QA). La F9 se retoma **desde una sesión local** de Claude Code sobre el repositorio; nada de lo que sigue depende de un entorno cloud ni de conversaciones previas.
 
 ## 1. Cómo arrancar (local)
 
@@ -19,13 +19,15 @@ Orden de lectura: [`docs/README.md`](../README.md) → [workflow funcional V2](.
 | | |
 |---|---|
 | Rama | `v2` (nunca `main`) |
-| HEAD de cierre de F8 | el HEAD de `v2` que contiene este documento, etiquetado **`v2-f8-complete`** (gate completo certificado el 7-oct-2026; ver §2b) |
+| Baseline de cierre de F8 | tag **`v2-f8-complete`** → commit `91e2aad9c850f313dc25171cdf43ef3a0cdfba22` (gate completo certificado el 7-oct-2026; ver §2b). Los commits de `v2` posteriores a ese tag son solo documentación de handoff: el tag **no se mueve** |
 | Último commit de CÓDIGO de F8 | `7afdab7` (los posteriores son solo herramientas y documentación) |
 | HEAD inicial de F8 | `a4a8dd5` (tag `v2-f7-complete`, intacto) |
 | `origin/main` | `2452283` («Rediseño v3»), publicado antes de V2, **intacto** |
 | Migraciones | `001`…`033` (siguiente: **034**) |
 | Decisiones | hasta **DEC-049** (siguiente: **DEC-050**) |
 | Fases cerradas | **F0, F1, F1.1, F2, F3, F4, F5, F6, F6.1, F7, F8**. Siguiente: **F9**; luego F10 (limpieza) |
+
+Roadmap: **F0–F8 cerradas** · **F9 siguiente (no iniciada)** · F10 después (limpieza, deprecación y endurecimiento final de V2; no se diseña todavía).
 
 Baseline de pruebas certificado (detalle en `V2_CURRENT_STATE` §4): domain 823 · agent 591 · web 121 · db 1885 · worker 799 · E2E oficial 78/78; lint, typecheck, build, ruff y mypy verdes; migraciones 001→033 + seed y upgrade 025→033 (md5 idéntico).
 
@@ -77,16 +79,82 @@ Las 13 del [handoff F8 §4](HANDOFF-Fase-8.md) siguen vigentes (TCL solo lee; la
 | `032_kpis` | kpi_targets, kpi_measurements |
 | `033_endurecimiento_operacion` | congela historia de envíos, rechaza NaN, revalida producto en `shipped`, PII vigente, `created_at` de evidencia |
 
-## 6. Contratos listos para la F9 (solo intención; NO se diseñó ni implementó nada)
+## 6. Fase 9 — marco oficial (NO diseñada ni implementada)
 
-**F9 = dashboard / proyección read-only para TCL** (workflow §3). Punto de partida disponible:
+### 6.1 Objetivo
 
-- `packages/domain/src/tcl-projection-operacion.ts`: tipo `ProyeccionTclDeOperacion`, `CLAVES_PROHIBIDAS_TCL` y `proyectarOperacionParaTcl(entrada)` (construye la salida solo desde una entrada pública; hay prueba de que ninguna clave prohibida llega a la salida). Sin ruta ni acceso hoy.
-- `obtenerKpiDeParticipacion().public` es el único bloque de KPI apto para TCL; `internal` (actor, motivo, procedencia) nunca sale. Capacidad reservada y sin asignar: `kpi:read_client`.
-- Estado de contenido: leer **solo** la fila `approved` de cada entregable (índice único parcial, F7) y su estado; nunca borradores, versiones rechazadas, hallazgos, comentarios ni internals de IA. Exponer la **fuente** de un guion aprobado a TCL sigue siendo una decisión humana explícita.
-- Estado del producto para TCL («producto recibido sí/no/parcial»): derivable de envíos `delivered` vs compromisos; **nunca** transportadora, tracking, costo ni dirección.
-- Para el cliente, el filtrado se hace **en el servidor, por capacidad nueva y proyección propia** (espejo de `source:read_shared`); las secciones sin permiso no se consultan. Los read models operativos actuales **no** se reutilizan con menos campos: se construye un tipo explícito nuevo.
-- Hoy el cliente TCL tiene solo `campaign:read`, `source:read_shared`, `brief:read`, `brief:export` y recibe 404 en contenido y operación.
+**F9 = dashboard / proyección de TCL, solo lectura.** No es otro dominio operativo: permite que TCL **observe únicamente la información autorizada de sus campañas** (workflow §3): campañas y su estado, influencers, productos, entregables, **guiones aprobados**, estado operativo permitido, KPI permitidos, publicaciones cuando exista el dato y exportación permitida. TCL **no** aprueba, rechaza ni pide cambios dentro del sistema, no modifica datos, no conversa con el agente como actor de Cuenta y no ve razonamiento de IA. Fuera de alcance: §6.13.
+
+### 6.2 Contratos que la F9 reutiliza (no se recrean)
+
+| Contrato | Dónde vive | Uso en la F9 |
+|---|---|---|
+| Organización, usuarios y roles | `users.organization_id` + `role`, `organizations.type`; `roleCan`, `canAccessResource` (`packages/domain/src/permissions.ts`). **No existe una entidad Membership separada** | El cliente es de otra organización por definición |
+| Visibilidad interna/TCL | `campaigns.visibility` (`interna \| tcl \| compartida`), `isTclVisible`. **`campaigns` no lleva una organización cliente propia**: hoy el aislamiento del cliente es visibilidad + rol (el cliente es siempre TCL) | Decidir y probar en el preflight cómo se acota el alcance del cliente (campañas que ve, multi-cliente futuro) |
+| Visibilidad de fuentes | `source:read_shared`, `resolverAlcanceDeFuentes` (único punto de decisión), `setSourceVisibility` | Una campaña visible **no** expone sus fuentes; cada fuente se comparte a propósito |
+| Brief lógico, versionado, bilingüe | DEC-043; `obtenerBriefRector` (aprobado vigente), `obtenerRepresentacion` (ES/EN), `brief:export` | Solo la versión aprobada vigente, en su representación autorizada |
+| Influencer / `CampaignInfluencer` / productos de campaña | DEC-044; `campaign_influencers`, `campaign_products` | Contexto central de todo lo que ve TCL |
+| Entregables y guion aprobado vigente | F7; `obtenerVersionVigente`, índice único parcial de la fila `approved` | Solo la fila `approved`; **no** se recrea la lógica de aprobación |
+| Revisión y hallazgos | `content_analysis_runs`, `content_findings` (internos, `script:read`) | **Nunca** cruzan a TCL |
+| Acuerdo, compromisos de producto, envío, resumen operativo | F8; `obtenerResumenOperativoDeCampana`, `obtenerEstadoOperativoDeParticipacion`; base: `packages/domain/src/tcl-projection-operacion.ts` (`ProyeccionTclDeOperacion`, `CLAVES_PROHIBIDAS_TCL`, `proyectarOperacionParaTcl`; sin ruta ni acceso hoy) | Los read models operativos actuales **no** se reutilizan con menos campos: se construye un tipo explícito nuevo |
+| KPI objetivo y medición | F8; `obtenerKpiDeParticipacion().public` (el único bloque apto para TCL; `internal` nunca sale), `obtenerResumenKpiDeCampana`; capacidad reservada y sin asignar `kpi:read_client` | Mostrar objetivo, resultado y cumplimiento solo con métrica, unidad y ámbito compatibles |
+| Frontera de PII | `influencer_pii_records` (`pii:read`/`pii:manage`) | **Cero** acceso funcional de la F9 |
+| Auditoría | `audit_events` (origen, correlación) | La F9 no escribe estado; si audita lecturas del cliente es una decisión de diseño |
+
+Hoy el cliente TCL tiene solo `campaign:read`, `source:read_shared`, `brief:read` y `brief:export`, y recibe 404 en contenido y operación.
+
+### 6.3 Frontera TCL: proyección POSITIVA (allowlist) en el servidor
+
+No: «entidad interna → ocultar campos en el frontend». **Sí:** entidad interna → **proyección del servidor para TCL** → únicamente los campos permitidos. El cliente nunca recibe la entidad interna ni una versión «filtrada en la interfaz». TCL **jamás** debe recibir: fee; términos monetarios del acuerdo; facturas; detalle o estado interno de pagos; costos internos; costos de envío; PII (dirección, teléfono, cédula); notas operativas internas; evidencia interna; borradores; versiones rechazadas o con cambios solicitados; hallazgos internos; comentarios de revisión de SmartPR; `ai_runs`; prompts; razonamiento; procedencia técnica no destinada al cliente.
+
+TCL recibe **estado, no datos internos**. Ejemplo: internamente el acuerdo es «Mixto · fee $X · factura recibida · pago pendiente»; TCL, como máximo, recibe algo equivalente a «Estado operativo: en curso» (o los estados que producto defina). Nunca el detalle financiero.
+
+### 6.4 Qué consume la F9 por dominio
+
+- **Contenido:** solo guion **aprobado y compartible** (la fila `approved` vigente de cada entregable y su estado). Nunca borradores, versiones reemplazadas no vigentes (salvo decisión explícita de producto), hallazgos, comentarios ni análisis internos. Exponer la **fuente** de un guion aprobado sigue siendo una decisión humana explícita.
+- **Brief:** si se expone, la representación autorizada de la versión aprobada vigente, respetando el modelo bilingüe (una versión, dos representaciones; **nunca dos flujos ES/EN**) y sin evidencia interna innecesaria.
+- **Operaciones:** consumir los read models/proyecciones de la F8; no leer tablas financieras directamente si existe una proyección segura reutilizable ni reconstruir la lógica operativa. Estado del producto («recibido sí/no/parcial») derivable de envíos `delivered` frente a compromisos; **nunca** transportadora, tracking, costo ni dirección.
+- **KPI:** objetivo, resultado y cumplimiento cuando las unidades sean compatibles; sin procedencia ni evidencia internas salvo que se declaren explícitamente visibles para el cliente.
+- **Publicaciones:** **no existe entidad de publicación** (ni en F7 ni en F8). La F9 no inventa un dominio nuevo: lo decide el preflight (omitir o mostrar «no disponible»).
+- **PII:** **0 acceso funcional**. La F9 no necesita `pii:read` y no incorpora PII en consultas, loaders, DTO, exportaciones, logs ni analítica.
+
+### 6.5 Permisos y exportación
+
+- El cliente sigue siendo de solo lectura. **No se reutilizan capacidades internas amplias:** se prefieren capacidades y proyecciones específicas de cliente, diseñadas en la F9 tras auditar las existentes. Conceptualmente (nombres no obligatorios): `campaign:read_client`, `content:read_approved_client`, `operations:read_summary_client`, `kpi:read_client` (ya reservada), `export:client`.
+- **Exportación:** si se implementa, exporta **la misma proyección segura que la interfaz**. Prohibido «interfaz filtrada + exportación directa desde tablas internas» (sería una fuga).
+- **No hay agente para TCL** ni se le dan tools internas: dashboard de solo lectura primero.
+
+### 6.6 Deuda de seguridad que la F9 hereda — REQUISITO CRÍTICO
+
+Los snapshots históricos del Sheet de influencers anteriores a la corrección de la F8 pueden conservar `fee`, `canje` y `condiciones` (y columnas desconocidas) en sus fragmentos; los caminos de lectura actuales ya los bloquean (`packages/db/src/fragment-scope.ts`: ilegibles hasta re-sincronizar). **La F9 debe probar explícitamente** que la cadena *fuente histórica → Brief o contenido derivado → proyección TCL* **no puede volver a exponer información financiera o comercial**. La proyección TCL aplica **su propia allowlist en el servidor**: no se confía solo en la visibilidad histórica de la fuente. Los Briefs extraídos antes del P0 podrían contener texto derivado de esos fragmentos (ver §7).
+
+### 6.7 Arquitectura esperada
+
+Dominio interno → **proyecciones del servidor para TCL** → read models → dashboard y exportaciones. La F9 debería introducir **pocas entidades nuevas** (idealmente ninguna: proyecciones, capacidades y vistas).
+
+### 6.8 Estrategia de costo y de agentes (austera)
+
+Seguir [`AGENT_EXECUTION_POLICY`](../project/AGENT_EXECUTION_POLICY.md) con una versión **ligera**:
+
+- **Diseño inicial: máximo 2 subagentes** (Sonnet 5.5, esfuerzo alto), con **informes cortos (≤ 1.000–1.200 palabras)**: **DESIGN-A** = seguridad de la proyección + permisos + read models; **DESIGN-B** = dashboard + exportación + integración.
+- **Implementación en 2 waves:** **WAVE 1** = proyecciones de backend + capacidades + read models + exportaciones; **WAVE 2** = dashboard/UI + E2E + integración.
+- **Un solo QA adversarial independiente** al final. No lanzar un agente por entidad. El agente principal conserva la arquitectura, la integración y Git; los subagentes no hacen push.
+
+### 6.9 Foco de pruebas
+
+Aislamiento de tenant y de cliente; fuga financiera; fuga de PII; fuga de borradores; fuga de hallazgos; fuga de comentarios internos; solo aprobado; **paridad interfaz–exportación**; fuga desde snapshots históricos; acceso entre campañas; representación bilingüe aprobada.
+
+### 6.10 QA adversarial prioritario (mínimo)
+
+1. TCL intenta leer fee. 2. Leer pago. 3. Leer factura. 4. Leer PII. 5. Obtener un guion en borrador. 6. Obtener un guion rechazado. 7. Obtener hallazgos. 8. Obtener comentarios de SmartPR. 9. Obtener fuente o evidencia interna. 10. Obtener una campaña de otra organización. 11. Exportación con más campos que la interfaz. 12. Brief derivado de una fuente histórica que filtra fee. 13. Resumen operativo que filtra montos. 14. Acceso directo por URL. 15. Acceso por API o read model.
+
+### 6.11 Fuera de alcance de la F9
+
+Ejecución de pagos; edición operativa; aprobación creativa; comentarios o solicitudes del cliente; agente TCL; limpieza de la F10; borrado de legado; nuevas integraciones de redes sociales; rediseño general de la plataforma.
+
+### 6.12 F10
+
+**F10 = limpieza, deprecación y endurecimiento final de V2.** No se diseña todavía.
 
 ## 7. Deuda conocida (solo pendientes reales)
 
@@ -106,6 +174,6 @@ La F8 se implementó y certificó en una VM cloud efímera; **no es un requisito
 
 1. Verifica el repo antes de asumir (HEAD, rama `v2`, `git status`); la documentación histórica está desactualizada.
 2. **Preflight primero** (política de agentes §3): inventario de lo reutilizable (proyección de contenido aprobado F7, read models F8, `source:read_shared`), búsqueda de modelos equivalentes y recién entonces proponer; congelar la arquitectura antes de implementar. No reinterpretes el workflow §3.
-3. Sigue [`AGENT_EXECUTION_POLICY`](../project/AGENT_EXECUTION_POLICY.md) (subagentes con esfuerzo alto para dominio/seguridad/QA, QA adversarial independiente, el principal controla Git).
+3. Sigue [`AGENT_EXECUTION_POLICY`](../project/AGENT_EXECUTION_POLICY.md) con la **versión austera de §6.8** (2 agentes de diseño, 2 waves, 1 QA adversarial; esfuerzo alto para dominio/seguridad/QA; el principal controla Git).
 4. No hagas push, merge ni PR sin instrucción explícita; **nunca a `main`**; no `--force`; no `git stash`.
 5. Cierra con DEC-050, nota técnica, actualización de `V2_CURRENT_STATE` y reporte; **detente y espera revisión** antes de la F10.
