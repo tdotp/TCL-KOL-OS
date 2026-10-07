@@ -412,3 +412,73 @@ export function verificarAsociacionDeGuion(e: EntradaDeAsociacionDeGuion): Resul
 export function archivoNombradoPorLaPersona(filename: string, textosDelActor: readonly string[]): boolean {
   return textosDelActor.some((t) => nombreCompletoLiteral(filename, t));
 }
+
+// ─────────────────────────── Objetivo de KPI (F8) ──────────────────────────────
+
+/** Cómo nombra una persona cada métrica del catálogo (sin acentos y en minúsculas, como `paraFechas`). */
+const TERMINOS_DE_METRICA: Readonly<Record<string, readonly string[]>> = {
+  views: [
+    'vistas',
+    'vista',
+    'views',
+    'view',
+    'visualizaciones',
+    'visualizacion',
+    'reproducciones',
+    'reproduccion',
+    'plays',
+  ],
+  reach: ['alcance', 'alcances', 'reach'],
+  impressions: ['impresiones', 'impresion', 'impressions'],
+  likes: ['me gusta', 'me gustas', 'likes', 'like'],
+  comments: ['comentarios', 'comentario', 'comments', 'comment'],
+  shares: ['compartidos', 'compartido', 'compartidas', 'compartir', 'shares', 'share'],
+  saves: ['guardados', 'guardado', 'guardadas', 'guardar', 'saves', 'save'],
+  link_clicks: ['clics', 'clic', 'clicks', 'click', 'link clicks'],
+  engagement_rate: ['engagement', 'interaccion', 'interacciones', 'tasa de interaccion'],
+};
+
+/** Expresiones de «como máximo» (el comparador `lte` solo se acepta si la persona puso un tope). */
+const TOPE_SUPERIOR =
+  /(?<![a-z0-9])(maximo|maxima|como mucho|a lo sumo|no mas de|no pasar de|no superar|menos de|hasta|tope|limite|at most|up to|max)(?![a-z0-9])/;
+
+const enMinusculasSinAcentos = (t: string): string => paraFechas(t).replace(/\s+/g, ' ');
+
+function contieneTermino(texto: string, termino: string): boolean {
+  const re = new RegExp(`(?<![a-z0-9])${termino.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![a-z0-9])`);
+  return re.test(texto);
+}
+
+export interface EntradaDeObjetivoDeKpi {
+  readonly metric: string;
+  readonly otherLabel: string | undefined;
+  readonly targetValue: number;
+  readonly comparator: string | undefined;
+  /** La cita (`evidenceQuote`) YA verificada como literal de un mensaje de la persona. */
+  readonly cita: string;
+}
+
+/**
+ * Grounding por VALOR de un objetivo de KPI (D11): lo que se guarda como objetivo debe estar en la CITA que la
+ * persona escribió, no solo en algún mensaje suyo ni en un documento:
+ *   · la MÉTRICA aparece nombrada (vistas, alcance, «me gusta»…; con `other`, su etiqueta literal);
+ *   · el VALOR es una cifra escrita en la cita (admite miles, decimales, k/mil/millones);
+ *   · `lte` exige un tope dicho por la persona («como máximo», «menos de»…).
+ * Función pura. Un valor que no cumple se rechaza SIN ejecutar el caso de uso.
+ */
+export function verificarObjetivoDeKpiEnLaCita(e: EntradaDeObjetivoDeKpi): ResultadoDeValor {
+  const cita = enMinusculasSinAcentos(e.cita);
+  if (e.metric === 'other') {
+    const etiqueta = enMinusculasSinAcentos(e.otherLabel ?? '');
+    if (etiqueta.length < 3 || !cita.includes(etiqueta)) return rechazo('otherLabel', 'no_aparece');
+  } else {
+    const terminos = TERMINOS_DE_METRICA[e.metric];
+    if (terminos === undefined || !terminos.some((t) => contieneTermino(cita, t))) {
+      return rechazo('metric', 'no_aparece');
+    }
+  }
+  if (!numeroFundamentado(e.targetValue, [e.cita])) return rechazo('targetValue', 'no_aparece');
+  if (e.comparator === 'lte' && !TOPE_SUPERIOR.test(cita))
+    return rechazo('comparator', 'sin_tope_en_la_cita');
+  return { ok: true };
+}

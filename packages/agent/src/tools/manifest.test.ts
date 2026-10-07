@@ -630,17 +630,17 @@ describe('(d) el catálogo registrado', () => {
   const nombresDeUseCases = importadosDeDb(fuente(join(AQUI, 'use-cases.ts')));
   const permitidosParaTools = new Set([...nombresDeUseCases, 'solicitarRevisionInternaDelBrief']);
 
-  it('tiene 19 READ, 13 WRITE y 4 CONFIRMATION_REQUIRED, todos distintos (36 tools)', () => {
+  it('tiene 24 READ, 14 WRITE y 4 CONFIRMATION_REQUIRED, todos distintos (42 tools)', () => {
     const por = (r: string) => CATALOGO_V1.filter((t) => t.risk === r).map((t) => t.name);
-    expect(por('read')).toHaveLength(19);
-    expect(por('write')).toHaveLength(13);
+    expect(por('read')).toHaveLength(24);
+    expect(por('write')).toHaveLength(14);
     expect(por('confirmation_required').sort()).toEqual([
       'brief_propose_approval',
       'script_propose_approval',
       'sheet_propose_apply',
       'sheet_propose_resolution',
     ]);
-    expect(new Set(CATALOGO_V1.map((t) => t.name)).size).toBe(36);
+    expect(new Set(CATALOGO_V1.map((t) => t.name)).size).toBe(42);
   });
 
   it('F7: las 11 tools de contenido son exactamente estas (5 lectura, 5 escritura, 1 propuesta)', () => {
@@ -665,6 +665,30 @@ describe('(d) el catálogo registrado', () => {
       'script_request_changes',
     ]);
     f7('confirmation_required', ['script_propose_approval']);
+  });
+
+  it('F8: las 6 tools de operación y KPIs son exactamente estas (5 lectura sin dinero ni PII, 1 escritura de objetivos)', () => {
+    const f8 = (r: string, nombres: string[]) =>
+      expect(
+        CATALOGO_V1.filter((t) => t.risk === r && nombres.includes(t.name))
+          .map((t) => t.name)
+          .sort(),
+      ).toEqual([...nombres].sort());
+    f8('read', [
+      'operations_summary_list',
+      'operations_participation_status',
+      'kpi_scoreboard_get',
+      'kpi_history_get',
+      'sheet_kpi_pactado_get',
+    ]);
+    f8('write', ['kpi_target_register']);
+    const reutiliza = (n: string) => CATALOGO_V1.find((t) => t.name === n)!.reuses;
+    expect(reutiliza('operations_summary_list')).toEqual(['obtenerResumenOperativoParaAgente']);
+    expect(reutiliza('operations_participation_status')).toContain('obtenerEstadoOperativoParaAgente');
+    expect(reutiliza('kpi_scoreboard_get')).toContain('obtenerKpiDeParticipacion');
+    expect(reutiliza('kpi_history_get')).toContain('obtenerHistorialDeKpi');
+    expect(reutiliza('sheet_kpi_pactado_get')).toContain('obtenerKpiPactadoDelSheet');
+    expect(reutiliza('kpi_target_register')).toContain('registrarKpiObjetivo');
   });
 
   it('(c′) ninguna tool tiene un nombre de decisión (approve/confirm/execute/reject/dismiss/publish/visibility/archive) salvo `_propose_`', () => {
@@ -760,5 +784,145 @@ describe('(d) el catálogo registrado', () => {
     expect(() => createToolRegistry({ nonceForRun, tools: [CATALOGO_V1[0]!, CATALOGO_V1[0]!] })).toThrow(
       /duplicada/,
     );
+  });
+});
+
+// ─────────────────────────── (e) Fase 8: operación, dinero y PII ───────────────
+
+/** Módulos de db de la Fase 8: lo que exportan (y `index.ts` re-exporta) se clasifica a conciencia. */
+const MODULOS_F8 = [
+  'agreements',
+  'shipments',
+  'billing-payment',
+  'operational-events',
+  'ops-evidence',
+  'ops-source-scope',
+  'pii',
+  'kpi-targets',
+  'kpi-measurements',
+  'kpi-views',
+  'kpi-sheet-pactado',
+  'operativo-views',
+  'operativo-agent-view',
+];
+
+/** Lo ÚNICO de la Fase 8 que el agente puede usar. */
+const F8_PARA_EL_AGENTE: Readonly<Record<string, 'read-tool' | 'write-tool'>> = {
+  obtenerResumenOperativoParaAgente: 'read-tool',
+  obtenerEstadoOperativoParaAgente: 'read-tool',
+  obtenerKpiDeParticipacion: 'read-tool',
+  obtenerHistorialDeKpi: 'read-tool',
+  obtenerKpiPactadoDelSheet: 'read-tool',
+  registrarKpiObjetivo: 'write-tool',
+};
+
+describe('(e) F8: el agente solo lee operación sin dinero ni PII y fija objetivos de KPI', () => {
+  const deF8 = [
+    ...new Set(
+      MODULOS_F8.flatMap((m) => [...exportsDeValor(join(SRC_DB, `${m}.ts`))]).filter((n) =>
+        exportsDeDb.has(n),
+      ),
+    ),
+  ].sort();
+  const noAgente = deF8.filter((n) => !Object.hasOwn(F8_PARA_EL_AGENTE, n));
+
+  it('hay exports de F8 que revisar y los seis del agente están entre ellos', () => {
+    expect(deF8.length).toBeGreaterThan(40);
+    for (const n of Object.keys(F8_PARA_EL_AGENTE)) expect(deF8, n).toContain(n);
+  });
+
+  it('los seis del agente están clasificados exactamente como lectura o escritura', () => {
+    for (const [n, c] of Object.entries(F8_PARA_EL_AGENTE)) expect(clasificacionDe(n), n).toBe(c);
+  });
+
+  it('TODO lo demás de F8 (acuerdos, envíos, facturación, pagos, eventos, evidencia, PII, mediciones, retiro, read models ricos) es prohibido o solo UI', () => {
+    for (const n of noAgente) {
+      expect(['prohibited', 'ui-only'], `${n} está clasificado ${clasificacionDe(n)}`).toContain(
+        clasificacionDe(n),
+      );
+      expect(esImportablePorElAgente(n), n).toBe(false);
+    }
+  });
+
+  it('lo que mueve dinero, pagos, envíos, evidencia, PII o resultados es PROHIBIDO (no solo «UI»): lo vigila el test (c)', () => {
+    for (const n of [
+      'crearAcuerdo',
+      'registrarVersionDeAcuerdo',
+      'cancelarAcuerdo',
+      'obtenerAcuerdo',
+      'crearEnvio',
+      'transicionarEnvio',
+      'obtenerEnvio',
+      'registrarDocumentoDeCobro',
+      'validarDocumento',
+      'rechazarDocumento',
+      'anularDocumento',
+      'reportarPago',
+      'cancelarObligacionDePago',
+      'registrarNotaDeCorreccionDePago',
+      'obtenerSeguimientoDePago',
+      'listarDocumentosDeCobro',
+      'aplicarEventoOperativo',
+      'listarEventosOperativos',
+      'subirEvidenciaOperativa',
+      'adjuntarEvidenciaOperativa',
+      'retractarEvidencia',
+      'listarEvidenciaDeEvento',
+      'listarEvidenciaDeSujeto',
+      'guardarPii',
+      'revelarPii',
+      'obtenerPiiResumen',
+      'registrarMedicionKpi',
+      'corregirMedicionKpi',
+      'retirarKpiObjetivo',
+      'obtenerResumenOperativoDeCampana',
+      'obtenerEstadoOperativoDeParticipacion',
+    ]) {
+      expect(clasificacionDe(n), n).toBe('prohibited');
+    }
+  });
+
+  it('ningún archivo de tools/ ni de runtime/ referencia un identificador de F8 que no sea de los seis (ni prohibido ni «UI»)', () => {
+    const archivos = [
+      ...archivosTs(AQUI).filter((p) => !esDePrueba(p) && !p.endsWith('manifest.ts')),
+      ...archivosTs(join(SRC_AGENT, 'runtime')).filter((p) => !esDePrueba(p)),
+    ];
+    const infractores: string[] = [];
+    for (const p of archivos) {
+      const ids = identificadores(fuente(p));
+      for (const n of noAgente) if (ids.has(n)) infractores.push(`${relative(SRC_AGENT, p)}: ${n}`);
+    }
+    expect(infractores).toEqual([]);
+  });
+
+  it('use-cases.ts importa de db, de todo F8, solo los seis (y nada de dinero, pagos, PII, evidencia ni mediciones)', () => {
+    const importadas = importadosDeDb(fuente(join(AQUI, 'use-cases.ts')));
+    expect(importadas.filter((n) => deF8.includes(n)).sort()).toEqual(Object.keys(F8_PARA_EL_AGENTE).sort());
+  });
+
+  it('el control del detector: un identificador de F8 prohibido en el código de una tool SE DETECTA', () => {
+    const falso = ts.createSourceFile(
+      'x.ts',
+      `const x = reportarPago; revelarPii(1);`,
+      ts.ScriptTarget.ES2022,
+      true,
+    );
+    const ids = identificadores(falso);
+    expect(['reportarPago', 'revelarPii'].every((n) => ids.has(n) && noAgente.includes(n))).toBe(true);
+  });
+
+  it('las tools de KPI no tocan nunca el bloque `internal` (autor, canal, motivo de corrección, procedencia)', () => {
+    const sf = fuente(join(AQUI, 'catalog', 'operacion.ts'));
+    const accesos: string[] = [];
+    const visita = (n: ts.Node): void => {
+      if (ts.isPropertyAccessExpression(n) && n.name.text === 'internal') accesos.push(n.getText(sf));
+      if (ts.isElementAccessExpression(n) && ts.isStringLiteralLike(n.argumentExpression)) {
+        if (n.argumentExpression.text === 'internal') accesos.push(n.getText(sf));
+      }
+      if (ts.isIdentifier(n) && n.text === 'internal') accesos.push(n.getText(sf));
+      ts.forEachChild(n, visita);
+    };
+    visita(sf);
+    expect(accesos).toEqual([]);
   });
 });

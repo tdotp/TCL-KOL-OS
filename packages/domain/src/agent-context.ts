@@ -564,7 +564,12 @@ export type ContextReferenceKind =
   | 'deliverable'
   | 'script_version'
   | 'finding'
-  | 'review_comment';
+  | 'review_comment'
+  // V2 · Fase 8: KPIs. K objetivo (la tool puede REEMPLAZARLO con `supersedes`) y M medición (solo lectura de
+  // historia: ninguna tool recibe un alias M). M comparte letra con `message`; el contador es por letra, así que
+  // jamás coinciden dos alias y `resolver` distingue por tipo.
+  | 'kpi_target'
+  | 'kpi_measurement';
 
 const PREFIJO_DE_ALIAS: Readonly<Record<ContextReferenceKind, string>> = {
   source: 'S',
@@ -580,6 +585,8 @@ const PREFIJO_DE_ALIAS: Readonly<Record<ContextReferenceKind, string>> = {
   script_version: 'V',
   finding: 'H',
   review_comment: 'C',
+  kpi_target: 'K',
+  kpi_measurement: 'M',
 };
 
 export interface ContextReference {

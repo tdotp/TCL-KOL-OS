@@ -349,6 +349,75 @@ export const MANIFIESTO_DE_DB: Readonly<Record<string, ClasificacionDeExport>> =
   // evaluación y la huella de aprobación y la propuesta pendiente: jamás una tool del agente.
   listarContenidoDeCampana: UI,
   obtenerDeliverableConVersiones: UI,
+
+  // ── Fase 8 · operación y KPIs (DEC-049) ── PAYMENT TRACKING ≠ PAYMENT EXECUTION; el agente jamás ve ni mueve
+  // dinero, pagos, envíos, evidencia ni PII. SOLO estos seis tienen puerta: los cinco `…ParaAgente`/KPI de
+  // lectura cuyo DTO no tiene dinero ni PII por construcción (aunque el actor sea admin) y el ÚNICO write:
+  // registrar un OBJETIVO de KPI (`kpi_target_register`, origen chat con `toolInvocationId`).
+  obtenerResumenOperativoParaAgente: R, // operations_summary_list
+  obtenerEstadoOperativoParaAgente: R, // operations_participation_status
+  obtenerKpiDeParticipacion: R, // kpi_scoreboard_get (solo el bloque `public`; el `internal` se descarta en la tool)
+  obtenerHistorialDeKpi: R, // kpi_history_get (solo el bloque `public`)
+  obtenerKpiPactadoDelSheet: R, // sheet_kpi_pactado_get (sugerencia; el texto va en un sobre no confiable)
+  registrarKpiObjetivo: W, // kpi_target_register (grounding por valor y métrica; jamás mediciones)
+
+  // agreements.ts · términos materiales con fee/moneda: solo la UI de Operativo.
+  crearAcuerdo: X,
+  registrarVersionDeAcuerdo: X,
+  cancelarAcuerdo: X,
+  obtenerAcuerdo: X, // devuelve el fee
+  listarVersionesDeAcuerdo: X,
+
+  // shipments.ts · logística con costo, transportadora y guía; entregar es un hecho humano.
+  crearEnvio: X,
+  transicionarEnvio: X,
+  listarEnviosDeParticipacion: X,
+  obtenerEnvio: X,
+
+  // billing-payment.ts · cuentas de cobro, validación y reporte de pago (payment tracking): nunca el agente.
+  registrarDocumentoDeCobro: X,
+  validarDocumento: X,
+  rechazarDocumento: X,
+  anularDocumento: X,
+  reportarPago: X,
+  cancelarObligacionDePago: X,
+  registrarNotaDeCorreccionDePago: X,
+  obtenerSeguimientoDePago: X,
+  listarDocumentosDeCobro: X,
+
+  // operational-events.ts · hechos que MUEVEN el estado (append-only, solo `ui`) y su mutex transaccional.
+  aplicarEventoOperativo: X,
+  listarEventosOperativos: X, // notas internas y referencias externas
+  transaccionOperativa: X, // recibe el cliente de BD
+
+  // ops-evidence.ts / ops-source-scope.ts · evidencia operativa (sensible, interna, sin job ni fragmentos).
+  subirEvidenciaOperativa: X,
+  adjuntarEvidenciaOperativa: X,
+  retractarEvidencia: X,
+  listarEvidenciaDeEvento: X,
+  listarEvidenciaDeSujeto: X,
+  SQL_FUENTE_SIN_EVIDENCIA_OPERATIVA: X, // SQL crudo
+  esEvidenciaOperativa: UI, // predicado puro que ya aplica `esLegibleParaIA`
+
+  // pii.ts · cédula, teléfono y dirección cifrados: ni guardar, ni revelar, ni siquiera el resumen.
+  guardarPii: X,
+  revelarPii: X,
+  obtenerPiiResumen: X,
+
+  // kpi-targets.ts / kpi-measurements.ts / kpi-views.ts · lo único del agente es FIJAR un objetivo; medir,
+  // corregir y retirar son de una persona por la interfaz.
+  retirarKpiObjetivo: X,
+  registrarMedicionKpi: X,
+  corregirMedicionKpi: X,
+  obtenerResumenKpiDeCampana: UI, // la usa el read model de la lista de operación
+
+  // operativo-views.ts · read models RICOS de la UI (con dinero y pagos según el rol): jamás al agente.
+  obtenerResumenOperativoDeCampana: X,
+  obtenerEstadoOperativoDeParticipacion: X,
+
+  // audit.ts (F8) · allowlist de metadata de eventos operativos: infraestructura.
+  esAccionOperativa: UI,
+  sanitizeMetadataOperativa: UI,
 };
 
 /** Clasificación de un export (`prohibited` si no está clasificado). */

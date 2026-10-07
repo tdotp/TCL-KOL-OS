@@ -204,7 +204,15 @@ describe('V4 · una clave de identidad/ámbito en los argumentos se rechaza en T
       'script_request_changes',
       'script_propose_approval',
     ]);
-    expect(patrones.filter((p) => !f7.has(p.tool))).toEqual([]);
+    // F8: solo las tools de operación y KPIs que reciben alias (P participación, K objetivo)
+    const f8 = new Set([
+      'operations_participation_status',
+      'kpi_scoreboard_get',
+      'kpi_history_get',
+      'sheet_kpi_pactado_get',
+      'kpi_target_register',
+    ]);
+    expect(patrones.filter((p) => !f7.has(p.tool) && !f8.has(p.tool))).toEqual([]);
   });
 });
 

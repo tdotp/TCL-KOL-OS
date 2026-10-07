@@ -153,9 +153,9 @@ describe('QA-F7-I · inventario de tools y manifiesto independiente', () => {
     }
   });
 
-  it('RESISTE: el registro ofrece exactamente 36 tools a la Cuenta; solo `*_propose_*` toca decisiones y ninguna se llama approve/confirm/execute/resolve', () => {
+  it('RESISTE: el registro ofrece exactamente 42 tools a la Cuenta; solo `*_propose_*` toca decisiones y ninguna se llama approve/confirm/execute/resolve', () => {
     const defs = r.definitionsFor(m.e.consultor);
-    expect(defs).toHaveLength(36);
+    expect(defs).toHaveLength(42);
     for (const d of defs) {
       if (/propose/.test(d.name)) continue;
       expect(d.name, d.name).not.toMatch(/approve|confirm|execute|resolve|reject|publish|visibility|archive/);
