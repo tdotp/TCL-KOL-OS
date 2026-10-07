@@ -40,7 +40,7 @@ import { assertCapability } from './authz.ts';
 import { type ContextoDeAuditoria, exigirPersona } from './audit-context.ts';
 import { query, transaction } from './client.ts';
 import { obtenerOCrearVersionDeTrabajo } from './brief-version.ts';
-import { SQL_FRAGMENTO_VIGENTE } from './fragment-scope.ts';
+import { SQL_FRAGMENTO_VIGENTE, sqlFragmentoSinTextoHistorico } from './fragment-scope.ts';
 import { SQL_LOCALIZADOR_DE_EVIDENCIA } from './locators.ts';
 import { SQL_FUENTE_SIN_EVIDENCIA_OPERATIVA } from './ops-source-scope.ts';
 import { SQL_FUENTE_SIN_GUION } from './script-scope.ts';
@@ -323,7 +323,7 @@ export async function persistirExtraccion(opciones: {
           `INSERT INTO evidence (brief_field_id, source_id, fragment_id, quote, relation,
                                  page, slide, section, linea, locator)
            SELECT $1, $2, $3, $4, $5::evidence_relation, f.page, f.slide, f.section, f.linea, f.locator
-             FROM source_fragments f WHERE f.id = $3`,
+             FROM source_fragments f WHERE f.id = $3 AND ${sqlFragmentoSinTextoHistorico('f')}`,
           [fila.rows[0]!.id, ev.sourceId, ev.fragmentId, ev.quote, ev.relation],
         );
         evidencias += 1;

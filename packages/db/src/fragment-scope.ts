@@ -13,9 +13,40 @@
  * «el contenido de la fuente» la aplica con estas expresiones.
  */
 
+/**
+ * Fragmentos de snapshots del Sheet de influencers ANTERIORES a la lista blanca de columnas (cierre de F8).
+ *
+ * El worker arma hoy el texto de los fragmentos del Sheet `TCL_KOL_OS_INFLUENCERS` con una lista blanca de columnas
+ * y lo declara en la estructura del snapshot (`sheets[].fragmentTextAllowlist`). Los snapshots creados ANTES conservan
+ * en `source_fragments.text` una línea «cabecera: valor» por cada columna, incluidos `fee`, `canje`, `condiciones` y
+ * cualquier columna desconocida (teléfono, dirección…). Son inmutables: no se reescriben. Para que ese texto no llegue
+ * a TCL, al agente, a la búsqueda, al insumo del LLM del Brief ni a ningún rol sin permiso financiero, ningún lector
+ * de contenido de fuente lo devuelve: es SEGURO POR DEFECTO (un fragmento es ilegible mientras su pestaña lleve el
+ * marcador del esquema de influencers en A1 y la estructura del snapshot no declare la lista blanca de esa pestaña).
+ * Para recuperarlo hay que re-sincronizar el Sheet: el snapshot nuevo ya trae la marca. La rejilla del snapshot
+ * (`source_snapshot_rows`) no se toca: la validación y el plan de importación no dependen del texto.
+ *
+ * Una sola expresión para todo lector; `alias` es el alias (o el nombre) de `source_fragments` en la consulta.
+ */
+export function sqlFragmentoSinTextoHistorico(alias: string): string {
+  return `(${alias}.snapshot_id IS NULL OR NOT EXISTS (
+  SELECT 1
+    FROM source_snapshot_rows hr
+    JOIN source_snapshots hs ON hs.id = hr.snapshot_id
+   WHERE hr.snapshot_id = ${alias}.snapshot_id
+     AND hr.row_number = 1
+     AND jsonb_path_exists(hr.cells, '$[*] ? (@.col == 1 && @.text like_regex "TCL_KOL_OS_INFLUENCERS" flag "i")')
+     AND NOT jsonb_path_exists(
+           hs.structure,
+           '$.sheets[*] ? (@.name == $n && exists(@.fragmentTextAllowlist))',
+           jsonb_build_object('n', hr.sheet))))`;
+}
+
 /** Con alias `f` (source_fragments) y `s` (source_documents) en la consulta. */
-export const SQL_FRAGMENTO_VIGENTE = '(f.snapshot_id IS NULL OR f.snapshot_id = s.current_snapshot_id)';
+export const SQL_FRAGMENTO_VIGENTE = `((f.snapshot_id IS NULL OR f.snapshot_id = s.current_snapshot_id)
+  AND ${sqlFragmentoSinTextoHistorico('f')})`;
 
 /** Para consultas sobre `source_fragments` sin alias ni join con la fuente. */
-export const SQL_FRAGMENTO_VIGENTE_SIN_ALIAS = `(snapshot_id IS NULL OR snapshot_id = (
-  SELECT d.current_snapshot_id FROM source_documents d WHERE d.id = source_fragments.source_id))`;
+export const SQL_FRAGMENTO_VIGENTE_SIN_ALIAS = `((snapshot_id IS NULL OR snapshot_id = (
+  SELECT d.current_snapshot_id FROM source_documents d WHERE d.id = source_fragments.source_id))
+  AND ${sqlFragmentoSinTextoHistorico('source_fragments')})`;

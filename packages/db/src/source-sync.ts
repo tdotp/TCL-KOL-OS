@@ -35,6 +35,7 @@ import { getPool } from './client.ts';
 import { type ContextoDeAuditoria, NO_ENCONTRADO, auditoriaDe, exigirPersona } from './influencers.ts';
 import { localizadorDeFila } from './locators.ts';
 import { Abortar, transaccionConResultado } from './tx-result.ts';
+import { sqlFragmentoSinTextoHistorico } from './fragment-scope.ts';
 
 /** Una sincronización activa sin avanzar más de esto se considera abandonada. */
 const MINUTOS_PARA_ABANDONAR = 30;
@@ -377,7 +378,8 @@ export async function getSnapshotFragments(
     metadata: Record<string, unknown>;
   }>(
     `SELECT id, ordinal, locator, text, metadata FROM source_fragments
-      WHERE snapshot_id = $1 AND ordinal >= $2 ORDER BY ordinal LIMIT $3`,
+      WHERE snapshot_id = $1 AND ordinal >= $2 AND ${sqlFragmentoSinTextoHistorico('source_fragments')}
+      ORDER BY ordinal LIMIT $3`,
     [snapshotId, desde, limite],
   );
   return ok(

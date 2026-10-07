@@ -392,7 +392,15 @@ describe('auditoría sin valores', () => {
     expect(eventos[1]!.metadata).toMatchObject({ fields: ['document_id', 'address'], version: 1 });
     expect(eventos[2]!.metadata['fields']).toEqual(['phone']);
 
-    const centinelas = [doc, tel, dir, 'Centinela', doc.slice(0, 1) + '.' + doc.slice(1, 4)];
+    // La variante con puntos va COMPLETA («9.123.456»): una de 5 caracteres («9.123») coincidía por azar con
+    // costos o latencias decimales de las miles de filas de `ai_runs` de una base de pruebas acumulada.
+    const centinelas = [
+      doc,
+      tel,
+      dir,
+      'Centinela',
+      doc.slice(0, 1) + '.' + doc.slice(1, 4) + '.' + doc.slice(4, 7),
+    ];
     for (const centinela of centinelas) {
       const enAuditoria = await query(
         `SELECT 1 FROM audit_events WHERE metadata::text ILIKE '%' || $1 || '%' OR action ILIKE '%' || $1 || '%'`,
