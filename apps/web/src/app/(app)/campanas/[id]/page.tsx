@@ -145,6 +145,11 @@ export default async function DetalleCampanaPage({
             Contenido
           </a>
         )}
+        {roleCan(user.role, 'operations:read') && (
+          <a href={`/campanas/${campaign.id}/operacion`} data-testid="operacion-nav-link">
+            Operación
+          </a>
+        )}
       </nav>
 
       <div className="stepper campaign-stepper">

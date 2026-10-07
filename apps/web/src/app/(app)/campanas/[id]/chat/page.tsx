@@ -96,6 +96,11 @@ export default async function ChatDeCampanaPage({ params }: { params: Promise<{ 
             Contenido
           </a>
         )}
+        {roleCan(user.role, 'operations:read') && (
+          <a href={`/campanas/${campaign.id}/operacion`} data-testid="operacion-nav-link">
+            Operación
+          </a>
+        )}
       </nav>
 
       <div className={styles['pagina']}>

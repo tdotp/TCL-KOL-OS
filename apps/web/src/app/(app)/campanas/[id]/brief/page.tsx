@@ -33,6 +33,7 @@ function CabeceraBrief({
   status,
   cliente = false,
   conContenido = false,
+  conOperacion = false,
 }: {
   id: string;
   name: string;
@@ -42,6 +43,8 @@ function CabeceraBrief({
   cliente?: boolean;
   /** El rol puede ver el contenido de la campaña (V2 · Fase 7): se añade el enlace «Contenido». */
   conContenido?: boolean;
+  /** El rol puede ver la operación de la campaña (V2 · Fase 8): se añade el enlace «Operación». */
+  conOperacion?: boolean;
 }) {
   const etapa = etapaDeStatus(status);
   const indice = ETAPAS.findIndex((e) => e.id === etapa);
@@ -85,6 +88,11 @@ function CabeceraBrief({
         {conContenido && (
           <a href={`/campanas/${id}/contenido`} data-testid="contenido-nav-link">
             Contenido
+          </a>
+        )}
+        {conOperacion && (
+          <a href={`/campanas/${id}/operacion`} data-testid="operacion-nav-link">
+            Operación
           </a>
         )}
       </nav>
@@ -241,6 +249,7 @@ export default async function BriefPage({
         category={campana.value.campaign.category}
         status={ultima?.status as BriefStatus | undefined}
         conContenido={roleCan(user.role, 'deliverable:read')}
+        conOperacion={roleCan(user.role, 'operations:read')}
       />
       <div className="review-intro">
         <div className="eyebrow">Revisión estructurada</div>
