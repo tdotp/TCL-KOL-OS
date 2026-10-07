@@ -36,6 +36,15 @@ process.env['DATABASE_URL'] = DATABASE_URL;
 const STORAGE_LOCAL_PATH = join(tmpdir(), 'tcl-kol-os-e2e-chat-storage');
 process.env['STORAGE_LOCAL_PATH'] = STORAGE_LOCAL_PATH;
 
+/**
+ * Claves de PRUEBA del cifrado de datos personales (V2 · Fase 8). Los servidores las necesitan para revelar datos de
+ * entrega y el proceso de Playwright para sembrarlos (`guardarPii`). Sintéticas: solo existen en estas corridas.
+ */
+const PII_ENCRYPTION_KEYS = `e2e-1:${Buffer.alloc(32, 0x11).toString('base64')}`;
+const PII_INDEX_KEY = Buffer.alloc(32, 0x22).toString('base64');
+process.env['PII_ENCRYPTION_KEYS'] = PII_ENCRYPTION_KEYS;
+process.env['PII_INDEX_KEY'] = PII_INDEX_KEY;
+
 /** Solo para iterar a mano: `E2E_REUSE_SERVERS=1` reutiliza servidores ya levantados (nunca en la corrida oficial). */
 const reutilizar = process.env['E2E_REUSE_SERVERS'] === '1';
 
@@ -55,6 +64,7 @@ const ENV_BASE = {
  *   · 3014 `chat-worker-caido` IA encendida pero con `AI_WORKER_URL` en 8012, donde NO arranca nadie:
  *     el spec levanta (y apaga) ese worker a mano para probar «cae → reintentar → completa».
  *   · 3015 `contenido` (V2 · Fase 7) IA encendida contra el mismo worker 8011.
+ *   · 3016 `operacion` (V2 · Fase 8) IA encendida contra el mismo worker 8011.
  *   · 8011 worker `uvicorn app.main:app` (venv local del servicio) con el modelo falso
  *     determinista: es el proceso REAL de `POST /modelo/turno`, sin red ni clave.
  * Ninguno toca la base de desarrollo: `DATABASE_URL` es la de esta corrida (`_test`).
@@ -138,6 +148,15 @@ export default defineConfig({
       timeout: 120_000,
       testMatch: /(contenido-(flujo|aprobacion|acceso|sin-brief|inyeccion)|chat-contenido)\.spec\.ts$/,
       use: { baseURL: 'http://localhost:3015' },
+    },
+    {
+      // V2 · Fase 8 — Operación (acuerdos, logística, facturación/pagos, KPI, datos de entrega). Mismo patrón
+      // que `contenido`: IA falsa determinista en el worker 8011 (E2E-28 prueba al agente contra Operación).
+      name: 'operacion',
+      // Compilación bajo demanda de `next dev` en la primera visita (ver nota en `src/nav.ts`): holgura de arranque.
+      timeout: 120_000,
+      testMatch: /operacion-[a-z-]+\.spec\.ts$/,
+      use: { baseURL: 'http://localhost:3016' },
     },
     {
       name: 'chat-ia-off',
@@ -236,6 +255,23 @@ export default defineConfig({
       cwd: '../../',
       url: 'http://localhost:3015/login',
       env: { ...ENV_CHAT, WEB_PORT: '3015', AI_WORKER_URL: `http://127.0.0.1:${PUERTO_WORKER}` },
+      reuseExistingServer: reutilizar,
+      timeout: 600_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+    {
+      // V2 · Fase 8 — proyecto `operacion`: IA encendida contra el worker real 8011 (modelo falso).
+      command: 'npm run dev --workspace=@tcl-kol-os/web',
+      cwd: '../../',
+      url: 'http://localhost:3016/login',
+      env: {
+        ...ENV_CHAT,
+        PII_ENCRYPTION_KEYS,
+        PII_INDEX_KEY,
+        WEB_PORT: '3016',
+        AI_WORKER_URL: `http://127.0.0.1:${PUERTO_WORKER}`,
+      },
       reuseExistingServer: reutilizar,
       timeout: 600_000,
       stdout: 'pipe',

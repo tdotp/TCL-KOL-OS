@@ -70,6 +70,7 @@ export function SeccionKpi({
   const medicionesVigentes = (historial?.public.measurements ?? []).filter((m) => m.current);
   const correcciones = (historial?.public.measurements ?? []).filter((m) => m.supersedesId !== null);
   const internas = new Map((historial?.internal.measurements ?? []).map((m) => [m.id, m]));
+  const porId = new Map((historial?.public.measurements ?? []).map((m) => [m.id, m]));
 
   return (
     <section
@@ -162,8 +163,11 @@ export function SeccionKpi({
           <ul className={styles['historial']} data-testid="kpi-correcciones">
             {correcciones.map((m) => (
               <li key={m.id} data-testid="kpi-correccion">
-                {nombreDeMetrica(m.metric, m.otherLabel)}: corregida a {numero(m.value)} ·{' '}
-                {fechaHora(m.recordedAt)}
+                {nombreDeMetrica(m.metric, m.otherLabel)}: corregida a {numero(m.value)}
+                {m.supersedesId !== null && porId.get(m.supersedesId) !== undefined
+                  ? ` (valor anterior: ${numero(porId.get(m.supersedesId)?.value ?? 0)}, conservado en el historial)`
+                  : ''}{' '}
+                · {fechaHora(m.recordedAt)}
                 {internas.get(m.id)?.recordedByName ? ` · ${internas.get(m.id)?.recordedByName}` : ''}
                 {internas.get(m.id)?.correctionReason
                   ? ` · Motivo: ${internas.get(m.id)?.correctionReason}`

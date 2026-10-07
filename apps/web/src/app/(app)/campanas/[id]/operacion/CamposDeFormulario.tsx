@@ -178,7 +178,7 @@ export function TerminosDeAcuerdo({
         </select>
       </label>
       {modo === 'barter' ? (
-        <p className={styles['aviso']} data-testid="pago-no-aplica">
+        <p className={styles['aviso']} data-testid="pago-no-aplica-formulario">
           Pago: no aplica
         </p>
       ) : (
