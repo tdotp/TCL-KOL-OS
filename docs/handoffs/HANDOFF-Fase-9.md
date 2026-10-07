@@ -9,7 +9,7 @@ Documento autosuficiente. **Reemplaza en vigencia** al [handoff de la Fase 8](HA
 ```bash
 git clone https://github.com/tdotp/TCL-KOL-OS.git && cd TCL-KOL-OS   # o, en un clon existente:
 git switch v2 && git pull --ff-only                                    # F9 se desarrolla en v2, NUNCA en main
-git rev-parse HEAD; git log --oneline -3                               # el último commit de código es 94ca0a3 (F8); ver §2b sobre el tag de cierre
+git rev-parse HEAD; git log --oneline -3                               # el tag v2-f8-complete marca el cierre certificado de la F8; el último commit de código es 7afdab7
 ```
 
 Orden de lectura: [`docs/README.md`](../README.md) → [workflow funcional V2](../product/TCL_KOL_OS_V2_WORKFLOW_FUNCIONAL.md) (**no se reinterpreta**; §3 «Cliente — TCL» es lo que toca la F9) → [`V2_CURRENT_STATE`](../project/V2_CURRENT_STATE.md) (estado técnico, entorno local, baseline de pruebas, deudas) → este handoff → [`decision-log`](../decisions/decision-log.md) DEC-042…049 → notas técnicas ([operación y KPIs](../product/OPERATIONS_KPI_V2.md), [contenido](../product/CONTENT_V2.md), [chat y agente](../product/CHAT_AGENT_V2.md), [influencer](../product/INFLUENCER_MODEL_V2.md), [bilingüe](../product/BILINGUAL_MODEL_V2.md), [ingestión](../product/INGESTION_SPREADSHEETS_V2.md), [Sheet V1](../product/INFLUENCER_SHEET_V1.md), [importación de Sheets](../product/GOOGLE_SHEETS_IMPORT_V2.md)) → [`AGENT_EXECUTION_POLICY`](../project/AGENT_EXECUTION_POLICY.md).
@@ -19,32 +19,21 @@ Orden de lectura: [`docs/README.md`](../README.md) → [workflow funcional V2](.
 | | |
 |---|---|
 | Rama | `v2` (nunca `main`) |
-| HEAD de cierre de F8 | el HEAD de `v2` que contiene este documento. **El tag `v2-f8-complete` NO se ha creado todavía**: se crea tras certificar el gate completo en local (§2b) |
-| Último commit de CÓDIGO de F8 | `94ca0a3` (los posteriores son solo documentación) |
+| HEAD de cierre de F8 | el HEAD de `v2` que contiene este documento, etiquetado **`v2-f8-complete`** (gate completo certificado el 7-oct-2026; ver §2b) |
+| Último commit de CÓDIGO de F8 | `7afdab7` (los posteriores son solo herramientas y documentación) |
 | HEAD inicial de F8 | `a4a8dd5` (tag `v2-f7-complete`, intacto) |
 | `origin/main` | `2452283` («Rediseño v3»), publicado antes de V2, **intacto** |
 | Migraciones | `001`…`033` (siguiente: **034**) |
 | Decisiones | hasta **DEC-049** (siguiente: **DEC-050**) |
 | Fases cerradas | **F0, F1, F1.1, F2, F3, F4, F5, F6, F6.1, F7, F8**. Siguiente: **F9**; luego F10 (limpieza) |
 
-Baseline de pruebas (detalle y límites de la certificación en `V2_CURRENT_STATE` §4): domain 823 · agent 584 · web 121 · worker 799 · E2E del proyecto `operacion` 27/27; db: 1822/1822 en el gate de la Wave 2 y, tras el QA y la migración 033, 391/391 en los 23 archivos de F8 y 033 migrada desde cero (001→033 + seed).
+Baseline de pruebas certificado (detalle en `V2_CURRENT_STATE` §4): domain 823 · agent 591 · web 121 · db 1885 · worker 799 · E2E oficial 78/78; lint, typecheck, build, ruff y mypy verdes; migraciones 001→033 + seed y upgrade 025→033 (md5 idéntico).
 
-### 2b. Verificación pendiente de la F8 (hacerla en local ANTES de etiquetar y de empezar la F9)
+### 2b. Certificación de la F8 (completada)
 
-Scripts versionados que automatizan esta verificación: [`scripts/f8-verificacion.sh`](../../scripts/f8-verificacion.sh) (todos los pasos de abajo, con logs y `summary.txt`) y [`scripts/f8-mutaciones.py`](../../scripts/f8-mutaciones.py) (las 10 mutaciones críticas, restaurando el árbol con `git checkout`).
+La F8 se certificó el 7 de octubre de 2026 en local con [`scripts/f8-verificacion.sh`](../../scripts/f8-verificacion.sh) (todos los pasos, con logs y `summary.txt`) y se etiquetó `v2-f8-complete` (no se movió `v2-f7-complete`). Resultados y mutaciones (9 de 10 originales detectadas; la #7 original enmascarada por una defensa de la base y sustituida por una equivalente detectada; ver [`scripts/f8-mutaciones.py`](../../scripts/f8-mutaciones.py)): `V2_CURRENT_STATE` §4. Para repetirlo: `psql` en el PATH (o un adaptador a `docker exec`), una `tclkolos_test` recién migrada y sembrada, el venv del worker y Chrome para Playwright; `DB_BASE=postgresql://tclkolos:devpassword@localhost:5434 scripts/f8-verificacion.sh <directorio-de-logs>`.
 
-El gate final **completo** se interrumpió por falta de saldo cloud (y una caída del Postgres de la VM). Lo que sí se certificó después del último cambio de código (`94ca0a3`): lint, typecheck, domain, agent y web. Falta repetir una vez, en una sesión local, lo siguiente (es mecánico; ninguna prueba conocida falla):
-
-```bash
-npm run seed --workspace @tcl-kol-os/db && python fixtures/spreadsheets/generar_fixtures.py   # si la base/fixture no existen
-npm run lint && npm run typecheck && npm run test && npm run build          # db completo (~1.900 pruebas), agent, web
-(cd services/ai-worker && ruff check app tests && mypy app && python -m pytest -q)   # worker: 799 pasaron en la última corrida
-# migraciones: base vacía 001→033 + seed, y upgrade 025→033 con datos (md5 por tabla de las tablas previas debe ser idéntico)
-(cd apps/e2e && E2E_DATABASE_URL=<base _test> npx playwright test)           # corrida oficial completa (51 previos + 27 de F8)
-npx prettier --check $(git diff --name-only a4a8dd5 HEAD -- '*.ts' '*.tsx' '*.json' '*.md')
-```
-
-Si todo pasa: `git tag -a v2-f8-complete -m "TCL KOL OS V2 — phases 0 through 8 complete; ready for phase 9" && git push origin v2-f8-complete` (no mover `v2-f7-complete`). Si algo falla, corrige solo F8 y repite la suite afectada. Un E2E completo bajo carga puede dar timeouts de login: repetir con la máquina en calma.
+El cierre encontró y corrigió un **bloqueante de seguridad**: el texto de los fragmentos de snapshots del Sheet anteriores a la lista blanca (con `fee`, `canje`, `condiciones` y columnas desconocidas) se leía por la búsqueda, la lectura de fuentes, el agente, TCL y el insumo del Brief mientras el snapshot fuera el vigente. Ahora esos fragmentos no se leen por ningún camino hasta re-sincronizar el Sheet (`V2_CURRENT_STATE` §4).
 
 ## 3. Qué dejó la Fase 8 (Operación + KPIs, DEC-049)
 
@@ -102,7 +91,7 @@ Las 13 del [handoff F8 §4](HANDOFF-Fase-8.md) siguen vigentes (TCL solo lee; la
 ## 7. Deuda conocida (solo pendientes reales)
 
 - **PII:** cripto-borrado (`erased_at`) y política de retención (exigida por DEC-013) sin implementar; sin procedimiento documentado de rotación de claves; los originales de evidencia en almacenamiento no están cifrados (mitigado: `sensible`, internos, sin extracción).
-- **Snapshots antiguos del Sheet:** los fragmentos de texto de snapshots creados antes de la corrección del P0 conservan `fee/canje/condiciones`; en una base con datos reales hay que cambiar el Sheet y re-sincronizar, y purgar los snapshots anteriores (no hay migración que lo haga: son inmutables).
+- **Snapshots antiguos del Sheet:** conservan `fee/canje/condiciones` en el texto de sus fragmentos (inmutables), pero ninguna lectura los devuelve (guarda en `fragment-scope.ts`); para recuperar el texto hay que re-sincronizar el Sheet, y su borrado físico, si se quiere, exige un procedimiento explícito (no hay migración que lo haga). Los Briefs extraídos antes del P0 podrían contener texto derivado: auditarlos en una base con datos reales.
 - Pagos en cuotas o parciales no modelados (una obligación = un reporte); un acuerdo cancelado bloquea uno nuevo en la misma participación (decisión de diseño a revisar); la idempotencia de versiones de acuerdo y de guardado de PII es por contenido (sin columna de clave).
 - KPI: CSV, sincronización con hojas de resultados e integraciones sociales diferidos; columnas de procedencia de mediciones nulas; sin tope de eventos/documentos/mediciones por sujeto; el grounding de `kpi_target_register` es conservador (rechaza frases ambiguas).
 - UI: sin `retractarEvidencia`, sin descarga de originales; el nav muestra «Editar» al Operativo (el servidor lo niega); verificación visual solo por E2E (no hay pruebas de render de componentes).
