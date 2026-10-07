@@ -32,3 +32,8 @@ export * from './content-analysis';
 export * from './content-analysis-prompt';
 export { LOCATOR_CASOS_INVALIDOS, LOCATOR_CASOS_VALIDOS } from './source-locator.fixtures';
 export * from './content';
+export * from './agreements';
+export * from './shipments';
+export * from './billing-payment';
+export * from './operational-events';
+export * from './pii';
