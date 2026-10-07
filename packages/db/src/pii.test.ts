@@ -329,6 +329,51 @@ describe('autorización y aislamiento', () => {
   });
 });
 
+describe('solo una persona por la interfaz guarda o revela PII (FIX-B)', () => {
+  const CHAT = { origin: 'chat', correlation: { toolInvocationId: 'tool-pii-1' } } as const;
+
+  it('el canal chat (el agente) y el sistema no guardan ni revelan: HUMAN_CONFIRMATION_REQUIRED / FORBIDDEN_ROLE, sin rastro', async () => {
+    const influencerId = await nuevoInfluencer(e.admin, extras);
+    const telefonoReal = telefono();
+    const guardadoChat = await guardarPii(e.operativo, { influencerId, phone: telefonoReal }, CHAT);
+    expect(guardadoChat.ok).toBe(false);
+    if (!guardadoChat.ok) expect(guardadoChat.error.code).toBe('HUMAN_CONFIRMATION_REQUIRED');
+    const guardadoSistema = await guardarPii(
+      e.operativo,
+      { influencerId, phone: telefonoReal },
+      {
+        origin: 'system',
+      },
+    );
+    expect(guardadoSistema.ok).toBe(false);
+    if (!guardadoSistema.ok) expect(guardadoSistema.error.code).toBe('FORBIDDEN_ROLE');
+    const guardadoSinActor = await guardarPii('system' as never, { influencerId, phone: telefonoReal });
+    expect(guardadoSinActor.ok).toBe(false);
+    expect(
+      await query(`SELECT 1 FROM influencer_pii_records WHERE influencer_id = $1`, [influencerId]),
+    ).toHaveLength(0);
+
+    const g = ok(await guardarPii(e.operativo, { influencerId, phone: telefonoReal }));
+    const antes = await query(`SELECT 1 FROM audit_events WHERE entity_id = $1 AND action = 'pii.reveal'`, [
+      g.record.recordId,
+    ]);
+    for (const contexto of [CHAT, { origin: 'chat' as const }, { origin: 'system' as const }]) {
+      const r = await revelarPii(e.operativo, g.record.recordId, ['phone'], contexto);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(['HUMAN_CONFIRMATION_REQUIRED', 'FORBIDDEN_ROLE']).toContain(r.error.code);
+      expect(JSON.stringify(r)).not.toContain(telefonoReal);
+    }
+    const despues = await query(`SELECT 1 FROM audit_events WHERE entity_id = $1 AND action = 'pii.reveal'`, [
+      g.record.recordId,
+    ]);
+    expect(despues).toHaveLength(antes.length);
+    // Por la interfaz (por omisión o `ui` explícito) sí.
+    expect(ok(await revelarPii(e.operativo, g.record.recordId, ['phone'], { origin: 'ui' })).values).toEqual({
+      phone: telefonoReal,
+    });
+  });
+});
+
 describe('auditoría sin valores', () => {
   it('ningún audit_events.metadata ni ai_runs contiene la cédula, el teléfono ni la dirección', async () => {
     const influencerId = await nuevoInfluencer(e.admin, extras);

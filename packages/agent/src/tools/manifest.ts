@@ -417,6 +417,8 @@ export const MANIFIESTO_DE_DB: Readonly<Record<string, ClasificacionDeExport>> =
 
   // audit.ts (F8) · allowlist de metadata de eventos operativos: infraestructura.
   esAccionOperativa: UI,
+  esAccionDeKpi: UI,
+  PREFIJOS_OPERATIVOS: UI,
   sanitizeMetadataOperativa: UI,
 };
 

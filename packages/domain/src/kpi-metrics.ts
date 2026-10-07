@@ -100,16 +100,20 @@ function invalido<T>(field: string, message: string, reason?: string): Result<T>
 
 export interface EtiquetaDeMetrica {
   readonly label: string;
-  /** Clave de comparación (NFKC, minúsculas, espacios colapsados). */
+  /** Clave de comparación (la etiqueta ya es NFKC; aquí además en minúsculas). */
   readonly key: string;
 }
 
-/** Etiqueta de una métrica `other`: texto corto, sin caracteres de control. */
+/**
+ * Etiqueta de una métrica `other`: texto corto, sin caracteres de control. Se guarda normalizada NFKC (y con
+ * los espacios colapsados): «Conversión» y «ｃonversión» (ancho completo) son la MISMA etiqueta, así que no
+ * pueden convivir como dos objetivos vigentes del mismo ámbito. La base exige NFKC en `kpi_targets` (033).
+ */
 export function normalizarEtiquetaDeMetrica(raw: unknown): Result<EtiquetaDeMetrica> {
   if (typeof raw !== 'string') {
     return invalido('otherLabel', 'La métrica «otra» exige una etiqueta.', 'other_label_required');
   }
-  const label = raw.normalize('NFC').replace(/\s+/gu, ' ').trim();
+  const label = raw.normalize('NFKC').replace(/\s+/gu, ' ').trim();
   if (label === '') {
     return invalido('otherLabel', 'La etiqueta de la métrica no puede quedar vacía.', 'other_label_required');
   }
@@ -119,7 +123,7 @@ export function normalizarEtiquetaDeMetrica(raw: unknown): Result<EtiquetaDeMetr
   if (CARACTERES_DE_CONTROL.test(label)) {
     return invalido('otherLabel', 'La etiqueta contiene caracteres no válidos.');
   }
-  return ok({ label, key: label.normalize('NFKC').toLowerCase() });
+  return ok({ label, key: label.toLowerCase() });
 }
 
 export interface MetricaValidada {

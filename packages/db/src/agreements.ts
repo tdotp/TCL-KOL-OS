@@ -33,10 +33,12 @@ import {
   type User,
   authorizeInternalResource,
   err,
+  esClaveDeIdempotenciaValida,
   obligacionInicialPara,
   ok,
   puedeVersionarAcuerdo,
   roleCan,
+  validarMotivoDeCancelacionDeAcuerdo,
   validarTerminosDeAcuerdo,
 } from '@tcl-kol-os/domain';
 import { recordAudit } from './audit.ts';
@@ -340,13 +342,7 @@ function aceptar<T>(r: Result<T>): T {
 }
 
 function exigirClave(clave: unknown): string {
-  if (
-    typeof clave !== 'string' ||
-    clave !== clave.trim() ||
-    clave === '' ||
-    clave.length > 200 ||
-    /[\p{Cc}]/u.test(clave)
-  ) {
+  if (!esClaveDeIdempotenciaValida(clave)) {
     throw invalido(
       'La clave de idempotencia es obligatoria (hasta 200 caracteres, sin espacios en los extremos).',
       'idempotencyKey',
@@ -856,10 +852,7 @@ export async function cancelarAcuerdo(
     if (dueña[0] === undefined) throw new Abortar(NO_ENCONTRADO_DE_CONTENIDO);
     autorizarOAbortar(persona, 'agreement:manage', dueña[0].organization_id);
     const clave = exigirClave(input.idempotencyKey);
-    const motivo = typeof input.reason === 'string' ? input.reason.trim() : '';
-    if (motivo === '' || motivo.length > 500) {
-      throw invalido('El motivo de la cancelación es obligatorio (hasta 500 caracteres).', 'reason');
-    }
+    const motivo = aceptar(validarMotivoDeCancelacionDeAcuerdo(input.reason));
 
     const { acuerdo, obligacion } = await bloquearAcuerdo(client, agreementId);
     if (acuerdo.status === 'cancelled') {

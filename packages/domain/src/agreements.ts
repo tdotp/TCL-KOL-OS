@@ -11,10 +11,12 @@
  *   Obligación   = seguimiento de pago (DEC-014: tracking, no ejecución): barter ⇒ not_applicable.
  *
  * Montos: `numeric(14,2)` en la base; aquí viajan como cadena decimal canónica («1500000.00») para no perder
- * exactitud. Moneda: ISO de tres letras mayúsculas (`^[A-Z]{3}$`).
+ * exactitud. Moneda: código ISO 4217 de una lista CERRADA (`MONEDAS_ISO_4217`; la base repite la forma
+ * `^[A-Z]{3}$`).
  */
 
 import { type Result, err, ok } from './errors';
+import { isIsoDate, tieneCaracteresNoValidos } from './operational-events';
 
 // ─────────────────────────── Estados del acuerdo ───────────────────────────────
 
@@ -80,12 +82,43 @@ export function obligacionCoherenteConModo(
 // ─────────────────────────── Dinero ────────────────────────────────────────────
 
 const MONTO_CANONICO = /^\d{1,12}(?:\.\d{1,2})?$/u;
-const MONEDA_ISO = /^[A-Z]{3}$/u;
 
 export const MAX_MONTO = '999999999999.99';
 
+/**
+ * Monedas aceptadas (ISO 4217), lista CERRADA y razonable para campañas KOL en la región y sus mercados: una
+ * moneda que no existe («ABC», «XXX») no entra como moneda de un acuerdo, un envío ni un documento de cobro.
+ * Agregar una es un cambio de dominio deliberado (una línea aquí), no una cadena libre.
+ */
+export const MONEDAS_ISO_4217: readonly string[] = [
+  'USD',
+  'COP',
+  'EUR',
+  'MXN',
+  'BRL',
+  'ARS',
+  'CLP',
+  'PEN',
+  'UYU',
+  'BOB',
+  'PYG',
+  'VES',
+  'CRC',
+  'GTQ',
+  'DOP',
+  'PAB',
+  'GBP',
+  'CAD',
+  'CHF',
+  'AUD',
+  'CNY',
+  'JPY',
+  'KRW',
+  'INR',
+] as const;
+
 export function esMonedaValida(value: unknown): value is string {
-  return typeof value === 'string' && MONEDA_ISO.test(value);
+  return typeof value === 'string' && MONEDAS_ISO_4217.includes(value);
 }
 
 /**
@@ -198,18 +231,36 @@ function terminoInvalido<T>(field: string, message: string): Result<T> {
   return err({ code: 'VALIDATION_FAILED', message, details: { field } });
 }
 
-function fechaIso(value: unknown): value is string {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false;
-  const d = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
-}
-
+/** Texto libre de varias líneas: sin NUL, control, invisibles ni bidi (`\n`, `\r` y `\t` se toleran). */
 function textoLargo(value: string | null | undefined, field: string, max: number): Result<string | null> {
   if (value === undefined || value === null) return ok(null);
   if (typeof value !== 'string') return terminoInvalido(field, `«${field}» debe ser texto.`);
   const texto = value.trim();
   if (texto === '') return ok(null);
   if (texto.length > max) return terminoInvalido(field, `«${field}» no puede superar ${max} caracteres.`);
+  if (tieneCaracteresNoValidos(texto, true)) {
+    return terminoInvalido(field, `«${field}» contiene caracteres no válidos (control, invisibles o bidi).`);
+  }
+  return ok(texto);
+}
+
+export const MAX_MOTIVO_DE_CANCELACION_DE_ACUERDO = 500;
+
+/** Motivo obligatorio al cancelar un acuerdo: 1 a 500 caracteres, sin control, invisibles ni bidi. */
+export function validarMotivoDeCancelacionDeAcuerdo(value: unknown): Result<string> {
+  if (typeof value !== 'string') {
+    return terminoInvalido('reason', 'El motivo de la cancelación es obligatorio (hasta 500 caracteres).');
+  }
+  const texto = value.trim();
+  if (texto === '' || texto.length > MAX_MOTIVO_DE_CANCELACION_DE_ACUERDO) {
+    return terminoInvalido('reason', 'El motivo de la cancelación es obligatorio (hasta 500 caracteres).');
+  }
+  if (tieneCaracteresNoValidos(texto, true)) {
+    return terminoInvalido(
+      'reason',
+      'El motivo contiene caracteres no válidos (control, invisibles o bidi).',
+    );
+  }
   return ok(texto);
 }
 
@@ -258,9 +309,9 @@ export function validarTerminosDeAcuerdo(
 
   const startsOn = input.startsOn ?? null;
   const endsOn = input.endsOn ?? null;
-  if (startsOn !== null && !fechaIso(startsOn))
+  if (startsOn !== null && !isIsoDate(startsOn))
     return terminoInvalido('startsOn', 'La fecha de inicio debe ser YYYY-MM-DD.');
-  if (endsOn !== null && !fechaIso(endsOn))
+  if (endsOn !== null && !isIsoDate(endsOn))
     return terminoInvalido('endsOn', 'La fecha de fin debe ser YYYY-MM-DD.');
   if (startsOn !== null && endsOn !== null && endsOn < startsOn) {
     return terminoInvalido('endsOn', 'La vigencia termina antes de empezar.');

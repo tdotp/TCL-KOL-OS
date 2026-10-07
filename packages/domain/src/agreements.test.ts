@@ -3,6 +3,7 @@ import {
   AGREEMENT_TRANSITIONS,
   cambiaTerminosEconomicos,
   compromisosRetirados,
+  MONEDAS_ISO_4217,
   esMonedaValida,
   normalizarMonto,
   obligacionCoherenteConModo,
@@ -12,6 +13,7 @@ import {
   requiereCompromisos,
   requiereMonto,
   validarMontoYMonedaPorModo,
+  validarMotivoDeCancelacionDeAcuerdo,
   validarTerminosDeAcuerdo,
   type CompensationType,
 } from './agreements';
@@ -199,5 +201,50 @@ describe('versionar con el pago reportado', () => {
         [{ campaignProductId: 'b', quantity: 2 }],
       ),
     ).toEqual(['a']);
+  });
+});
+
+describe('endurecimiento (FIX-B): moneda ISO 4217 cerrada, fechas en rango y texto sin control', () => {
+  it('la moneda es de una lista cerrada: COP, USD, EUR, MXN… sí; ABC, XXX, cop y vacío, no', () => {
+    for (const m of ['USD', 'COP', 'EUR', 'MXN', 'BRL', 'ARS', 'CLP', 'PEN', 'GBP', 'CAD', 'CNY', 'JPY']) {
+      expect(esMonedaValida(m), m).toBe(true);
+      expect(MONEDAS_ISO_4217).toContain(m);
+    }
+    for (const m of ['ABC', 'XXX', 'cop', 'COPP', '', 'US', null, undefined, 12]) {
+      expect(esMonedaValida(m), String(m)).toBe(false);
+    }
+    expect(validarMontoYMonedaPorModo('fee', 100, 'ABC').ok).toBe(false);
+  });
+
+  const base = { compensationType: 'fee', feeAmount: 100, feeCurrency: 'COP' } as const;
+
+  it('una fecha fuera del calendario o del rango de Postgres (0000-01-01) es validación, no un 500', () => {
+    for (const startsOn of ['0000-01-01', '1899-12-31', '2026-02-30', '2026-13-01']) {
+      const r = validarTerminosDeAcuerdo({ ...base, startsOn });
+      expect(r.ok, startsOn).toBe(false);
+      if (!r.ok) expect(r.error.details).toMatchObject({ field: 'startsOn' });
+    }
+    expect(validarTerminosDeAcuerdo({ ...base, startsOn: '2026-01-31', endsOn: '2026-12-31' }).ok).toBe(true);
+  });
+
+  it('NUL, control, invisibles y bidi en conditions o motivo de cambio se rechazan; el salto de línea no', () => {
+    for (const mala of ['a\u0000b', 'pagar \u202Eodagap\u202C antes', 'a\u200Bb', 'a\u0007b']) {
+      const r = validarTerminosDeAcuerdo({ ...base, conditions: mala });
+      expect(r.ok, JSON.stringify(mala)).toBe(false);
+      if (!r.ok) expect(r.error.code).toBe('VALIDATION_FAILED');
+      expect(validarTerminosDeAcuerdo({ ...base, changeReason: mala }, 2).ok, JSON.stringify(mala)).toBe(
+        false,
+      );
+    }
+    expect(validarTerminosDeAcuerdo({ ...base, conditions: 'línea 1\nlínea 2\tcon tab' }).ok).toBe(true);
+  });
+
+  it('el motivo de cancelación del acuerdo es obligatorio, ≤ 500 y sin control/bidi', () => {
+    expect(validarMotivoDeCancelacionDeAcuerdo('  Se acordó cerrar  ')).toEqual(
+      expect.objectContaining({ ok: true, value: 'Se acordó cerrar' }),
+    );
+    for (const malo of ['', '   ', 'x'.repeat(501), 'a\u0000b', 'a\u202Eb', 7, undefined]) {
+      expect(validarMotivoDeCancelacionDeAcuerdo(malo).ok, JSON.stringify(malo)).toBe(false);
+    }
   });
 });

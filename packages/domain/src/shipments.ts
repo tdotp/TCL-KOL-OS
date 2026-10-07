@@ -177,6 +177,24 @@ export function validarMotivoDeCancelacion(value: unknown): Result<string> {
   return ok(texto);
 }
 
+/**
+ * «Entregado» no puede fecharse antes que «enviado» (las dos fechas son `YYYY-MM-DD`; el mismo día vale).
+ * La base lo repite en el evento `shipment.delivered` (033). Sin fecha de envío conocida no hay nada que comparar.
+ */
+export function validarOrdenDeFechasDeEnvio(
+  enviadoEl: string | null | undefined,
+  entregadoEl: string | null | undefined,
+): Result<true> {
+  if (typeof enviadoEl === 'string' && typeof entregadoEl === 'string' && entregadoEl < enviadoEl) {
+    return err({
+      code: 'VALIDATION_FAILED',
+      message: `La entrega (${entregadoEl}) no puede fecharse antes del envío (${enviadoEl}).`,
+      details: { field: 'happenedOn', reason: 'delivered_before_shipped' },
+    });
+  }
+  return ok(true);
+}
+
 // ─────────────────────────── Ítems ─────────────────────────────────────────────
 
 export interface ShipmentItemInput {
@@ -222,7 +240,8 @@ export type PreparationFailure =
   | { readonly reason: 'not_committed'; readonly campaignProductId: string };
 
 /**
- * Espejo de `shipments_preparacion` (029): en la transición a `prepared`, ≥ 1 ítem; cada ítem asignado a la
+ * Espejo de `shipments_preparacion` (029/033): en la transición a `prepared` Y a `shipped` (la versión vigente del
+ * acuerdo pudo cambiar entre ambas), ≥ 1 ítem; cada ítem asignado a la
  * participación y, si el acuerdo vigente es barter o mixed, comprometido en la versión vigente.
  * Lista TODOS los incumplimientos (la UI los muestra juntos).
  */

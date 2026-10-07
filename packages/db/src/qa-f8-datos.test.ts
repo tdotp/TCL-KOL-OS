@@ -1,10 +1,9 @@
 /**
  * QA ADVERSARIAL F8 · datos, estados y puertas (V2 · Fase 8). Dos bloques:
  *
- *  A. ABIERTO (`it.fails`): hallazgos CONFIRMADOS. Cada uno ejecuta el ataque UNA vez y la ÚNICA aserción que puede
- *     fallar es `expect(ataque.vulnerable).toBe(false)`; así un error de preparación no se confunde con el hallazgo
- *     (las pruebas de control se corrieron volteando `it.fails` → `it` y `toBe(false)` → `toBe(true)`).
- *     Al corregir el defecto: quitar `.fails`.
+ *  A. CORREGIDO (antes `it.fails`): hallazgos CONFIRMADOS por el QA y corregidos en FIX-B (migración 033 y los
+ *     casos de uso). Cada uno ejecuta el ataque UNA vez y la ÚNICA aserción que puede fallar es
+ *     `expect(ataque.vulnerable).toBe(false)`; así un error de preparación no se confunde con el hallazgo.
  *  B. SEGURO (`it`): lo que se atacó y NO cedió, como regresión permanente.
  *
  * Datos sintéticos. Base `_test`. La limpieza usa el bypass de pruebas de `limpiarEscenarioDeOperacion`.
@@ -91,10 +90,10 @@ async function aceptada(fn: () => Promise<unknown>): Promise<boolean> {
 const dosPersonas = async (): Promise<{ ci: string; influencerId: string }> => nuevaParticipacion(op, 'Qa8');
 
 // ═════════════════════════════════════════════════════════════════════════════
-// A. ABIERTO — hallazgos confirmados
+// A. CORREGIDO — hallazgos confirmados por el QA
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe('ABIERTO P2 · numeric acepta NaN en las columnas de dinero y KPI (SQL directo)', () => {
+describe('CORREGIDO P2 · numeric acepta NaN en las columnas de dinero y KPI (SQL directo)', () => {
   async function ataqueFee(): Promise<Ataque> {
     const { ci } = await dosPersonas();
     const ok = await aceptada(() =>
@@ -130,12 +129,12 @@ describe('ABIERTO P2 · numeric acepta NaN en las columnas de dinero y KPI (SQL 
     return { vulnerable: ok, detalle: 'fee_amount = NaN aceptado (NaN > 0 es verdadero en numeric)' };
   }
 
-  it.fails('agreement_versions.fee_amount rechaza NaN', async () => {
+  it('agreement_versions.fee_amount rechaza NaN', async () => {
     const ataque = await ataqueFee();
     expect(ataque.vulnerable, ataque.detalle).toBe(false);
   });
 
-  it.fails('kpi_measurements.value y kpi_targets.target_value rechazan NaN', async () => {
+  it('kpi_measurements.value y kpi_targets.target_value rechazan NaN', async () => {
     const { ci } = await dosPersonas();
     const medicion = await aceptada(() =>
       query(
@@ -160,7 +159,7 @@ describe('ABIERTO P2 · numeric acepta NaN en las columnas de dinero y KPI (SQL 
     expect(ataque.vulnerable, ataque.detalle).toBe(false);
   });
 
-  it.fails('shipments.shipping_cost rechaza NaN', async () => {
+  it('shipments.shipping_cost rechaza NaN', async () => {
     const { ci } = await dosPersonas();
     const ok = await aceptada(() =>
       transaction(async (c) => {
@@ -186,7 +185,7 @@ describe('ABIERTO P2 · numeric acepta NaN en las columnas de dinero y KPI (SQL 
   });
 });
 
-describe('ABIERTO P1 · revelarPii y guardarPii aceptan el origen chat (el agente podría leer PII)', () => {
+describe('CORREGIDO P1 · revelarPii y guardarPii aceptan el origen chat (el agente podría leer PII)', () => {
   const CHAT = { origin: 'chat', correlation: { toolInvocationId: 'qa8-tool' } } as const;
 
   async function influencerDe(ci: string): Promise<string> {
@@ -197,24 +196,21 @@ describe('ABIERTO P1 · revelarPii y guardarPii aceptan el origen chat (el agent
     return f!.influencer_id;
   }
 
-  it.fails(
-    'guardarPii con origen chat se rechaza (HUMAN_CONFIRMATION_REQUIRED), como el resto de la operación',
-    async () => {
-      const { ci } = await dosPersonas();
-      const r = await guardarPii(
-        e.operativo,
-        { influencerId: await influencerDe(ci), phone: '3005550101' },
-        CHAT,
-      );
-      const ataque: Ataque = {
-        vulnerable: r.ok,
-        detalle: `guardarPii(chat) => ${r.ok ? 'OK' : r.error.code}`,
-      };
-      expect(ataque.vulnerable, ataque.detalle).toBe(false);
-    },
-  );
+  it('guardarPii con origen chat se rechaza (HUMAN_CONFIRMATION_REQUIRED), como el resto de la operación', async () => {
+    const { ci } = await dosPersonas();
+    const r = await guardarPii(
+      e.operativo,
+      { influencerId: await influencerDe(ci), phone: '3005550101' },
+      CHAT,
+    );
+    const ataque: Ataque = {
+      vulnerable: r.ok,
+      detalle: `guardarPii(chat) => ${r.ok ? 'OK' : r.error.code}`,
+    };
+    expect(ataque.vulnerable, ataque.detalle).toBe(false);
+  });
 
-  it.fails('revelarPii con origen chat NO devuelve el valor en claro', async () => {
+  it('revelarPii con origen chat NO devuelve el valor en claro', async () => {
     const { ci } = await dosPersonas();
     const guardado = exito(
       await guardarPii(e.operativo, { influencerId: await influencerDe(ci), phone: '3005550102' }),
@@ -229,55 +225,52 @@ describe('ABIERTO P1 · revelarPii y guardarPii aceptan el origen chat (el agent
   });
 });
 
-describe('ABIERTO P2 · un envío preparado sigue adelante con un producto que la versión vigente ya no compromete', () => {
-  it.fails(
-    'shipped se rechaza si el producto del envío dejó de estar comprometido (canje/mixto)',
-    async () => {
-      const { ci } = await nuevaParticipacion(op, 'Canje', [e.productos.p80, e.productos.pro]);
-      const a = await crearAcuerdoPorSql(op, { ci, mode: 'barter', productos: [[e.productos.p80, 2]] });
-      const envio = exito(
-        await crearEnvio(e.operativo, {
-          campaignInfluencerId: ci,
-          items: [{ campaignProductId: e.productos.p80, quantity: 1 }],
-          idempotencyKey: unico('env'),
-        }),
-      ).envio;
-      const preparado = exito(
-        await transicionarEnvio(e.operativo, {
-          shipmentId: envio.id,
-          to: 'prepared',
-          expectedSeq: envio.rowSeq,
-          idempotencyKey: unico('prep'),
-        }),
-      ).envio;
-      // Versión 2: ya no se compromete p80 (solo pro).
-      exito(
-        await registrarVersionDeAcuerdo(e.operativo, a.agreementId, {
-          compensationType: 'barter',
-          commitments: [{ campaignProductId: e.productos.pro, quantity: 1 }],
-          changeReason: 'Cambia el producto del canje',
-          expectedVersion: 1,
-          idempotencyKey: unico('v2'),
-        }),
-      );
-      const enviado = await transicionarEnvio(e.operativo, {
-        shipmentId: preparado.id,
-        to: 'shipped',
-        expectedSeq: preparado.rowSeq,
-        idempotencyKey: unico('ship'),
-        happenedOn: dia(1),
-      });
-      const ataque: Ataque = {
-        vulnerable: enviado.ok,
-        detalle: `shipped con p80 NO comprometido en v2 => ${enviado.ok ? 'OK (se envió)' : enviado.error.code}`,
-      };
-      expect(ataque.vulnerable, ataque.detalle).toBe(false);
-    },
-  );
+describe('CORREGIDO P2 · un envío preparado sigue adelante con un producto que la versión vigente ya no compromete', () => {
+  it('shipped se rechaza si el producto del envío dejó de estar comprometido (canje/mixto)', async () => {
+    const { ci } = await nuevaParticipacion(op, 'Canje', [e.productos.p80, e.productos.pro]);
+    const a = await crearAcuerdoPorSql(op, { ci, mode: 'barter', productos: [[e.productos.p80, 2]] });
+    const envio = exito(
+      await crearEnvio(e.operativo, {
+        campaignInfluencerId: ci,
+        items: [{ campaignProductId: e.productos.p80, quantity: 1 }],
+        idempotencyKey: unico('env'),
+      }),
+    ).envio;
+    const preparado = exito(
+      await transicionarEnvio(e.operativo, {
+        shipmentId: envio.id,
+        to: 'prepared',
+        expectedSeq: envio.rowSeq,
+        idempotencyKey: unico('prep'),
+      }),
+    ).envio;
+    // Versión 2: ya no se compromete p80 (solo pro).
+    exito(
+      await registrarVersionDeAcuerdo(e.operativo, a.agreementId, {
+        compensationType: 'barter',
+        commitments: [{ campaignProductId: e.productos.pro, quantity: 1 }],
+        changeReason: 'Cambia el producto del canje',
+        expectedVersion: 1,
+        idempotencyKey: unico('v2'),
+      }),
+    );
+    const enviado = await transicionarEnvio(e.operativo, {
+      shipmentId: preparado.id,
+      to: 'shipped',
+      expectedSeq: preparado.rowSeq,
+      idempotencyKey: unico('ship'),
+      happenedOn: dia(1),
+    });
+    const ataque: Ataque = {
+      vulnerable: enviado.ok,
+      detalle: `shipped con p80 NO comprometido en v2 => ${enviado.ok ? 'OK (se envió)' : enviado.error.code}`,
+    };
+    expect(ataque.vulnerable, ataque.detalle).toBe(false);
+  });
 });
 
-describe('ABIERTO P2 · un rol sin payment:report altera el soporte de un pago ya reportado', () => {
-  it.fails('retractarEvidencia del comprobante de un pago reportado exige payment:report', async () => {
+describe('CORREGIDO P2 · un rol sin payment:report altera el soporte de un pago ya reportado', () => {
+  it('retractarEvidencia del comprobante de un pago reportado exige payment:report', async () => {
     const { ci } = await dosPersonas();
     const a = await crearAcuerdoPorSql(op, { ci, mode: 'fee' });
     const reportado = exito(
@@ -306,74 +299,71 @@ describe('ABIERTO P2 · un rol sin payment:report altera el soporte de un pago y
   });
 });
 
-describe('ABIERTO P2 · doble envío del formulario: la perdedora de la carrera recibe un CONFLICTO en vez del reintento idéntico', () => {
-  it.fails(
-    'crearEnvio con la misma clave, cuando la ganadora ya confirmó, devuelve ok con repetido=true',
-    async () => {
-      const { ci } = await nuevaParticipacion(op, 'Doble', [e.productos.p80]);
-      const clave = unico('doble');
-      const entrada = {
-        campaignInfluencerId: ci,
-        items: [{ campaignProductId: e.productos.p80, quantity: 1 }],
-        idempotencyKey: clave,
-      };
-      // Misma `huellaExtra` que arma `crearEnvio`: así la ganadora y la perdedora comparten huella.
-      const huellaExtra = {
-        campaignInfluencerId: ci,
-        items: [{ p: e.productos.p80, q: 1 }],
-        carrier: null,
-        trackingRef: null,
-        shippingCost: null,
-        shippingCurrency: null,
-        piiRecordId: null,
-      };
-      // Fija el orden: la perdedora pasa su comprobación de idempotencia, inserta su envío y se detiene en la FK del
-      // ítem (el producto está bloqueado); mientras tanto la ganadora confirma su evento con la misma clave.
-      const bloqueo = await getPool().connect();
-      let perdedora: ReturnType<typeof crearEnvio> | undefined;
-      try {
-        await bloqueo.query('BEGIN');
-        await bloqueo.query(`SELECT id FROM campaign_products WHERE id = $1 FOR UPDATE`, [e.productos.p80]);
-        perdedora = crearEnvio(e.operativo, entrada);
-        await new Promise((r) => setTimeout(r, 400));
-        await transaction(async (c) => {
-          const id = await insertar(c, 'shipments', {
-            organization_id: e.operativo.organizationId,
-            campaign_id: e.campanaId,
-            campaign_influencer_id: ci,
-            created_by: e.operativo.id,
-          });
-          await aplicarEventoOperativo(c, {
-            actor: e.operativo,
-            action: 'shipment:manage',
-            sujeto: { tipo: 'shipment', id },
-            eventType: 'shipment.created',
-            toStatus: 'pending',
-            expectedSeq: 0,
-            idempotencyKey: clave,
-            huellaExtra,
-          });
+describe('CORREGIDO P2 · doble envío del formulario: la perdedora de la carrera recibe un CONFLICTO en vez del reintento idéntico', () => {
+  it('crearEnvio con la misma clave, cuando la ganadora ya confirmó, devuelve ok con repetido=true', async () => {
+    const { ci } = await nuevaParticipacion(op, 'Doble', [e.productos.p80]);
+    const clave = unico('doble');
+    const entrada = {
+      campaignInfluencerId: ci,
+      items: [{ campaignProductId: e.productos.p80, quantity: 1 }],
+      idempotencyKey: clave,
+    };
+    // Misma `huellaExtra` que arma `crearEnvio`: así la ganadora y la perdedora comparten huella.
+    const huellaExtra = {
+      campaignInfluencerId: ci,
+      items: [{ p: e.productos.p80, q: 1 }],
+      carrier: null,
+      trackingRef: null,
+      shippingCost: null,
+      shippingCurrency: null,
+      piiRecordId: null,
+    };
+    // Fija el orden: la perdedora pasa su comprobación de idempotencia, inserta su envío y se detiene en la FK del
+    // ítem (el producto está bloqueado); mientras tanto la ganadora confirma su evento con la misma clave.
+    const bloqueo = await getPool().connect();
+    let perdedora: ReturnType<typeof crearEnvio> | undefined;
+    try {
+      await bloqueo.query('BEGIN');
+      await bloqueo.query(`SELECT id FROM campaign_products WHERE id = $1 FOR UPDATE`, [e.productos.p80]);
+      perdedora = crearEnvio(e.operativo, entrada);
+      await new Promise((r) => setTimeout(r, 400));
+      await transaction(async (c) => {
+        const id = await insertar(c, 'shipments', {
+          organization_id: e.operativo.organizationId,
+          campaign_id: e.campanaId,
+          campaign_influencer_id: ci,
+          created_by: e.operativo.id,
         });
-      } finally {
-        await bloqueo.query('COMMIT');
-        bloqueo.release();
-      }
-      const r = await perdedora!;
-      const [n] = await query<{ n: string }>(
-        `SELECT count(*) AS n FROM shipments WHERE campaign_influencer_id = $1`,
-        [ci],
-      );
-      expect(Number(n!.n), 'nunca se duplica el envío').toBe(1);
-      const ataque: Ataque = {
-        vulnerable: !r.ok,
-        detalle: `perdedora => ${r.ok ? `ok repetido=${r.value.repetido}` : `${r.error.code}: ${r.error.message}`}`,
-      };
-      expect(ataque.vulnerable, ataque.detalle).toBe(false);
-    },
-  );
+        await aplicarEventoOperativo(c, {
+          actor: e.operativo,
+          action: 'shipment:manage',
+          sujeto: { tipo: 'shipment', id },
+          eventType: 'shipment.created',
+          toStatus: 'pending',
+          expectedSeq: 0,
+          idempotencyKey: clave,
+          huellaExtra,
+        });
+      });
+    } finally {
+      await bloqueo.query('COMMIT');
+      bloqueo.release();
+    }
+    const r = await perdedora!;
+    const [n] = await query<{ n: string }>(
+      `SELECT count(*) AS n FROM shipments WHERE campaign_influencer_id = $1`,
+      [ci],
+    );
+    expect(Number(n!.n), 'nunca se duplica el envío').toBe(1);
+    const ataque: Ataque = {
+      vulnerable: !r.ok,
+      detalle: `perdedora => ${r.ok ? `ok repetido=${r.value.repetido}` : `${r.error.code}: ${r.error.message}`}`,
+    };
+    expect(ataque.vulnerable, ataque.detalle).toBe(false);
+  });
 });
 
-describe('ABIERTO P1 · historia: los datos de un envío ya despachado/entregado/cancelado se reescriben por UPDATE, sin evento', () => {
+describe('CORREGIDO P1 · historia: los datos de un envío ya despachado/entregado/cancelado se reescriben por UPDATE, sin evento', () => {
   async function envioHasta(hasta: 'delivered' | 'cancelled'): Promise<{ id: string; rowSeq: number }> {
     const { ci } = await nuevaParticipacion(op, 'Historia', [e.productos.p80]);
     let envio = exito(
@@ -412,267 +402,246 @@ describe('ABIERTO P1 · historia: los datos de un envío ya despachado/entregado
     return { id: envio.id, rowSeq: envio.rowSeq };
   }
 
-  it.fails(
-    'carrier, tracking_ref y shipping_cost de un envío entregado, y cancel_reason de uno cancelado, no cambian fuera de una transición',
-    async () => {
-      const entregado = await envioHasta('delivered');
-      const cancelado = await envioHasta('cancelled');
-      const antes = await query<{ row_seq: number; last_event_id: string }>(
-        `SELECT row_seq, last_event_id FROM shipments WHERE id = $1`,
-        [entregado.id],
-      );
-      const aceptadas: string[] = [];
-      for (const [columna, sql, id] of [
-        ['tracking_ref', `UPDATE shipments SET tracking_ref = 'GUIA-REESCRITA' WHERE id = $1`, entregado.id],
-        ['carrier', `UPDATE shipments SET carrier = 'Otra' WHERE id = $1`, entregado.id],
-        ['shipping_cost', `UPDATE shipments SET shipping_cost = 1 WHERE id = $1`, entregado.id],
-        [
-          'cancel_reason',
-          `UPDATE shipments SET cancel_reason = 'Motivo reescrito' WHERE id = $1`,
-          cancelado.id,
-        ],
-      ] as const) {
-        if (await aceptada(() => query(sql, [id]))) aceptadas.push(columna);
-      }
-      const despues = await query<{ row_seq: number; last_event_id: string }>(
-        `SELECT row_seq, last_event_id FROM shipments WHERE id = $1`,
-        [entregado.id],
-      );
-      const ataque: Ataque = {
-        vulnerable: aceptadas.length > 0,
-        detalle: `UPDATE aceptado sobre ${aceptadas.join(', ')}; row_seq ${antes[0]!.row_seq} → ${despues[0]!.row_seq} y last_event_id intacto: no queda rastro`,
-      };
-      expect(ataque.vulnerable, ataque.detalle).toBe(false);
-    },
-  );
+  it('carrier, tracking_ref y shipping_cost de un envío entregado, y cancel_reason de uno cancelado, no cambian fuera de una transición', async () => {
+    const entregado = await envioHasta('delivered');
+    const cancelado = await envioHasta('cancelled');
+    const antes = await query<{ row_seq: number; last_event_id: string }>(
+      `SELECT row_seq, last_event_id FROM shipments WHERE id = $1`,
+      [entregado.id],
+    );
+    const aceptadas: string[] = [];
+    for (const [columna, sql, id] of [
+      ['tracking_ref', `UPDATE shipments SET tracking_ref = 'GUIA-REESCRITA' WHERE id = $1`, entregado.id],
+      ['carrier', `UPDATE shipments SET carrier = 'Otra' WHERE id = $1`, entregado.id],
+      ['shipping_cost', `UPDATE shipments SET shipping_cost = 1 WHERE id = $1`, entregado.id],
+      [
+        'cancel_reason',
+        `UPDATE shipments SET cancel_reason = 'Motivo reescrito' WHERE id = $1`,
+        cancelado.id,
+      ],
+    ] as const) {
+      if (await aceptada(() => query(sql, [id]))) aceptadas.push(columna);
+    }
+    const despues = await query<{ row_seq: number; last_event_id: string }>(
+      `SELECT row_seq, last_event_id FROM shipments WHERE id = $1`,
+      [entregado.id],
+    );
+    const ataque: Ataque = {
+      vulnerable: aceptadas.length > 0,
+      detalle: `UPDATE aceptado sobre ${aceptadas.join(', ')}; row_seq ${antes[0]!.row_seq} → ${despues[0]!.row_seq} y last_event_id intacto: no queda rastro`,
+    };
+    expect(ataque.vulnerable, ataque.detalle).toBe(false);
+  });
 });
 
-describe('ABIERTO P3 · robustez: entradas que LANZAN (500) en vez de devolver VALIDATION_FAILED', () => {
-  it.fails(
-    'NUL (U+0000) en conditions / motivo de cancelación / motivo de versión devuelve un Result',
-    async () => {
-      const r1 = await lanza(async () => {
-        const { ci } = await dosPersonas();
-        return crearAcuerdo(e.operativo, {
-          campaignInfluencerId: ci,
+describe('CORREGIDO P3 · robustez: entradas que LANZAN (500) en vez de devolver VALIDATION_FAILED', () => {
+  it('NUL (U+0000) en conditions / motivo de cancelación / motivo de versión devuelve un Result', async () => {
+    const r1 = await lanza(async () => {
+      const { ci } = await dosPersonas();
+      return crearAcuerdo(e.operativo, {
+        campaignInfluencerId: ci,
+        compensationType: 'fee',
+        feeAmount: 100,
+        feeCurrency: 'COP',
+        conditions: 'a\u0000b',
+        idempotencyKey: unico('nul'),
+      });
+    });
+    const r2 = await lanza(async () => {
+      const { ci } = await dosPersonas();
+      const a = await crearAcuerdoPorSql(op, { ci, mode: 'fee' });
+      return cancelarAcuerdo(e.operativo, a.agreementId, {
+        reason: 'a\u0000b',
+        idempotencyKey: unico('nul'),
+      });
+    });
+    const r3 = await lanza(async () => {
+      const { ci } = await dosPersonas();
+      const a = await crearAcuerdoPorSql(op, { ci, mode: 'fee' });
+      return registrarVersionDeAcuerdo(e.operativo, a.agreementId, {
+        compensationType: 'fee',
+        feeAmount: 200,
+        feeCurrency: 'COP',
+        changeReason: 'a\u0000b',
+        expectedVersion: 1,
+        idempotencyKey: unico('nul'),
+      });
+    });
+    const ataque: Ataque = {
+      vulnerable: r1.lanzo || r2.lanzo || r3.lanzo,
+      detalle: `conditions=${r1.lanzo} cancel=${r2.lanzo} version=${r3.lanzo}: ${r1.mensaje || r2.mensaje || r3.mensaje}`,
+    };
+    expect(ataque.vulnerable, ataque.detalle).toBe(false);
+  });
+
+  it('fecha 0000-01-01 (válida para el validador, fuera de rango para date) devuelve un Result', async () => {
+    const { ci } = await nuevaParticipacion(op, 'Fecha', [e.productos.p80]);
+    const a = await crearAcuerdoPorSql(op, { ci, mode: 'fee' });
+    const intentos = await Promise.all([
+      lanza(async () =>
+        crearAcuerdo(e.operativo, {
+          campaignInfluencerId: (await dosPersonas()).ci,
           compensationType: 'fee',
           feeAmount: 100,
           feeCurrency: 'COP',
-          conditions: 'a\u0000b',
-          idempotencyKey: unico('nul'),
-        });
-      });
-      const r2 = await lanza(async () => {
-        const { ci } = await dosPersonas();
-        const a = await crearAcuerdoPorSql(op, { ci, mode: 'fee' });
-        return cancelarAcuerdo(e.operativo, a.agreementId, {
-          reason: 'a\u0000b',
-          idempotencyKey: unico('nul'),
-        });
-      });
-      const r3 = await lanza(async () => {
-        const { ci } = await dosPersonas();
-        const a = await crearAcuerdoPorSql(op, { ci, mode: 'fee' });
-        return registrarVersionDeAcuerdo(e.operativo, a.agreementId, {
-          compensationType: 'fee',
-          feeAmount: 200,
-          feeCurrency: 'COP',
-          changeReason: 'a\u0000b',
-          expectedVersion: 1,
-          idempotencyKey: unico('nul'),
-        });
-      });
-      const ataque: Ataque = {
-        vulnerable: r1.lanzo || r2.lanzo || r3.lanzo,
-        detalle: `conditions=${r1.lanzo} cancel=${r2.lanzo} version=${r3.lanzo}: ${r1.mensaje || r2.mensaje || r3.mensaje}`,
-      };
-      expect(ataque.vulnerable, ataque.detalle).toBe(false);
-    },
-  );
-
-  it.fails(
-    'fecha 0000-01-01 (válida para el validador, fuera de rango para date) devuelve un Result',
-    async () => {
-      const { ci } = await nuevaParticipacion(op, 'Fecha', [e.productos.p80]);
-      const a = await crearAcuerdoPorSql(op, { ci, mode: 'fee' });
-      const intentos = await Promise.all([
-        lanza(async () =>
-          crearAcuerdo(e.operativo, {
-            campaignInfluencerId: (await dosPersonas()).ci,
-            compensationType: 'fee',
-            feeAmount: 100,
-            feeCurrency: 'COP',
-            startsOn: '0000-01-01',
-            idempotencyKey: unico('f0'),
-          }),
-        ),
-        lanza(() =>
-          registrarDocumentoDeCobro(e.operativo, {
-            paymentObligationId: a.obligationId,
-            documentNumber: unico('D'),
-            issuedOn: '0000-01-01',
-            claimedAmount: 10,
-            claimedCurrency: 'COP',
-            archivo: archivoDePrueba(),
-            idempotencyKey: unico('f0'),
-          }),
-        ),
-        lanza(() =>
-          reportarPago(e.operativo, {
-            paymentObligationId: a.obligationId,
-            expectedSeq: 1,
-            idempotencyKey: unico('f0'),
-            paidOn: '0000-01-01',
-            externalReference: 'R',
-          }),
-        ),
-        lanza(() =>
-          registrarMedicionKpi(e.operativo, {
-            campaignInfluencerId: ci,
-            metric: 'views',
-            value: 1,
-            observedAt: '0000-01-01T00:00:00Z',
-            idempotencyKey: unico('f0'),
-          }),
-        ),
-      ]);
-      const ataque: Ataque = {
-        vulnerable: intentos.some((i) => i.lanzo),
-        detalle: intentos.map((i) => (i.lanzo ? i.mensaje.slice(0, 60) : 'Result')).join(' | '),
-      };
-      expect(ataque.vulnerable, ataque.detalle).toBe(false);
-    },
-  );
-});
-
-describe('ABIERTO P3 · validación de contenido de campos (moneda, bidi, fechas incoherentes)', () => {
-  it.fails(
-    'una moneda que no existe en ISO 4217 (XXX, ABC) no se acepta como moneda de un acuerdo',
-    async () => {
-      const { ci } = await dosPersonas();
-      const r = await crearAcuerdo(e.operativo, {
-        campaignInfluencerId: ci,
-        compensationType: 'fee',
-        feeAmount: 100,
-        feeCurrency: 'ABC',
-        idempotencyKey: unico('mon'),
-      });
-      const ataque: Ataque = {
-        vulnerable: r.ok,
-        detalle: `feeCurrency ABC => ${r.ok ? 'OK' : r.error.code}`,
-      };
-      expect(ataque.vulnerable, ataque.detalle).toBe(false);
-    },
-  );
-
-  it.fails(
-    'caracteres bidi/invisibles (U+202E, U+200B) no entran en conditions, motivos ni claves de idempotencia',
-    async () => {
-      const { ci } = await dosPersonas();
-      const a = await crearAcuerdo(e.operativo, {
-        campaignInfluencerId: ci,
-        compensationType: 'fee',
-        feeAmount: 100,
-        feeCurrency: 'COP',
-        conditions: 'pagar ‮odagap‬ antes',
-        idempotencyKey: unico('bidi'),
-      });
-      const k = await crearAcuerdo(e.operativo, {
-        campaignInfluencerId: (await dosPersonas()).ci,
-        compensationType: 'fee',
-        feeAmount: 100,
-        feeCurrency: 'COP',
-        idempotencyKey: `${unico('bidi')}‮`,
-      });
-      const ataque: Ataque = { vulnerable: a.ok || k.ok, detalle: `conditions=${a.ok} clave=${k.ok}` };
-      expect(ataque.vulnerable, ataque.detalle).toBe(false);
-    },
-  );
-
-  it.fails(
-    '«entregado» no puede fecharse antes que «enviado»; el documento de cobro no se emite en el futuro',
-    async () => {
-      const { ci } = await nuevaParticipacion(op, 'Fechas', [e.productos.p80]);
-      const envio = exito(
-        await crearEnvio(e.operativo, {
+          startsOn: '0000-01-01',
+          idempotencyKey: unico('f0'),
+        }),
+      ),
+      lanza(() =>
+        registrarDocumentoDeCobro(e.operativo, {
+          paymentObligationId: a.obligationId,
+          documentNumber: unico('D'),
+          issuedOn: '0000-01-01',
+          claimedAmount: 10,
+          claimedCurrency: 'COP',
+          archivo: archivoDePrueba(),
+          idempotencyKey: unico('f0'),
+        }),
+      ),
+      lanza(() =>
+        reportarPago(e.operativo, {
+          paymentObligationId: a.obligationId,
+          expectedSeq: 1,
+          idempotencyKey: unico('f0'),
+          paidOn: '0000-01-01',
+          externalReference: 'R',
+        }),
+      ),
+      lanza(() =>
+        registrarMedicionKpi(e.operativo, {
           campaignInfluencerId: ci,
-          items: [{ campaignProductId: e.productos.p80, quantity: 1 }],
-          idempotencyKey: unico('env'),
+          metric: 'views',
+          value: 1,
+          observedAt: '0000-01-01T00:00:00Z',
+          idempotencyKey: unico('f0'),
         }),
-      ).envio;
-      const p = exito(
-        await transicionarEnvio(e.operativo, {
-          shipmentId: envio.id,
-          to: 'prepared',
-          expectedSeq: envio.rowSeq,
-          idempotencyKey: unico('p'),
-        }),
-      ).envio;
-      const s = exito(
-        await transicionarEnvio(e.operativo, {
-          shipmentId: p.id,
-          to: 'shipped',
-          expectedSeq: p.rowSeq,
-          idempotencyKey: unico('s'),
-          happenedOn: dia(2),
-        }),
-      ).envio;
-      const d = await transicionarEnvio(e.operativo, {
-        shipmentId: s.id,
-        to: 'delivered',
-        expectedSeq: s.rowSeq,
-        idempotencyKey: unico('d'),
-        happenedOn: dia(30),
-      });
-      const a = await crearAcuerdoPorSql(op, { ci: (await dosPersonas()).ci, mode: 'fee' });
-      const futuro = await registrarDocumentoDeCobro(e.operativo, {
-        paymentObligationId: a.obligationId,
-        documentNumber: unico('F'),
-        issuedOn: '2999-01-01',
-        claimedAmount: 10,
-        claimedCurrency: 'COP',
-        archivo: archivoDePrueba(),
-        idempotencyKey: unico('fut'),
-      });
-      const ataque: Ataque = {
-        vulnerable: d.ok || futuro.ok,
-        detalle: `delivered(hace 30 d) tras shipped(hace 2 d)=${d.ok}; issuedOn 2999=${futuro.ok}`,
-      };
-      expect(ataque.vulnerable, ataque.detalle).toBe(false);
-    },
-  );
+      ),
+    ]);
+    const ataque: Ataque = {
+      vulnerable: intentos.some((i) => i.lanzo),
+      detalle: intentos.map((i) => (i.lanzo ? i.mensaje.slice(0, 60) : 'Result')).join(' | '),
+    };
+    expect(ataque.vulnerable, ataque.detalle).toBe(false);
+  });
 });
 
-describe('ABIERTO P3 · KPI: etiquetas equivalentes bajo NFKC conviven como objetivos vigentes', () => {
-  it.fails(
-    '«Conversión» y «ｃonversión» (ancho completo) no pueden ser dos objetivos vigentes del mismo ámbito',
-    async () => {
-      const { ci } = await dosPersonas();
-      const a = await registrarKpiObjetivo(e.consultor, {
+describe('CORREGIDO P3 · validación de contenido de campos (moneda, bidi, fechas incoherentes)', () => {
+  it('una moneda que no existe en ISO 4217 (XXX, ABC) no se acepta como moneda de un acuerdo', async () => {
+    const { ci } = await dosPersonas();
+    const r = await crearAcuerdo(e.operativo, {
+      campaignInfluencerId: ci,
+      compensationType: 'fee',
+      feeAmount: 100,
+      feeCurrency: 'ABC',
+      idempotencyKey: unico('mon'),
+    });
+    const ataque: Ataque = {
+      vulnerable: r.ok,
+      detalle: `feeCurrency ABC => ${r.ok ? 'OK' : r.error.code}`,
+    };
+    expect(ataque.vulnerable, ataque.detalle).toBe(false);
+  });
+
+  it('caracteres bidi/invisibles (U+202E, U+200B) no entran en conditions, motivos ni claves de idempotencia', async () => {
+    const { ci } = await dosPersonas();
+    const a = await crearAcuerdo(e.operativo, {
+      campaignInfluencerId: ci,
+      compensationType: 'fee',
+      feeAmount: 100,
+      feeCurrency: 'COP',
+      conditions: 'pagar ‮odagap‬ antes',
+      idempotencyKey: unico('bidi'),
+    });
+    const k = await crearAcuerdo(e.operativo, {
+      campaignInfluencerId: (await dosPersonas()).ci,
+      compensationType: 'fee',
+      feeAmount: 100,
+      feeCurrency: 'COP',
+      idempotencyKey: `${unico('bidi')}‮`,
+    });
+    const ataque: Ataque = { vulnerable: a.ok || k.ok, detalle: `conditions=${a.ok} clave=${k.ok}` };
+    expect(ataque.vulnerable, ataque.detalle).toBe(false);
+  });
+
+  it('«entregado» no puede fecharse antes que «enviado»; el documento de cobro no se emite en el futuro', async () => {
+    const { ci } = await nuevaParticipacion(op, 'Fechas', [e.productos.p80]);
+    const envio = exito(
+      await crearEnvio(e.operativo, {
         campaignInfluencerId: ci,
-        metric: 'other',
-        otherLabel: 'Conversión',
-        targetValue: 5,
-        idempotencyKey: unico('nfkc'),
-      });
-      const b = await registrarKpiObjetivo(e.consultor, {
-        campaignInfluencerId: ci,
-        metric: 'other',
-        otherLabel: 'ｃonversión',
-        targetValue: 8,
-        idempotencyKey: unico('nfkc'),
-      });
-      const ataque: Ataque = {
-        vulnerable: a.ok && b.ok,
-        detalle: `NFC=${a.ok ? 'OK' : a.error.code} ancho-completo=${b.ok ? 'OK' : b.error.code} (la comparación del dominio las trata como la misma etiqueta con NFKC)`,
-      };
-      expect(ataque.vulnerable, ataque.detalle).toBe(false);
-    },
-  );
+        items: [{ campaignProductId: e.productos.p80, quantity: 1 }],
+        idempotencyKey: unico('env'),
+      }),
+    ).envio;
+    const p = exito(
+      await transicionarEnvio(e.operativo, {
+        shipmentId: envio.id,
+        to: 'prepared',
+        expectedSeq: envio.rowSeq,
+        idempotencyKey: unico('p'),
+      }),
+    ).envio;
+    const s = exito(
+      await transicionarEnvio(e.operativo, {
+        shipmentId: p.id,
+        to: 'shipped',
+        expectedSeq: p.rowSeq,
+        idempotencyKey: unico('s'),
+        happenedOn: dia(2),
+      }),
+    ).envio;
+    const d = await transicionarEnvio(e.operativo, {
+      shipmentId: s.id,
+      to: 'delivered',
+      expectedSeq: s.rowSeq,
+      idempotencyKey: unico('d'),
+      happenedOn: dia(30),
+    });
+    const a = await crearAcuerdoPorSql(op, { ci: (await dosPersonas()).ci, mode: 'fee' });
+    const futuro = await registrarDocumentoDeCobro(e.operativo, {
+      paymentObligationId: a.obligationId,
+      documentNumber: unico('F'),
+      issuedOn: '2999-01-01',
+      claimedAmount: 10,
+      claimedCurrency: 'COP',
+      archivo: archivoDePrueba(),
+      idempotencyKey: unico('fut'),
+    });
+    const ataque: Ataque = {
+      vulnerable: d.ok || futuro.ok,
+      detalle: `delivered(hace 30 d) tras shipped(hace 2 d)=${d.ok}; issuedOn 2999=${futuro.ok}`,
+    };
+    expect(ataque.vulnerable, ataque.detalle).toBe(false);
+  });
 });
 
-describe('ABIERTO P3 · la marca de tiempo de la evidencia se reescribe', () => {
-  it.fails('source_documents.created_at de una evidencia operativa no cambia por UPDATE', async () => {
+describe('CORREGIDO P3 · KPI: etiquetas equivalentes bajo NFKC conviven como objetivos vigentes', () => {
+  it('«Conversión» y «ｃonversión» (ancho completo) no pueden ser dos objetivos vigentes del mismo ámbito', async () => {
+    const { ci } = await dosPersonas();
+    const a = await registrarKpiObjetivo(e.consultor, {
+      campaignInfluencerId: ci,
+      metric: 'other',
+      otherLabel: 'Conversión',
+      targetValue: 5,
+      idempotencyKey: unico('nfkc'),
+    });
+    const b = await registrarKpiObjetivo(e.consultor, {
+      campaignInfluencerId: ci,
+      metric: 'other',
+      otherLabel: 'ｃonversión',
+      targetValue: 8,
+      idempotencyKey: unico('nfkc'),
+    });
+    const ataque: Ataque = {
+      vulnerable: a.ok && b.ok,
+      detalle: `NFC=${a.ok ? 'OK' : a.error.code} ancho-completo=${b.ok ? 'OK' : b.error.code} (la comparación del dominio las trata como la misma etiqueta con NFKC)`,
+    };
+    expect(ataque.vulnerable, ataque.detalle).toBe(false);
+  });
+});
+
+describe('CORREGIDO P3 · la marca de tiempo de la evidencia se reescribe', () => {
+  it('source_documents.created_at de una evidencia operativa no cambia por UPDATE', async () => {
     const { ci } = await nuevaParticipacion(op, 'Marca', [e.productos.p80]);
     const envio = exito(
       await crearEnvio(e.operativo, {
@@ -705,8 +674,8 @@ describe('ABIERTO P3 · la marca de tiempo de la evidencia se reescribe', () => 
   });
 });
 
-describe('ABIERTO P3 · PII y evidencia', () => {
-  it.fails('un envío nuevo no se enlaza a una versión de PII que ya no es la vigente', async () => {
+describe('CORREGIDO P3 · PII y evidencia', () => {
+  it('un envío nuevo no se enlaza a una versión de PII que ya no es la vigente', async () => {
     const { ci, influencerId } = await dosPersonas();
     const v1 = exito(await guardarPii(e.operativo, { influencerId, address: 'Calle 1 # 2-3 Bogotá' })).record;
     exito(await guardarPii(e.operativo, { influencerId, address: 'Carrera 9 # 8-7 Medellín' }));
@@ -726,51 +695,48 @@ describe('ABIERTO P3 · PII y evidencia', () => {
     expect(ataque.vulnerable, ataque.detalle).toBe(false);
   });
 
-  it.fails(
-    'la evidencia financiera reutilizada por hash no expone su nombre de archivo a shipment:read (consultor)',
-    async () => {
-      const financiero = 'cuenta_cobro_VALENTINA_5millones_QA8.pdf';
-      const contenido = archivoDePrueba().contenido;
-      const { ci } = await nuevaParticipacion(op, 'Reuso', [e.productos.p80]);
-      const a = await crearAcuerdoPorSql(op, { ci, mode: 'fee' });
-      exito(
-        await registrarDocumentoDeCobro(e.operativo, {
-          paymentObligationId: a.obligationId,
-          documentNumber: unico('RE'),
-          issuedOn: dia(1),
-          claimedAmount: 5_000_000,
-          claimedCurrency: 'COP',
-          archivo: { filename: financiero, contenido },
-          idempotencyKey: unico('reuso'),
-        }),
-      );
-      const envio = exito(
-        await crearEnvio(e.operativo, {
-          campaignInfluencerId: ci,
-          items: [{ campaignProductId: e.productos.p80, quantity: 1 }],
-          idempotencyKey: unico('env'),
-        }),
-      ).envio;
-      exito(
-        await adjuntarEvidenciaOperativa(e.operativo, {
-          subjectType: 'shipment',
-          subjectId: envio.id,
-          expectedSeq: envio.rowSeq,
-          idempotencyKey: unico('adj'),
-          kind: 'guia',
-          archivo: { filename: 'guia.pdf', contenido },
-        }),
-      );
-      const visto = exito(
-        await listarEvidenciaDeSujeto(e.consultor, { subjectType: 'shipment', subjectId: envio.id }),
-      );
-      const ataque: Ataque = {
-        vulnerable: visto.some((x) => x.filename === financiero),
-        detalle: `consultor lista la evidencia del envío: ${visto.map((x) => x.filename).join(', ')}`,
-      };
-      expect(ataque.vulnerable, ataque.detalle).toBe(false);
-    },
-  );
+  it('la evidencia financiera reutilizada por hash no expone su nombre de archivo a shipment:read (consultor)', async () => {
+    const financiero = 'cuenta_cobro_VALENTINA_5millones_QA8.pdf';
+    const contenido = archivoDePrueba().contenido;
+    const { ci } = await nuevaParticipacion(op, 'Reuso', [e.productos.p80]);
+    const a = await crearAcuerdoPorSql(op, { ci, mode: 'fee' });
+    exito(
+      await registrarDocumentoDeCobro(e.operativo, {
+        paymentObligationId: a.obligationId,
+        documentNumber: unico('RE'),
+        issuedOn: dia(1),
+        claimedAmount: 5_000_000,
+        claimedCurrency: 'COP',
+        archivo: { filename: financiero, contenido },
+        idempotencyKey: unico('reuso'),
+      }),
+    );
+    const envio = exito(
+      await crearEnvio(e.operativo, {
+        campaignInfluencerId: ci,
+        items: [{ campaignProductId: e.productos.p80, quantity: 1 }],
+        idempotencyKey: unico('env'),
+      }),
+    ).envio;
+    exito(
+      await adjuntarEvidenciaOperativa(e.operativo, {
+        subjectType: 'shipment',
+        subjectId: envio.id,
+        expectedSeq: envio.rowSeq,
+        idempotencyKey: unico('adj'),
+        kind: 'guia',
+        archivo: { filename: 'guia.pdf', contenido },
+      }),
+    );
+    const visto = exito(
+      await listarEvidenciaDeSujeto(e.consultor, { subjectType: 'shipment', subjectId: envio.id }),
+    );
+    const ataque: Ataque = {
+      vulnerable: visto.some((x) => x.filename === financiero),
+      detalle: `consultor lista la evidencia del envío: ${visto.map((x) => x.filename).join(', ')}`,
+    };
+    expect(ataque.vulnerable, ataque.detalle).toBe(false);
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

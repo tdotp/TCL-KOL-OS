@@ -17,11 +17,16 @@ import {
   eventTypesForTransition,
   initialStatusesOf,
   isCreationEventType,
+  FECHA_ISO_MAXIMA,
+  FECHA_ISO_MINIMA,
+  esClaveDeIdempotenciaValida,
   isIsoDate,
   isNoteEventType,
   isStaleTransition,
   isValidOperationalEdge,
+  manageActionForSubject,
   readActionForSubject,
+  tieneCaracteresNoValidos,
   roleMayRecordEvent,
   statusesOf,
   statusesProducedBy,
@@ -333,5 +338,58 @@ describe('idempotencia y concurrencia', () => {
   it('expected_seq distinto del vigente es transición obsoleta', () => {
     expect(isStaleTransition(3, 3)).toBe(false);
     expect(isStaleTransition(2, 3)).toBe(true);
+  });
+});
+
+describe('endurecimiento (FIX-B): fechas en rango, claves sin invisibles y capacidad de gestión', () => {
+  it('isIsoDate rechaza 0000-01-01 y lo que Postgres no guarda, y acepta los límites', () => {
+    for (const mala of [
+      '0000-01-01',
+      '0001-01-01',
+      '1899-12-31',
+      '2026-02-30',
+      '2026-00-10',
+      '',
+      '2026-1-1',
+    ]) {
+      expect(isIsoDate(mala), mala).toBe(false);
+    }
+    expect(isIsoDate(FECHA_ISO_MINIMA)).toBe(true);
+    expect(isIsoDate(FECHA_ISO_MAXIMA)).toBe(true);
+    expect(isIsoDate('2026-02-28')).toBe(true);
+    expect(isIsoDate('2028-02-29')).toBe(true);
+  });
+
+  it('tieneCaracteresNoValidos: NUL, control, invisibles y bidi; con multilinea tolera \\n \\r \\t', () => {
+    for (const mala of ['a\u0000b', 'a\u200Bb', 'a\u202Eb', 'a\u0007b', 'a\u00ADb']) {
+      expect(tieneCaracteresNoValidos(mala), JSON.stringify(mala)).toBe(true);
+      expect(tieneCaracteresNoValidos(mala, true), JSON.stringify(mala)).toBe(true);
+    }
+    expect(tieneCaracteresNoValidos('a\nb\tc')).toBe(true);
+    expect(tieneCaracteresNoValidos('a\nb\tc\r', true)).toBe(false);
+    expect(tieneCaracteresNoValidos('Canción ñandú 😀')).toBe(false);
+  });
+
+  it('la clave de idempotencia rechaza bidi e invisibles además de control, espacios y exceso', () => {
+    expect(esClaveDeIdempotenciaValida('envio-123:a')).toBe(true);
+    for (const mala of ['', ' x', 'x ', 'a\u0000', 'k\u202E', 'k\u200B', 'x'.repeat(201), 5, null]) {
+      expect(esClaveDeIdempotenciaValida(mala), JSON.stringify(mala)).toBe(false);
+    }
+    const r = validateOperationalEventRequest(
+      {
+        eventType: 'shipment.created',
+        subjectType: 'shipment',
+        toStatus: 'pending',
+        idempotencyKey: 'clave\u202E',
+      },
+      new Date(),
+    );
+    expect(r.ok).toBe(false);
+  });
+
+  it('la capacidad de gestión del sujeto: envío ⇒ shipment:manage; cobro y pago ⇒ billing:manage', () => {
+    expect(manageActionForSubject('shipment')).toBe('shipment:manage');
+    expect(manageActionForSubject('billing_document')).toBe('billing:manage');
+    expect(manageActionForSubject('payment_obligation')).toBe('billing:manage');
   });
 });

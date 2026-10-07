@@ -232,6 +232,14 @@ export function readActionForSubject(subject: OperationalSubjectType): Action {
   return subject === 'shipment' ? 'shipment:read' : 'finance:read';
 }
 
+/**
+ * Capacidad de GESTIÓN del sujeto: el envío se gestiona con `shipment:manage`; el documento de cobro y la
+ * obligación de pago con `billing:manage`. Quien retira evidencia de un sujeto necesita la de su sujeto.
+ */
+export function manageActionForSubject(subject: OperationalSubjectType): Action {
+  return subject === 'shipment' ? 'shipment:manage' : 'billing:manage';
+}
+
 // ─────────────────────────── Evidencia ─────────────────────────────────────────
 
 export const EVIDENCE_KINDS = [
@@ -302,14 +310,46 @@ function invalid<T>(field: string, message: string): Result<T> {
   return err({ code: 'VALIDATION_FAILED', message, details: { field } });
 }
 
-/** `YYYY-MM-DD` que es un día real del calendario. */
+/**
+ * Rango de fechas `YYYY-MM-DD` aceptado: dentro de lo que `date` de Postgres guarda sin error (el año 0000 no
+ * existe allí) y de lo que tiene sentido para un hecho operativo. Un valor fuera de rango es una validación
+ * fallida, nunca un 500 de la base.
+ */
+export const FECHA_ISO_MINIMA = '1900-01-01';
+export const FECHA_ISO_MAXIMA = '9999-12-31';
+
+/** `YYYY-MM-DD` que es un día real del calendario y está dentro de `FECHA_ISO_MINIMA..FECHA_ISO_MAXIMA`. */
 export function isIsoDate(value: unknown): value is string {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false;
+  if (value < FECHA_ISO_MINIMA || value > FECHA_ISO_MAXIMA) return false;
   const fecha = new Date(`${value}T00:00:00Z`);
   return !Number.isNaN(fecha.getTime()) && fecha.toISOString().slice(0, 10) === value;
 }
 
 const CONTROL = /[\p{Cc}\p{Cf}]/u;
+
+/**
+ * ¿El texto lleva caracteres de control (NUL incluido), invisibles o de dirección bidi (`\p{Cc}` y `\p{Cf}`:
+ * U+0000, U+200B, U+202E…)? Con `multilinea`, el salto de línea, el retorno y el tabulador se toleran.
+ * Criterio ÚNICO del dominio para texto libre de la operación (la web aplica el mismo).
+ */
+export function tieneCaracteresNoValidos(texto: string, multilinea = false): boolean {
+  return CONTROL.test(multilinea ? texto.replace(/[\n\r\t]/gu, ' ') : texto);
+}
+
+/**
+ * Clave de idempotencia válida: texto sin espacios en los extremos, de 1 a `MAX_IDEMPOTENCY_KEY_LENGTH`
+ * caracteres, sin control ni invisibles/bidi (una clave con U+202E parecería otra en pantalla).
+ */
+export function esClaveDeIdempotenciaValida(clave: unknown): clave is string {
+  return (
+    typeof clave === 'string' &&
+    clave === clave.trim() &&
+    clave !== '' &&
+    clave.length <= MAX_IDEMPOTENCY_KEY_LENGTH &&
+    !tieneCaracteresNoValidos(clave)
+  );
+}
 
 function textoOpcional(
   value: string | null | undefined,
@@ -358,7 +398,7 @@ export function validateOperationalEventRequest(
   }
 
   const key = typeof request.idempotencyKey === 'string' ? request.idempotencyKey : '';
-  if (key !== key.trim() || key === '' || key.length > MAX_IDEMPOTENCY_KEY_LENGTH || /[\p{Cc}]/u.test(key)) {
+  if (!esClaveDeIdempotenciaValida(key)) {
     return invalid(
       'idempotencyKey',
       'La clave de idempotencia es obligatoria (hasta 200 caracteres, sin espacios en los extremos).',

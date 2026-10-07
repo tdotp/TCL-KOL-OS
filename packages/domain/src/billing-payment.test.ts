@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   BILLING_DOCUMENT_STATUSES,
+  MAX_EMISION_ADELANTADA_DIAS,
   BILLING_DOCUMENT_TRANSITIONS,
   EVENTO_DE_DOCUMENTO_POR_DESTINO,
   EVENTO_DE_OBLIGACION_POR_DESTINO,
@@ -173,5 +174,39 @@ describe('seguimiento de pago derivado', () => {
     expect(billingValidadoAlReportar([])).toBe(false);
     expect(billingValidadoAlReportar(['registered'])).toBe(false);
     expect(billingValidadoAlReportar(['validated'])).toBe(true);
+  });
+});
+
+describe('documento de cobro: fecha de emisión (FIX-B)', () => {
+  const base = {
+    documentNumber: 'F-1',
+    issuedOn: '2026-05-01',
+    claimedAmount: 100,
+    claimedCurrency: 'COP',
+    sourceDocumentId: '3f1c2d4e-5a6b-4c7d-8e9f-0a1b2c3d4e5f',
+  };
+  const hoy = new Date('2026-05-10T12:00:00Z');
+
+  it('0000-01-01 y fechas inexistentes son validación; el futuro lejano (> 1 año) se rechaza, el cercano no', () => {
+    expect(validarDocumentoDeCobro({ ...base, issuedOn: '0000-01-01' }, hoy).ok).toBe(false);
+    expect(validarDocumentoDeCobro({ ...base, issuedOn: '2999-01-01' }, hoy).ok).toBe(false);
+    const lejano = validarDocumentoDeCobro({ ...base, issuedOn: '2027-05-12' }, hoy);
+    expect(lejano.ok).toBe(false);
+    if (!lejano.ok)
+      expect(lejano.error.details).toMatchObject({ field: 'issuedOn', reason: 'in_the_far_future' });
+    expect(MAX_EMISION_ADELANTADA_DIAS).toBe(365);
+    expect(validarDocumentoDeCobro({ ...base, issuedOn: '2027-05-10' }, hoy).ok).toBe(true);
+    expect(validarDocumentoDeCobro({ ...base, issuedOn: '2026-06-01' }, hoy).ok).toBe(true);
+    expect(validarDocumentoDeCobro({ ...base, issuedOn: '2020-01-01' }, hoy).ok).toBe(true);
+  });
+
+  it('la moneda reclamada es de la lista cerrada y el número no admite invisibles', () => {
+    expect(validarDocumentoDeCobro({ ...base, claimedCurrency: 'XXX' }, hoy).ok).toBe(false);
+    expect(validarDocumentoDeCobro({ ...base, documentNumber: 'F\u200B1' }, hoy).ok).toBe(false);
+  });
+
+  it('un reporte de pago con fecha fuera de rango se rechaza', () => {
+    expect(validarReporteDePago({ paidOn: '0000-01-01', externalReference: 'R-1' }).ok).toBe(false);
+    expect(validarReporteDePago({ paidOn: '2026-05-01', externalReference: 'R-1' }).ok).toBe(true);
   });
 });

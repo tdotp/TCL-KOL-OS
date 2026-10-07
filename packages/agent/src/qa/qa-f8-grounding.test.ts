@@ -6,8 +6,8 @@
  * comparador sea coherente con lo dicho. `kpi_target_register` es el ÚNICO write del agente y no pasa por HITL: el
  * valor que fija es el que luego decide si un KPI «se cumplió».
  *
- *  · ABIERTO (`it.fails`): hallazgos CONFIRMADOS. La única aserción que puede fallar es `expect(r.ok).toBe(false)`;
- *    las pruebas de control se corrieron volteando `it.fails` → `it` y `toBe(false)` → `toBe(true)`.
+ *  · CORREGIDO (antes `it.fails`): hallazgos CONFIRMADOS y corregidos en FIX-B. La única aserción que puede
+ *    fallar es `expect(r.ok).toBe(false)`.
  *  · SEGURO (`it`): lo que el grounding SÍ rechaza.
  */
 import { describe, expect, it } from 'vitest';
@@ -21,48 +21,42 @@ const verificar = (
   otherLabel?: string,
 ) => verificarObjetivoDeKpiEnLaCita({ metric, otherLabel, targetValue, comparator, cita });
 
-describe('ABIERTO P2 · el comparador no se contrasta con lo que dijo la persona', () => {
-  it.fails(
-    '«como máximo 100 vistas» sin comparator (gte por defecto) se rechaza: invertiría el objetivo',
-    () => {
-      const r = verificar('views', 100, 'como máximo 100 vistas', undefined);
-      expect(r.ok).toBe(false);
-    },
-  );
+describe('CORREGIDO P2 · el comparador no se contrasta con lo que dijo la persona', () => {
+  it('«como máximo 100 vistas» sin comparator (gte por defecto) se rechaza: invertiría el objetivo', () => {
+    const r = verificar('views', 100, 'como máximo 100 vistas', undefined);
+    expect(r.ok).toBe(false);
+  });
 
-  it.fails('«menos de 100 vistas es inaceptable» con gte se rechaza', () => {
+  it('«menos de 100 vistas es inaceptable» con gte se rechaza', () => {
     const r = verificar('views', 100, 'menos de 100 vistas es inaceptable', 'gte');
     expect(r.ok).toBe(false);
   });
 
-  it.fails('«hasta el viernes» (una fecha) no cuenta como un tope superior para aceptar lte', () => {
+  it('«hasta el viernes» (una fecha) no cuenta como un tope superior para aceptar lte', () => {
     const r = verificar('views', 50000, 'Alcanzar 50.000 vistas hasta el viernes', 'lte');
     expect(r.ok).toBe(false);
   });
 });
 
-describe('ABIERTO P2 · la cifra se acepta en una lectura que la persona no quiso (factor 1000)', () => {
-  it.fails('«50.000 vistas» (cincuenta mil) no admite el valor 50', () => {
+describe('CORREGIDO P2 · la cifra se acepta en una lectura que la persona no quiso (factor 1000)', () => {
+  it('«50.000 vistas» (cincuenta mil) no admite el valor 50', () => {
     const r = verificar('views', 50, 'Alcanzar 50.000 vistas');
     expect(r.ok).toBe(false);
   });
 
-  it.fails('«10 mil vistas» no admite el valor 10', () => {
+  it('«10 mil vistas» no admite el valor 10', () => {
     const r = verificar('views', 10, 'quiero 10 mil vistas');
     expect(r.ok).toBe(false);
   });
 });
 
-describe('ABIERTO P3 · la cifra no se liga a la métrica ni a la negación', () => {
-  it.fails(
-    'una cifra de OTRA cosa en la misma frase («alcance de 7 días, 70000 vistas») no vale para reach=7',
-    () => {
-      const r = verificar('reach', 7, 'alcance de 7 días, 70000 vistas');
-      expect(r.ok).toBe(false);
-    },
-  );
+describe('CORREGIDO P3 · la cifra no se liga a la métrica ni a la negación', () => {
+  it('una cifra de OTRA cosa en la misma frase («alcance de 7 días, 70000 vistas») no vale para reach=7', () => {
+    const r = verificar('reach', 7, 'alcance de 7 días, 70000 vistas');
+    expect(r.ok).toBe(false);
+  });
 
-  it.fails('«NO quiero 100 vistas, quiero 5000» no admite 100', () => {
+  it('«NO quiero 100 vistas, quiero 5000» no admite 100', () => {
     const r = verificar('views', 100, 'NO quiero 100 vistas, quiero 5000');
     expect(r.ok).toBe(false);
   });

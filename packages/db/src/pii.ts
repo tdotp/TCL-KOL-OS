@@ -15,6 +15,9 @@
  *  · `guardarPii` (`pii:manage`) crea una VERSIÓN nueva (append-only); `revelarPii` (`pii:read`) descifra solo
  *    los campos pedidos y audita `pii.reveal` con NOMBRES de campo, jamás valores; `obtenerPiiResumen` dice
  *    qué campos existen, sin valores. `shipment:manage` NO implica `pii:read`.
+ *  · Solo una PERSONA, por la INTERFAZ, guarda o revela datos personales (`exigirPersonaPorUi`, el mismo criterio
+ *    que envíos, cobro y pagos): el canal `chat` (el agente) ⇒ `HUMAN_CONFIRMATION_REQUIRED`; `system` u otro
+ *    origen ⇒ `FORBIDDEN_ROLE`. El agente no recibe PII ni siquiera con la capacidad del usuario.
  *  · La auditoría usa solo la allowlist de `audit.ts`; ningún valor ni texto cifrado llega a ella, a un error,
  *    a un log ni al agente.
  *
@@ -44,9 +47,10 @@ import {
   DomainError,
 } from '@tcl-kol-os/domain';
 import { recordAudit } from './audit.ts';
-import { type ContextoDeAuditoria, auditoriaDe, exigirPersona } from './audit-context.ts';
+import { type ContextoDeAuditoria, auditoriaDe } from './audit-context.ts';
 import { getPool } from './client.ts';
 import { esUuid } from './deliverables.ts';
+import { exigirPersonaPorUi } from './operational-events.ts';
 import { Abortar, transaccionConResultado } from './tx-result.ts';
 
 // ─────────────────────────── Claves ────────────────────────────────────────────
@@ -282,7 +286,7 @@ export async function guardarPii(
   input: GuardarPiiInput,
   contexto?: ContextoDeAuditoria,
 ): Promise<Result<GuardarPiiResultado>> {
-  const persona = exigirPersona(actor, contexto);
+  const persona = exigirPersonaPorUi(actor, contexto);
   if (!persona.ok) return persona;
   if (!esUuid(input.influencerId)) return autorizarInexistente(actor, 'pii:manage');
 
@@ -445,7 +449,7 @@ export async function revelarPii(
   campos: readonly PiiField[],
   contexto?: ContextoDeAuditoria,
 ): Promise<Result<PiiRevelada>> {
-  const persona = exigirPersona(actor, contexto);
+  const persona = exigirPersonaPorUi(actor, contexto);
   if (!persona.ok) return persona;
   if (!esUuid(piiRecordId)) return autorizarInexistente(actor, 'pii:read');
 

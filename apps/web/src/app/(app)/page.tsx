@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { roleCan } from '@tcl-kol-os/domain';
 import { listAudit, getPool, listCampaigns } from '@tcl-kol-os/db';
 import { currentUser } from '@/lib/session';
 import { monogramaColor, monogramaIniciales } from '@/lib/monograma';
@@ -17,7 +18,10 @@ export default async function Home() {
   const campanas = await listCampaigns(user);
   const visibles = campanas.ok ? campanas.value : [];
   const recientes = visibles.slice(0, 5);
-  const actividad = user.role === 'cliente' ? [] : await listAudit(getPool(), user.organizationId, 6);
+  // La actividad es auditoría: solo con `audit:read`; y sin `finance:read` no incluye pagos, PII ni acuerdos.
+  const actividad = roleCan(user.role, 'audit:read')
+    ? await listAudit(getPool(), user.organizationId, 6, { incluirOperativas: roleCan(user.role, 'finance:read') })
+    : [];
   const activas = visibles.filter((c) => c.status === 'activa').length;
 
   return (

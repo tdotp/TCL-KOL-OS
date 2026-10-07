@@ -29,8 +29,10 @@ import {
   err,
   isEvidenceKind,
   isOperationalSubjectType,
+  manageActionForSubject,
   ok,
   readActionForSubject,
+  roleCan,
   validarArchivo,
 } from '@tcl-kol-os/domain';
 import { recordAudit } from './audit.ts';
@@ -278,7 +280,10 @@ export interface EvidenciaRetirada {
 
 /**
  * Retira (marca, no borra) un vínculo de evidencia. La fuente y el evento se conservan. Una sola vez:
- * retirar lo ya retirado es `RESOURCE_CONFLICT`. Exige `ops_evidence:attach`; ajeno ⇒ `RESOURCE_NOT_FOUND`.
+ * retirar lo ya retirado es `RESOURCE_CONFLICT`. Exige `ops_evidence:attach` MÁS la capacidad de GESTIÓN del
+ * SUJETO de la evidencia (envío ⇒ `shipment:manage`; documento de cobro u obligación de pago ⇒ `billing:manage`),
+ * y, si el soporte es el de un pago reportado (evento `payment.reported` u obligación `reported_paid`),
+ * `payment:report`: quien no puede reportar un pago no altera su soporte. Ajeno ⇒ `RESOURCE_NOT_FOUND`.
  */
 export async function retractarEvidencia(
   actor: User,
@@ -300,6 +305,25 @@ export async function retractarEvidencia(
     const fila = rows[0];
     if (fila === undefined) throw new Abortar(NO_ENCONTRADO_DE_CONTENIDO);
     autorizarOAbortar(persona, 'ops_evidence:attach', fila.organization_id);
+    // La capacidad del SUJETO de la evidencia (no solo la genérica de adjuntar).
+    const { rows: deSujeto } = await client.query<{
+      subject_type: OperationalSubjectType;
+      event_type: string;
+      obligacion_reportada: boolean;
+    }>(
+      `SELECT e.subject_type, e.event_type,
+              (e.subject_type = 'payment_obligation'
+               AND EXISTS (SELECT 1 FROM payment_obligations po
+                            WHERE po.id = e.payment_obligation_id AND po.status = 'reported_paid')) AS obligacion_reportada
+         FROM operational_events e WHERE e.id = $1`,
+      [fila.event_id],
+    );
+    const sujeto = deSujeto[0];
+    if (sujeto === undefined) throw new Abortar(NO_ENCONTRADO_DE_CONTENIDO);
+    autorizarOAbortar(persona, manageActionForSubject(sujeto.subject_type), fila.organization_id);
+    if (sujeto.event_type === 'payment.reported' || sujeto.obligacion_reportada) {
+      autorizarOAbortar(persona, 'payment:report', fila.organization_id);
+    }
     if (fila.retracted_at !== null) {
       throw new Abortar({
         code: 'RESOURCE_CONFLICT',
@@ -346,6 +370,8 @@ export interface EvidenciaVista {
 }
 
 interface FilaDeEvidencia {
+  /** ¿La fuente respalda también evidencia de un documento de cobro o un pago (financiera)? */
+  financiera: boolean;
   id: string;
   event_id: string;
   event_type: string;
@@ -366,13 +392,26 @@ const SELECT_EVIDENCIA = `
   SELECT oe.id, oe.event_id, e.event_type, e.subject_type,
          COALESCE(e.shipment_id, e.billing_document_id, e.payment_obligation_id) AS subject_id,
          oe.source_document_id, oe.kind, s.filename, s.mime_type, s.size_bytes, s.hash,
-         oe.attached_by, oe.created_at, oe.retracted_at
+         oe.attached_by, oe.created_at, oe.retracted_at,
+         EXISTS (SELECT 1 FROM operational_evidence o2
+                   JOIN operational_events e2 ON e2.id = o2.event_id
+                  WHERE o2.source_document_id = oe.source_document_id
+                    AND e2.subject_type <> 'shipment') AS financiera
     FROM operational_evidence oe
     JOIN operational_events e ON e.id = oe.event_id
     JOIN source_documents s ON s.id = oe.source_document_id
 `;
 
-function comoEvidencia(f: FilaDeEvidencia): EvidenciaVista {
+/** Nombre mostrado cuando la persona no tiene la capacidad del sujeto ORIGINAL de la evidencia. */
+export const NOMBRE_DE_EVIDENCIA_RESTRINGIDO = 'Soporte financiero (nombre restringido)';
+
+/**
+ * Proyección por capacidad del SUJETO ORIGINAL: una fuente puede reutilizarse por hash (mismo contenido) como
+ * evidencia de un envío; si esa fuente respalda también un documento de cobro o un pago, su nombre y su hash
+ * son financieros y solo los ve quien tiene `finance:read` (no basta `shipment:read`).
+ */
+function comoEvidencia(f: FilaDeEvidencia, verFinanciero: boolean): EvidenciaVista {
+  const oculto = f.financiera && !verFinanciero;
   return {
     id: f.id,
     eventId: f.event_id,
@@ -381,10 +420,10 @@ function comoEvidencia(f: FilaDeEvidencia): EvidenciaVista {
     subjectId: f.subject_id,
     sourceDocumentId: f.source_document_id,
     kind: f.kind,
-    filename: f.filename,
+    filename: oculto ? NOMBRE_DE_EVIDENCIA_RESTRINGIDO : f.filename,
     mimeType: f.mime_type,
     sizeBytes: f.size_bytes === null ? null : Number(f.size_bytes),
-    hash: f.hash,
+    hash: oculto ? null : f.hash,
     attachedBy: f.attached_by,
     attachedAt: f.created_at.toISOString(),
     retractedAt: f.retracted_at === null ? null : f.retracted_at.toISOString(),
@@ -417,7 +456,7 @@ export async function listarEvidenciaDeEvento(
     `${SELECT_EVIDENCIA} WHERE oe.event_id = $1 ORDER BY oe.created_at, oe.id`,
     [eventId],
   );
-  return ok(filas.map(comoEvidencia));
+  return ok(filas.map((f) => comoEvidencia(f, roleCan(actor.role, 'finance:read'))));
 }
 
 /** Evidencia de TODOS los eventos de un sujeto (misma capacidad y proyección que `listarEvidenciaDeEvento`). */
@@ -442,5 +481,5 @@ export async function listarEvidenciaDeSujeto(
     `${SELECT_EVIDENCIA} WHERE ${columna} = $1 ORDER BY e.subject_seq, oe.created_at, oe.id`,
     [sujeto.subjectId],
   );
-  return ok(filas.map(comoEvidencia));
+  return ok(filas.map((f) => comoEvidencia(f, roleCan(actor.role, 'finance:read'))));
 }

@@ -9,14 +9,15 @@
  * `pii:read`) ven quién reportó un pago o reveló datos personales y cuándo. No hay montos (la allowlist de F8 lo
  * impide): es fuga de ACTIVIDAD financiera y de PII, no de cifras.
  *
- * `it.fails` = «abierto»: al corregir, quitar `.fails`.
+ * CORREGIDO (FIX-B): el Inicio y Campañas pintan la actividad solo con `audit:read`, y `listAudit` excluye por
+ * defecto las acciones operativas/PII para quien no tiene `finance:read` (`incluirOperativas`).
  */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { reportarPago } from './billing-payment.ts';
-import { listAudit } from './audit.ts';
+import { PREFIJOS_OPERATIVOS, listAudit } from './audit.ts';
 import { closePool, getPool, query } from './client.ts';
 import { guardarPii, revelarPii } from './pii.ts';
 import {
@@ -59,7 +60,8 @@ describe('CONTROL: la auditoría de la organización trae eventos de pago y PII 
     expect(g.ok).toBe(true);
     if (g.ok) expect((await revelarPii(e.operativo, g.value.record.recordId, ['phone'])).ok).toBe(true);
 
-    const eventos = await listAudit(getPool(), e.operativo.organizationId, 200);
+    // El rastro SÍ las trae para quien tiene `finance:read` (la opción explícita); por omisión se excluyen.
+    const eventos = await listAudit(getPool(), e.operativo.organizationId, 200, { incluirOperativas: true });
     const acciones = new Set(eventos.map((x) => x.action));
     expect(acciones.has('payment.reported')).toBe(true);
     expect(acciones.has('pii.save')).toBe(true);
@@ -76,16 +78,48 @@ describe('CONTROL: la auditoría de la organización trae eventos de pago y PII 
   });
 });
 
-describe('ABIERTO P2 · el Inicio y el listado de campañas muestran la actividad a todo rol salvo cliente', () => {
-  it.fails(
-    'Inicio: listAudit solo se llama para roles con audit:read (no consultor/operativo, y sin eventos F8 para analista/legal)',
-    () => {
-      const fuente = pagina('page.tsx');
-      expect(fuente).toMatch(/roleCan\([^)]*['"]audit:read['"]/);
-    },
-  );
+describe('listAudit excluye por defecto las acciones operativas y de PII (sin `finance:read`)', () => {
+  it('por omisión no devuelve pii.*, payment.*, billing.*, agreement.*, shipment.*, ops_evidence.* ni operational_event.*; con incluirOperativas sí', async () => {
+    const e = op.e;
+    const { ci, influencerId } = await nuevaParticipacion(op, 'ActividadFiltro');
+    const a = await crearAcuerdoPorSql(op, { ci, mode: 'fee' });
+    expect(
+      (
+        await reportarPago(e.operativo, {
+          paymentObligationId: a.obligationId,
+          expectedSeq: 1,
+          idempotencyKey: unico('filtro'),
+          paidOn: dia(0),
+          externalReference: 'REF-FILTRO-QA8',
+        })
+      ).ok,
+    ).toBe(true);
+    const g = await guardarPii(e.operativo, { influencerId, phone: '3001112233' });
+    expect(g.ok).toBe(true);
+    // Una acción NO operativa (p. ej. de KPI) sí se mantiene en el listado por omisión.
+    await query(
+      `INSERT INTO audit_events (organization_id, actor_id, action, entity_type, metadata)
+       VALUES ($1, $2, 'kpi_target.registered', 'kpi_target', '{}'::jsonb)`,
+      [e.operativo.organizationId, e.operativo.id],
+    );
 
-  it.fails('Campañas: listAudit solo se llama para roles con audit:read', () => {
+    const sin = await listAudit(getPool(), e.operativo.organizationId, 500);
+    const con = await listAudit(getPool(), e.operativo.organizationId, 500, { incluirOperativas: true });
+    const operativa = (x: string): boolean => PREFIJOS_OPERATIVOS.some((p) => x.startsWith(p));
+    expect(sin.filter((x) => operativa(x.action))).toEqual([]);
+    expect(sin.some((x) => x.action === 'kpi_target.registered')).toBe(true);
+    expect(con.some((x) => x.action === 'payment.reported')).toBe(true);
+    expect(con.some((x) => x.action === 'pii.save')).toBe(true);
+  });
+});
+
+describe('CORREGIDO P2 · el Inicio y el listado de campañas muestran la actividad solo con audit:read', () => {
+  it('Inicio: listAudit solo se llama para roles con audit:read (no consultor/operativo, y sin eventos F8 para analista/legal)', () => {
+    const fuente = pagina('page.tsx');
+    expect(fuente).toMatch(/roleCan\([^)]*['"]audit:read['"]/);
+  });
+
+  it('Campañas: listAudit solo se llama para roles con audit:read', () => {
     const fuente = pagina('campanas/page.tsx');
     expect(fuente).toMatch(/roleCan\([^)]*['"]audit:read['"]/);
   });

@@ -4,7 +4,12 @@
  */
 import { describe, expect, it } from 'vitest';
 import { campoDelCatalogo } from '@tcl-kol-os/domain';
-import { fechaFundamentada, numeroFundamentado, verificarValorDeRespuesta } from './grounding.ts';
+import {
+  fechaFundamentada,
+  numeroFundamentado,
+  verificarObjetivoDeKpiEnLaCita,
+  verificarValorDeRespuesta,
+} from './grounding.ts';
 
 describe('fechaFundamentada', () => {
   it('acepta la fecha escrita en las formas habituales', () => {
@@ -162,5 +167,87 @@ describe('verificarValorDeRespuesta · criterio por tipo de campo', () => {
 
   it('un campo fuera del catálogo no se contrasta aquí (lo rechaza el caso de uso)', () => {
     expect(verificarValorDeRespuesta(undefined, 'x', undefined, dicho).ok).toBe(true);
+  });
+});
+
+describe('verificarObjetivoDeKpiEnLaCita · lo que la persona dictó (F8, FIX-B)', () => {
+  const v = (
+    metric: string,
+    targetValue: number,
+    cita: string,
+    comparator?: 'gte' | 'lte',
+    otherLabel?: string,
+  ) => verificarObjetivoDeKpiEnLaCita({ metric, otherLabel, targetValue, comparator, cita });
+
+  it('el valor es la cifra literal: miles, decimales y sufijos tienen UN solo valor', () => {
+    expect(v('views', 50_000, 'Alcanzar 50.000 vistas').ok).toBe(true);
+    expect(v('views', 50, 'Alcanzar 50.000 vistas').ok).toBe(false);
+    expect(v('views', 50_000_000, 'Alcanzar 50.000 vistas').ok).toBe(false);
+    expect(v('views', 10_000, 'quiero 10 mil vistas').ok).toBe(true);
+    expect(v('views', 10, 'quiero 10 mil vistas').ok).toBe(false);
+    expect(v('views', 1_500_000, '1,5 millones de vistas').ok).toBe(true);
+    expect(v('views', 1_500, '1,5 millones de vistas').ok).toBe(false);
+    expect(v('views', 50_000, 'meta: 50k vistas').ok).toBe(true);
+    expect(v('views', 50, 'meta: 50k vistas').ok).toBe(false);
+    expect(v('views', 1_500, 'subir a 1.500 vistas').ok).toBe(true);
+    expect(v('views', 1_234_567, 'tener 1.234.567 vistas').ok).toBe(true);
+    expect(v('engagement_rate', 4.7, 'engagement de 4,7%').ok).toBe(true);
+    expect(v('engagement_rate', 47, 'engagement de 4,7%').ok).toBe(false);
+  });
+
+  it('«como máximo / menos de / no más de / hasta <cifra>» piden lte; «al menos / más de / mínimo», gte', () => {
+    for (const cita of [
+      'como máximo 100 vistas',
+      'menos de 100 vistas',
+      'no más de 100 vistas',
+      'hasta 100 vistas',
+      'hasta un máximo de 100 vistas',
+      '100 vistas o menos',
+      '100 vistas como máximo',
+    ]) {
+      expect(v('views', 100, cita, 'lte').ok, cita).toBe(true);
+      expect(v('views', 100, cita, 'gte').ok, cita).toBe(false);
+      expect(v('views', 100, cita).ok, cita).toBe(false);
+    }
+    for (const cita of [
+      'al menos 100 vistas',
+      'más de 100 vistas',
+      'mínimo 100 vistas',
+      'no menos de 100 vistas',
+      '100 vistas como mínimo',
+      'por lo menos 100 vistas',
+    ]) {
+      expect(v('views', 100, cita, 'gte').ok, cita).toBe(true);
+      expect(v('views', 100, cita).ok, cita).toBe(true);
+      expect(v('views', 100, cita, 'lte').ok, cita).toBe(false);
+    }
+  });
+
+  it('una cita neutra solo admite gte; «hasta el viernes» o «hasta el 15 de marzo» no son un tope', () => {
+    expect(v('views', 50_000, 'objetivo de 50.000 vistas').ok).toBe(true);
+    expect(v('views', 50_000, 'objetivo de 50.000 vistas', 'gte').ok).toBe(true);
+    expect(v('views', 50_000, 'objetivo de 50.000 vistas', 'lte').ok).toBe(false);
+    expect(v('views', 50_000, 'hasta el viernes quiero 50.000 vistas', 'lte').ok).toBe(false);
+    expect(v('views', 50_000, 'hasta el 15 de marzo, 50.000 vistas', 'lte').ok).toBe(false);
+    expect(v('views', 50_000, '50.000 vistas hasta el viernes', 'gte').ok).toBe(true);
+  });
+
+  it('la cifra se liga a su métrica: una duración, una fecha o la cifra de OTRA métrica no valen', () => {
+    expect(v('reach', 7, 'alcance de 7 días, 70000 vistas').ok).toBe(false);
+    expect(v('views', 70_000, 'alcance de 7 días, 70000 vistas').ok).toBe(true);
+    expect(v('comments', 5, '100 vistas y 5 comentarios').ok).toBe(true);
+    expect(v('views', 5, '100 vistas y 5 comentarios').ok).toBe(false);
+    expect(v('comments', 100, '100 vistas y 5 comentarios').ok).toBe(false);
+    expect(v('views', 15, 'el 15 de marzo quiero vistas').ok).toBe(false);
+    expect(v('views', 100, 'NO quiero 100 vistas, quiero 5000').ok).toBe(false);
+    expect(v('views', 100, 'no quiero ni 100 vistas').ok).toBe(false);
+  });
+
+  it('con etiqueta `other` la cifra se liga a la etiqueta', () => {
+    expect(v('other', 25, 'etiqueta Menciones de marca 25', undefined, 'Menciones de marca').ok).toBe(true);
+    expect(v('other', 25, '25 menciones de marca', undefined, 'menciones de marca').ok).toBe(true);
+    expect(v('other', 100, '25 menciones de marca y 100 vistas', undefined, 'menciones de marca').ok).toBe(
+      false,
+    );
   });
 });

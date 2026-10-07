@@ -39,6 +39,7 @@ import {
   type User,
   authorizeInternalResource,
   err,
+  esClaveDeIdempotenciaValida,
   isEvidenceKind,
   isOperationalSubjectType,
   ok,
@@ -440,14 +441,19 @@ function conflicto(message: string, details: Record<string, unknown>): Abortar {
   return new Abortar({ code: 'RESOURCE_CONFLICT', message, details });
 }
 
-function claveValida(clave: unknown): clave is string {
-  return (
-    typeof clave === 'string' &&
-    clave === clave.trim() &&
-    clave !== '' &&
-    clave.length <= 200 &&
-    !/[\p{Cc}]/u.test(clave)
-  );
+/**
+ * La creación de un sujeto perdió la carrera de idempotencia: otra transacción con la MISMA clave y solicitud ya
+ * confirmó el evento mientras ésta insertaba su sujeto (que sigue en `row_seq = 0`). Esta transacción no puede
+ * cerrar (su sujeto quedaría sin evento): se revierte entera y `transaccionOperativa` la reintenta, de modo que
+ * encuentre el evento de la ganadora y devuelva el reintento idéntico (`repetido = true`).
+ */
+export class CreacionPerdida extends Error {
+  readonly eventoId: string;
+  constructor(eventoId: string) {
+    super('La creación perdió la carrera de idempotencia: el evento ya fue confirmado por otra solicitud.');
+    this.name = 'CreacionPerdida';
+    this.eventoId = eventoId;
+  }
 }
 
 /**
@@ -459,7 +465,7 @@ export async function aplicarEventoOperativo(
   input: AplicarEventoInput,
 ): Promise<ResultadoDeEvento> {
   const actor = exigirPersonaPorUiOAbortar(input.actor, input.contexto);
-  if (!claveValida(input.idempotencyKey)) {
+  if (!esClaveDeIdempotenciaValida(input.idempotencyKey)) {
     throw new Abortar({
       code: 'VALIDATION_FAILED',
       message:
@@ -497,6 +503,8 @@ export async function aplicarEventoOperativo(
         reason: 'idempotency_key_reused',
       });
     }
+    // El sujeto que acabamos de insertar (aún sin eventos) no es el del reintento: la ganadora ya confirmó.
+    if (input.expectedSeq === 0 && sujeto.rowSeq === 0) throw new CreacionPerdida(previo.id);
     return { evento: await cargarEvento(client, previo.id, true), repetido: true, sujeto };
   }
 
@@ -721,8 +729,10 @@ function esChoqueDeIdempotencia(error: unknown): boolean {
 /**
  * Transacción de un caso de uso operativo, con `Result`. Traduce `Abortar`, los rechazos de la base (también
  * los diferidos que fallan en el COMMIT) y UNA carrera de idempotencia: dos solicitudes simultáneas con la
- * misma clave que CREAN su sujeto chocan en `UNIQUE(organización, clave)`; la perdedora se reintenta una vez
- * y entonces encuentra el evento de la ganadora (reintento idéntico ⇒ el mismo evento).
+ * misma clave que CREAN su sujeto chocan en `UNIQUE(organización, clave)` (o, si la ganadora confirmó antes del
+ * INSERT del evento, la perdedora lo ve en `aplicarEventoOperativo` ⇒ `CreacionPerdida`); en ambos casos la
+ * perdedora se REVIERTE entera y se reintenta una vez: entonces encuentra el evento de la ganadora (reintento
+ * idéntico ⇒ el mismo evento, `repetido = true`, sin sujeto huérfano).
  */
 export async function transaccionOperativa<T>(fn: (client: pg.PoolClient) => Promise<T>): Promise<Result<T>> {
   for (let intento = 0; ; intento++) {
@@ -730,6 +740,14 @@ export async function transaccionOperativa<T>(fn: (client: pg.PoolClient) => Pro
       return ok(await transaction(fn));
     } catch (error) {
       if (error instanceof Abortar) return err(error.payload);
+      if (error instanceof CreacionPerdida) {
+        if (intento === 0) continue; // revertida: la segunda vuelta encuentra el evento de la ganadora
+        return err(
+          conflicto('Otra operación simultánea tocó el mismo registro: inténtelo de nuevo.', {
+            reason: 'concurrent_update',
+          }).payload,
+        );
+      }
       if (esChoqueDeIdempotencia(error) && intento === 0) continue;
       const traducido = errorDeBaseComoPayload(error);
       if (traducido !== undefined) return err(traducido.payload);

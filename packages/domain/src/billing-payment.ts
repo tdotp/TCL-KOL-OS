@@ -61,6 +61,13 @@ export const EVENTO_DE_DOCUMENTO_POR_DESTINO: Readonly<Record<BillingDocumentSta
 
 export const MAX_NUMERO_DE_DOCUMENTO = 100;
 
+/**
+ * Cuánto puede adelantarse la fecha de emisión de un documento de cobro respecto de hoy: un documento con fecha
+ * de emisión en el futuro lejano (p. ej. 2999-01-01) es un error o un intento de falsear el seguimiento. Se
+ * tolera hasta un año (cuentas de cobro programadas), nunca más.
+ */
+export const MAX_EMISION_ADELANTADA_DIAS = 365;
+
 export interface BillingDocumentInput {
   readonly documentNumber: string;
   readonly issuedOn: string;
@@ -86,7 +93,10 @@ function invalido<T>(field: string, message: string): Result<T> {
  * Valida el registro de un documento de cobro: número, fecha, monto y moneda RECLAMADOS (lo que el documento
  * dice; no se compara ni se paga) y su soporte obligatorio.
  */
-export function validarDocumentoDeCobro(input: BillingDocumentInput): Result<ValidatedBillingDocument> {
+export function validarDocumentoDeCobro(
+  input: BillingDocumentInput,
+  ahora: Date = new Date(),
+): Result<ValidatedBillingDocument> {
   const numero = typeof input.documentNumber === 'string' ? input.documentNumber.trim() : '';
   if (numero === '' || numero.length > MAX_NUMERO_DE_DOCUMENTO || /[\p{Cc}\p{Cf}]/u.test(numero)) {
     return invalido(
@@ -95,6 +105,15 @@ export function validarDocumentoDeCobro(input: BillingDocumentInput): Result<Val
     );
   }
   if (!isIsoDate(input.issuedOn)) return invalido('issuedOn', 'La fecha de emisión debe ser YYYY-MM-DD.');
+  const limite = new Date(ahora.getTime());
+  limite.setUTCDate(limite.getUTCDate() + MAX_EMISION_ADELANTADA_DIAS);
+  if (input.issuedOn > limite.toISOString().slice(0, 10)) {
+    return err({
+      code: 'VALIDATION_FAILED',
+      message: `La fecha de emisión no puede estar más de ${MAX_EMISION_ADELANTADA_DIAS} días en el futuro.`,
+      details: { field: 'issuedOn', reason: 'in_the_far_future' },
+    });
+  }
   const monto = normalizarMonto(input.claimedAmount);
   if (!monto.ok) return invalido('claimedAmount', monto.error.message);
   if (!esMonedaValida(input.claimedCurrency)) {

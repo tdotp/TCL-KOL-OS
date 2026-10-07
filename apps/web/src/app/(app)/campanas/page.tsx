@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { roleCan } from '@tcl-kol-os/domain';
 import { getPool, listAudit, listCampaigns, listarPreguntas } from '@tcl-kol-os/db';
 import { currentUser } from '@/lib/session';
 import { TablaCampanas } from './TablaCampanas';
@@ -28,7 +29,10 @@ export default async function CampanasPage({ searchParams }: { searchParams: Pro
 
   const resultado = await listCampaigns(user);
   const campanas = resultado.ok ? resultado.value : [];
-  const actividad = user.role === 'cliente' ? [] : await listAudit(getPool(), user.organizationId, 6);
+  // La actividad es auditoría: solo con `audit:read`; y sin `finance:read` no incluye pagos, PII ni acuerdos.
+  const actividad = roleCan(user.role, 'audit:read')
+    ? await listAudit(getPool(), user.organizationId, 6, { incluirOperativas: roleCan(user.role, 'finance:read') })
+    : [];
 
   const activas = campanas.filter((c) => c.status === 'activa').slice(0, 6);
   const proximasAcciones =

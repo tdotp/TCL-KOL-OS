@@ -12,6 +12,7 @@ import {
   validarDatosDeEnvio,
   validarItemsDeEnvio,
   validarMotivoDeCancelacion,
+  validarOrdenDeFechasDeEnvio,
 } from './shipments';
 import { canTransitionOperationalSubject, eventTypesForTransition } from './operational-events';
 
@@ -134,5 +135,25 @@ describe('ítems y preparación', () => {
         true,
       );
     }
+  });
+});
+
+describe('«entregado» no se fecha antes que «enviado» (FIX-B)', () => {
+  it('antes ⇒ VALIDATION_FAILED en happenedOn; el mismo día y después valen; sin fecha de envío, nada que comparar', () => {
+    const antes = validarOrdenDeFechasDeEnvio('2026-05-10', '2026-05-09');
+    expect(antes.ok).toBe(false);
+    if (!antes.ok) {
+      expect(antes.error.code).toBe('VALIDATION_FAILED');
+      expect(antes.error.details).toMatchObject({ field: 'happenedOn', reason: 'delivered_before_shipped' });
+    }
+    expect(validarOrdenDeFechasDeEnvio('2026-05-10', '2026-05-10').ok).toBe(true);
+    expect(validarOrdenDeFechasDeEnvio('2026-05-10', '2026-06-01').ok).toBe(true);
+    expect(validarOrdenDeFechasDeEnvio(null, '2026-05-09').ok).toBe(true);
+    expect(validarOrdenDeFechasDeEnvio('2026-05-10', undefined).ok).toBe(true);
+  });
+
+  it('la moneda del costo del envío es de la lista cerrada', () => {
+    expect(validarDatosDeEnvio({ shippingCost: 5000, shippingCurrency: 'ABC' }).ok).toBe(false);
+    expect(validarDatosDeEnvio({ shippingCost: 5000, shippingCurrency: 'COP' }).ok).toBe(true);
   });
 });

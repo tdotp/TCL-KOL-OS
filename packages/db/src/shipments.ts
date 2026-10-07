@@ -29,12 +29,14 @@ import {
   err,
   evaluarPreparacionDeEnvio,
   isEvidenceKind,
+  isIsoDate,
   isShipmentStatus,
   ok,
   roleCan,
   validarDatosDeEnvio,
   validarItemsDeEnvio,
   validarMotivoDeCancelacion,
+  validarOrdenDeFechasDeEnvio,
 } from '@tcl-kol-os/domain';
 import { type ContextoDeAuditoria } from './audit-context.ts';
 import { getPool, query } from './client.ts';
@@ -267,9 +269,14 @@ export async function crearEnvio(
         organization_id: string;
         influencer_id: string;
         erased_at: Date | null;
-      }>(`SELECT organization_id, influencer_id, erased_at FROM influencer_pii_records WHERE id = $1`, [
-        piiRecordId,
-      ]);
+        version: number;
+        vigente: number;
+      }>(
+        `SELECT r.organization_id, r.influencer_id, r.erased_at, r.version,
+                (SELECT max(m.version) FROM influencer_pii_records m WHERE m.influencer_id = r.influencer_id) AS vigente
+           FROM influencer_pii_records r WHERE r.id = $1`,
+        [piiRecordId],
+      );
       const registro = pii[0];
       if (registro === undefined || registro.organization_id !== participacion.organization_id) {
         throw new Abortar(NO_ENCONTRADO_DE_CONTENIDO);
@@ -279,6 +286,15 @@ export async function crearEnvio(
           code: 'VALIDATION_FAILED',
           message: 'El registro de datos personales no corresponde al influencer de esta participación.',
           details: { field: 'piiRecordId' },
+        });
+      }
+      // Solo la versión VIGENTE: un envío nuevo no se ata a una dirección que ya fue reemplazada (la base lo repite).
+      if (registro.version !== registro.vigente) {
+        throw new Abortar({
+          code: 'VALIDATION_FAILED',
+          message:
+            'El registro de datos personales no es la versión vigente del influencer: use la versión actual.',
+          details: { field: 'piiRecordId', reason: 'pii_record_not_current' },
         });
       }
     }
@@ -487,20 +503,56 @@ export async function transicionarEnvio(
       note: input.note,
       cambios,
       evidencias,
-      precondicion: input.to === 'prepared' ? exigirEnvioPreparable : undefined,
+      precondicion:
+        input.to === 'prepared'
+          ? exigirEnvioPreparable('pending')
+          : input.to === 'shipped'
+            ? exigirEnvioPreparable('prepared')
+            : input.to === 'delivered'
+              ? exigirEntregaNoAnteriorAlEnvio(input.happenedOn)
+              : undefined,
     });
     const [envio] = await cargarEnvios(client, persona, 's.id = $1', [input.shipmentId]);
     return { envio: envio!, evento: aplicado.evento, repetido: aplicado.repetido };
   });
 }
 
-/** Espejo de `shipments_preparacion` (029) con el dominio puro, para devolver un error accionable. */
-async function exigirEnvioPreparable(ctx: {
-  client: pg.PoolClient;
-  sujeto: { id: string; status: string };
-}): Promise<void> {
+/** «Entregado» no se fecha antes que «enviado» (dominio puro; la base lo repite en el evento, 033). */
+function exigirEntregaNoAnteriorAlEnvio(entregadoEl: string | undefined) {
+  return async (ctx: { client: pg.PoolClient; sujeto: { id: string; status: string } }): Promise<void> => {
+    if (ctx.sujeto.status !== 'shipped' || !isIsoDate(entregadoEl)) return; // lo rechazan la arista o la validación
+    const { rows } = await ctx.client.query<{ enviado: string | null }>(
+      `SELECT happened_on::text AS enviado FROM operational_events
+        WHERE shipment_id = $1 AND event_type = 'shipment.shipped'`,
+      [ctx.sujeto.id],
+    );
+    const orden = validarOrdenDeFechasDeEnvio(rows[0]?.enviado, entregadoEl);
+    if (!orden.ok) {
+      throw new Abortar({
+        code: orden.error.code,
+        message: orden.error.message,
+        details: orden.error.details,
+      });
+    }
+  };
+}
+
+/**
+ * Espejo de `shipments_preparacion` (029/033) con el dominio puro, para devolver un error accionable. Corre al
+ * PREPARAR (origen `pending`) y de nuevo al ENVIAR (origen `prepared`): la versión vigente del acuerdo o la
+ * asignación pudieron cambiar entre ambos pasos.
+ */
+function exigirEnvioPreparable(origenEsperado: 'pending' | 'prepared') {
+  return (ctx: { client: pg.PoolClient; sujeto: { id: string; status: string } }): Promise<void> =>
+    revalidarProductosDelEnvio(ctx, origenEsperado);
+}
+
+async function revalidarProductosDelEnvio(
+  ctx: { client: pg.PoolClient; sujeto: { id: string; status: string } },
+  origenEsperado: 'pending' | 'prepared',
+): Promise<void> {
   const { client, sujeto } = ctx;
-  if (sujeto.status !== 'pending') return; // otro origen: lo rechaza la arista del grafo
+  if (sujeto.status !== origenEsperado) return; // otro origen: lo rechaza la arista del grafo
   const { rows: envio } = await client.query<{ campaign_influencer_id: string }>(
     `SELECT campaign_influencer_id FROM shipments WHERE id = $1`,
     [sujeto.id],
@@ -547,7 +599,9 @@ async function exigirEnvioPreparable(ctx: {
     throw new Abortar({
       code: 'RESOURCE_CONFLICT',
       message:
-        'El envío no se puede preparar: cada producto debe estar asignado al influencer y, si el acuerdo es de canje o mixto, comprometido en la versión vigente.',
+        origenEsperado === 'pending'
+          ? 'El envío no se puede preparar: cada producto debe estar asignado al influencer y, si el acuerdo es de canje o mixto, comprometido en la versión vigente.'
+          : 'El envío no se puede marcar como enviado: cada producto debe seguir asignado al influencer y, si el acuerdo es de canje o mixto, comprometido en la versión vigente (el acuerdo pudo cambiar después de preparar).',
       details: { reason: 'preparation_failed', failures: fallos.map((f) => f.reason) },
     });
   }

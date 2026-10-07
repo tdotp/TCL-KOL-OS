@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { esAccionOperativa, sanitizeMetadataOperativa } from './audit.ts';
+import { PREFIJOS_OPERATIVOS, esAccionDeKpi, esAccionOperativa, sanitizeMetadataOperativa } from './audit.ts';
 
 const ID = '3f1c2d4e-5a6b-4c7d-8e9f-0a1b2c3d4e5f';
 
@@ -61,5 +61,61 @@ describe('auditoría operativa: allowlist estricta (Fase 8, DEC-013/DEC-049)', (
       toStatus: { nested: 'a' },
     });
     expect(Object.values(m).every((v) => v === '[redactado]')).toBe(true);
+  });
+});
+
+describe('auditoría de KPI: allowlist (FIX-B)', () => {
+  it('reconoce kpi_target.* y kpi_measurement.* como KPI y NO como operativas (no se ocultan a quien no ve finanzas)', () => {
+    for (const a of [
+      'kpi_target.registered',
+      'kpi_target.superseded',
+      'kpi_target.retired',
+      'kpi_measurement.recorded',
+      'kpi_measurement.corrected',
+    ]) {
+      expect(esAccionDeKpi(a), a).toBe(true);
+      expect(esAccionOperativa(a), a).toBe(false);
+    }
+    expect(esAccionDeKpi('pii.reveal')).toBe(false);
+    expect(PREFIJOS_OPERATIVOS.some((p) => 'kpi_target.registered'.startsWith(p))).toBe(false);
+  });
+
+  it('conserva ids, `metric` del catálogo y `unit`; redacta el resto (valor, etiqueta, motivo, texto del Sheet)', () => {
+    const m = sanitizeMetadataOperativa({
+      targetId: ID,
+      measurementId: ID,
+      supersedesId: ID,
+      campaignId: ID,
+      campaignInfluencerId: ID,
+      metric: 'views',
+      unit: 'count',
+      version: 2,
+      value: 123456,
+      targetValue: 5000,
+      otherLabel: 'Menciones de Valentina',
+      correctionReason: 'Calle 10 # 5-20',
+      sheetText: 'Alcanzar 50.000 vistas',
+    });
+    expect(m).toMatchObject({
+      targetId: ID,
+      measurementId: ID,
+      supersedesId: ID,
+      campaignId: ID,
+      campaignInfluencerId: ID,
+      metric: 'views',
+      unit: 'count',
+      version: 2,
+    });
+    for (const k of ['value', 'targetValue', 'otherLabel', 'correctionReason', 'sheetText']) {
+      expect(m[k], k).toBe('[redactado]');
+    }
+  });
+
+  it('`metric` solo admite tokens del catálogo (una etiqueta libre o un valor disfrazado se redacta); `unit` un token corto', () => {
+    expect(sanitizeMetadataOperativa({ metric: 'Menciones de Valentina' })['metric']).toBe('[redactado]');
+    expect(sanitizeMetadataOperativa({ metric: 'other' })['metric']).toBe('other');
+    expect(sanitizeMetadataOperativa({ metric: 5000 })['metric']).toBe('[redactado]');
+    expect(sanitizeMetadataOperativa({ unit: 'percent' })['unit']).toBe('percent');
+    expect(sanitizeMetadataOperativa({ unit: '50.000 vistas para Valentina' })['unit']).toBe('[redactado]');
   });
 });

@@ -117,3 +117,24 @@ describe('validadores', () => {
     expect(m.ok && m.value).toBe('Error de digitación');
   });
 });
+
+describe('endurecimiento (FIX-B): claves, fechas y observación fuera de rango', () => {
+  it('la clave de idempotencia rechaza bidi e invisibles', () => {
+    expect(validarClaveDeKpi('kpi-1').ok).toBe(true);
+    for (const mala of ['k\u202E', 'k\u200B', 'k\u0000', ' k', '']) {
+      expect(validarClaveDeKpi(mala).ok, JSON.stringify(mala)).toBe(false);
+    }
+  });
+
+  it('el periodo y la observación en el año 0000 son validación, no un 500', () => {
+    expect(validarFechaDeKpi('0000-01-01', 'periodStart').ok).toBe(false);
+    expect(validarFechaDeKpi('1899-12-31', 'periodStart').ok).toBe(false);
+    expect(validarFechaDeKpi('2026-03-01', 'periodStart').ok).toBe(true);
+    const m = validarMedicionDeKpi({ metric: 'views', value: 1, observedAt: '0000-01-01T00:00:00Z' });
+    expect(m.ok).toBe(false);
+    if (!m.ok) expect(m.error.details).toMatchObject({ field: 'observedAt', reason: 'out_of_range' });
+    expect(validarMedicionDeKpi({ metric: 'views', value: 1, observedAt: '2026-03-01T00:00:00Z' }).ok).toBe(
+      true,
+    );
+  });
+});

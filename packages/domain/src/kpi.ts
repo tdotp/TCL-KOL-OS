@@ -16,6 +16,7 @@ import {
   validarValorDeKpi,
 } from './kpi-metrics';
 import { isSocialPlatform } from './influencers';
+import { FECHA_ISO_MINIMA, esClaveDeIdempotenciaValida, isIsoDate } from './operational-events';
 
 // ─────────────────────────── Resumen ───────────────────────────────────────────
 
@@ -96,15 +97,9 @@ const CARACTERES_DE_CONTROL = /[\p{Cc}]/u;
 export const KPI_MAX_MOTIVO = 500;
 const TOLERANCIA_DE_FUTURO_MS = 24 * 60 * 60 * 1000;
 
-/** Clave de idempotencia: obligatoria, sin espacios en los extremos, hasta 200 caracteres, sin control. */
+/** Clave de idempotencia: obligatoria, sin espacios en los extremos, hasta 200 caracteres, sin control ni bidi. */
 export function validarClaveDeKpi(clave: unknown): Result<string> {
-  if (
-    typeof clave !== 'string' ||
-    clave !== clave.trim() ||
-    clave === '' ||
-    clave.length > 200 ||
-    CARACTERES_DE_CONTROL.test(clave)
-  ) {
+  if (!esClaveDeIdempotenciaValida(clave)) {
     return invalido(
       'idempotencyKey',
       'La clave de idempotencia es obligatoria (hasta 200 caracteres, sin espacios en los extremos).',
@@ -119,9 +114,9 @@ export function validarFechaDeKpi(valor: unknown, field: string): Result<string 
   if (typeof valor !== 'string' || !PATRON_DE_FECHA.test(valor)) {
     return invalido(field, 'La fecha debe tener el formato AAAA-MM-DD.');
   }
-  const d = new Date(`${valor}T00:00:00.000Z`);
-  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== valor) {
-    return invalido(field, 'La fecha no existe en el calendario.');
+  // Calendario real Y dentro del rango que la base guarda (el año 0000 no existe en `date`).
+  if (!isIsoDate(valor)) {
+    return invalido(field, 'La fecha no existe en el calendario o está fuera de rango.');
   }
   return ok(valor);
 }
@@ -211,6 +206,10 @@ export function validarObservacionDeKpi(valor: unknown, ahora: Date): Result<str
         : undefined;
   if (fecha === undefined || Number.isNaN(fecha.getTime())) {
     return invalido('observedAt', 'La fecha de observación no es válida.');
+  }
+  // Fuera del rango que `timestamptz` guarda sin error (p. ej. el año 0000): validación, nunca un 500.
+  if (fecha.toISOString().slice(0, 10) < FECHA_ISO_MINIMA) {
+    return invalido('observedAt', 'La fecha de observación está fuera de rango.', 'out_of_range');
   }
   if (fecha.getTime() > ahora.getTime() + TOLERANCIA_DE_FUTURO_MS) {
     return invalido('observedAt', 'La fecha de observación no puede estar en el futuro.', 'in_the_future');

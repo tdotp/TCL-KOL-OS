@@ -7,7 +7,13 @@
  */
 
 import type pg from 'pg';
-import { AUDIT_ORIGINS, type AuditCorrelation, type AuditOrigin, type User } from '@tcl-kol-os/domain';
+import {
+  AUDIT_ORIGINS,
+  type AuditCorrelation,
+  type AuditOrigin,
+  type User,
+  isKpiMetric,
+} from '@tcl-kol-os/domain';
 
 export interface AuditInput {
   /**
@@ -103,7 +109,7 @@ const CLAVES_PROHIBIDAS = new Set([
  * referencias externas, notas, nombres de archivo ni valores de datos personales. Lo que
  * no está permitido se redacta (no se descarta en silencio, para que el defecto se vea).
  */
-const PREFIJOS_OPERATIVOS = [
+export const PREFIJOS_OPERATIVOS = [
   'pii.',
   'shipment.',
   'payment.',
@@ -132,12 +138,28 @@ const CLAVES_OPERATIVAS_PERMITIDAS = new Set([
   'evidenceCount',
   'fields',
   'itemCount',
+  // KPI (`kpi_target.*`, `kpi_measurement.*`): la métrica es un token del catálogo y la unidad un token corto.
+  'metric',
+  'unit',
 ]);
+
+/**
+ * V2 · Fase 8: los KPI también se auditan con la allowlist (ids, `metric` del catálogo, `unit`, `version`; el
+ * resto se redacta: jamás el valor, la etiqueta `other`, el motivo de una corrección ni texto del Sheet). NO son
+ * «operativos» para el lector de la actividad (no son financieros ni de PII): por eso no están en
+ * `PREFIJOS_OPERATIVOS`.
+ */
+const PREFIJOS_DE_KPI = ['kpi_target.', 'kpi_measurement.'] as const;
+
+export function esAccionDeKpi(action: string): boolean {
+  return PREFIJOS_DE_KPI.some((p) => action.startsWith(p));
+}
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TOKEN_CORTO = /^[A-Za-z0-9_.:-]{1,48}$/;
 
 function valorOperativoSeguro(clave: string, v: unknown): boolean {
+  if (clave === 'metric') return typeof v === 'string' && isKpiMetric(v);
   if (typeof v === 'boolean' || typeof v === 'number') return Number.isFinite(Number(v));
   if (v === null) return true;
   if (typeof v === 'string') return /(^id$|Id$|_id$)/.test(clave) ? UUID.test(v) : TOKEN_CORTO.test(v);
@@ -203,7 +225,7 @@ export async function recordAudit(client: pg.PoolClient, input: AuditInput): Pro
       input.entityType,
       input.entityId ?? null,
       JSON.stringify(
-        esAccionOperativa(input.action)
+        esAccionOperativa(input.action) || esAccionDeKpi(input.action)
           ? sanitizeMetadataOperativa(input.metadata)
           : sanitizeMetadata(input.metadata),
       ),
@@ -226,21 +248,37 @@ export interface AuditEventRow {
   readonly correlation: AuditCorrelation | null;
 }
 
-/** Auditoría de la organización del actor. Nunca de otra. */
+export interface OpcionesDeListaDeAuditoria {
+  /**
+   * Incluye las acciones operativas y de PII (`PREFIJOS_OPERATIVOS`: pii, pagos, cobro, acuerdos, envíos,
+   * evidencia). Por omisión se EXCLUYEN: quién reportó un pago o reveló datos personales y cuándo es actividad
+   * financiera/de PII. Solo quien tiene `finance:read` la pide (la decide el llamador con `roleCan`).
+   */
+  readonly incluirOperativas?: boolean | undefined;
+}
+
+/**
+ * Auditoría de la organización del actor. Nunca de otra. Sin `incluirOperativas`, excluye las acciones
+ * operativas/PII (mismo criterio que `esAccionOperativa`: no hay una segunda lista).
+ */
 export async function listAudit(
   client: pg.Pool | pg.PoolClient,
   organizationId: string,
   limit = 50,
+  opciones: OpcionesDeListaDeAuditoria = {},
 ): Promise<AuditEventRow[]> {
+  const excluir = opciones.incluirOperativas !== true;
   const { rows } = await client.query<AuditEventRow>(
     `SELECT a.id, u.name AS actor_name, a.action, a.entity_type, a.entity_id, a.metadata, a.created_at,
             a.origin, a.correlation
        FROM audit_events a
        LEFT JOIN users u ON u.id = a.actor_id
       WHERE a.organization_id = $1
+        AND ($3::boolean = false
+             OR NOT EXISTS (SELECT 1 FROM unnest($4::text[]) p WHERE starts_with(a.action, p)))
       ORDER BY a.created_at DESC
       LIMIT $2`,
-    [organizationId, limit],
+    [organizationId, limit, excluir, [...PREFIJOS_OPERATIVOS]],
   );
   return rows;
 }

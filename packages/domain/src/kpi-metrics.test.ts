@@ -89,3 +89,22 @@ describe('validarValorDeKpi', () => {
     expect(validarValorDeKpi('engagement_rate', 4.12345).ok).toBe(false);
   });
 });
+
+describe('etiqueta de métrica `other`: NFKC (FIX-B)', () => {
+  it('«Conversión» y «ｃonversión» (ancho completo) son la MISMA etiqueta; la guardada es NFKC', () => {
+    const a = normalizarEtiquetaDeMetrica('Conversión');
+    const b = normalizarEtiquetaDeMetrica('ｃonversión');
+    expect(a.ok && b.ok).toBe(true);
+    if (a.ok && b.ok) {
+      expect(b.value.label.toLowerCase()).toBe(a.value.label.toLowerCase());
+      expect(b.value.key).toBe(a.value.key);
+      expect(a.value.label).toBe(a.value.label.normalize('NFKC'));
+    }
+    const lig = normalizarEtiquetaDeMetrica('ﬁnal  ratio');
+    expect(lig.ok && lig.value.label).toBe('final ratio');
+  });
+
+  it('una etiqueta que solo tiene control tras normalizar se rechaza', () => {
+    expect(normalizarEtiquetaDeMetrica('a\u0000b').ok).toBe(false);
+  });
+});

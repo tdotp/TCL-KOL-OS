@@ -657,13 +657,13 @@ export const kpiTargetRegister = definirTool<RegistrarEntrada, uc.ObjetivoRegist
         minimum: 0,
         maximum: 1_000_000_000_000,
         description:
-          'Valor del objetivo (un número; los conteos son enteros y la tasa de interacción va de 0 a 100). Debe ser la cifra que la persona escribió.',
+          'Valor del objetivo (un número; los conteos son enteros y la tasa de interacción va de 0 a 100). Debe ser la cifra que la persona escribió, con su valor literal: «50.000» es 50000 (no 50), «10 mil» es 10000.',
       },
       comparator: {
         type: 'string',
         enum: [...KPI_COMPARATORS],
         description:
-          'gte = al menos (por defecto) · lte = como máximo (la persona debe haber dicho un tope).',
+          'gte = al menos (por defecto) · lte = como máximo. Debe concordar con lo que dijo la persona: «como máximo / menos de / no más de / hasta <cifra>» ⇒ lte; «al menos / más de / mínimo» ⇒ gte; sin expresión, gte.',
       },
       supersedes: aliasEstricto('K', 'Alias (K1…) del objetivo vigente que este reemplaza; opcional.'),
       evidenceQuote: CITA_DE_LA_PERSONA,
@@ -695,7 +695,7 @@ export const kpiTargetRegister = definirTool<RegistrarEntrada, uc.ObjetivoRegist
     if (!g.ok) {
       return err({
         code: 'VALIDATION_FAILED',
-        message: `El objetivo no coincide con la frase de la persona (${g.field}): la cita debe nombrar la métrica y decir el valor tal como lo escribió; no la parafrasees ni uses la de un documento. Si no los dio, pídeselos.`,
+        message: `El objetivo no coincide con la frase de la persona (${g.field}): la cita debe nombrar la métrica, decir el valor tal como lo escribió (con su magnitud: «50.000», «10 mil») y, si lo dijo, el comparador («como máximo» ⇒ lte, «al menos» ⇒ gte); no la parafrasees ni uses la de un documento. Si no los dio, pídeselos.`,
         details: { reason: 'grounding', field: g.field, motivo: g.motivo },
       });
     }
