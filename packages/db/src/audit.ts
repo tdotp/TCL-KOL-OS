@@ -96,6 +96,73 @@ const CLAVES_PROHIBIDAS = new Set([
   'direccion',
 ]);
 
+/**
+ * V2 · Fase 8 (DEC-049, DEC-013): las acciones operativas y de PII se auditan con una
+ * ALLOWLIST estricta, no con la denylist de arriba. Su metadata solo puede llevar
+ * identificadores, estados, versiones, conteos, tipos y nombres de campo — jamás montos,
+ * referencias externas, notas, nombres de archivo ni valores de datos personales. Lo que
+ * no está permitido se redacta (no se descarta en silencio, para que el defecto se vea).
+ */
+const PREFIJOS_OPERATIVOS = [
+  'pii.',
+  'shipment.',
+  'payment.',
+  'payment_obligation.',
+  'billing.',
+  'agreement.',
+  'ops_evidence.',
+  'operational_event.',
+] as const;
+
+const CLAVES_OPERATIVAS_PERMITIDAS = new Set([
+  'status',
+  'fromStatus',
+  'toStatus',
+  'eventType',
+  'subjectType',
+  'version',
+  'seq',
+  'count',
+  'kind',
+  'mode',
+  'compensationType',
+  'idempotent',
+  'replayed',
+  'hasEvidence',
+  'evidenceCount',
+  'fields',
+  'itemCount',
+]);
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const TOKEN_CORTO = /^[A-Za-z0-9_.:-]{1,48}$/;
+
+function valorOperativoSeguro(clave: string, v: unknown): boolean {
+  if (typeof v === 'boolean' || typeof v === 'number') return Number.isFinite(Number(v));
+  if (v === null) return true;
+  if (typeof v === 'string') return /(^id$|Id$|_id$)/.test(clave) ? UUID.test(v) : TOKEN_CORTO.test(v);
+  if (clave === 'fields' && Array.isArray(v)) {
+    return v.length <= 8 && v.every((x) => typeof x === 'string' && /^[a-z_]{1,24}$/.test(x));
+  }
+  return false;
+}
+
+export function esAccionOperativa(action: string): boolean {
+  return PREFIJOS_OPERATIVOS.some((p) => action.startsWith(p));
+}
+
+export function sanitizeMetadataOperativa(
+  metadata: Readonly<Record<string, unknown>> | undefined,
+): Record<string, unknown> {
+  if (metadata === undefined) return {};
+  const limpio: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(metadata)) {
+    const claveOk = CLAVES_OPERATIVAS_PERMITIDAS.has(k) || /(^id$|Id$|_id$)/.test(k);
+    limpio[k] = claveOk && valorOperativoSeguro(k, v) ? v : '[redactado]';
+  }
+  return limpio;
+}
+
 export function sanitizeMetadata(
   metadata: Readonly<Record<string, unknown>> | undefined,
 ): Record<string, unknown> {
@@ -135,7 +202,11 @@ export async function recordAudit(client: pg.PoolClient, input: AuditInput): Pro
       input.action,
       input.entityType,
       input.entityId ?? null,
-      JSON.stringify(sanitizeMetadata(input.metadata)),
+      JSON.stringify(
+        esAccionOperativa(input.action)
+          ? sanitizeMetadataOperativa(input.metadata)
+          : sanitizeMetadata(input.metadata),
+      ),
       origin,
       correlation === null ? null : JSON.stringify(correlation),
     ],
