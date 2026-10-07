@@ -1,0 +1,445 @@
+/**
+ * Estilos de Operación (V2 · Fase 8). CSS Module propio: no toca `globals.css`.
+ * Mismos tokens y clases globales que el contenido (`--brand`, `--line`, `.card`, `.btn`, `.pill`, `.aviso`).
+ * Todo texto de personas y archivos es TEXTO PLANO: `overflow-wrap: anywhere` y `pre-wrap` donde hay saltos.
+ */
+
+.pagina {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cabecera h1 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.nota {
+  margin: 6px 0 0;
+  max-width: 720px;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.texto {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.etiquetas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.vacio {
+  color: var(--muted);
+  font-size: 13.5px;
+  margin: 0;
+}
+
+.error {
+  margin: 0;
+  color: var(--bad);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.exito {
+  margin: 0;
+  color: var(--ok);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* ── Conteos y filtros ── */
+
+.conteos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.conteo {
+  display: grid;
+  gap: 2px;
+  min-width: 120px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.conteo strong {
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+.conteo span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filtro {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.filtro:hover {
+  border-color: var(--brand);
+}
+
+.filtroActivo {
+  border-color: var(--brand);
+  background: var(--chip);
+  font-weight: 650;
+}
+
+.paginacion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* ── Lista de participaciones ── */
+
+.filas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.fila {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  min-width: 0;
+}
+
+.filaTitulo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+}
+
+.filaTitulo a {
+  font-weight: 650;
+  color: var(--ink);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.filaTitulo a:hover {
+  color: var(--brand);
+  text-decoration: underline;
+}
+
+.insignia {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.insigniaRotulo {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+/* ── Detalle: secciones ── */
+
+.seccion {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.seccionCabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.seccionCabecera h2 {
+  margin: 0;
+}
+
+.subtitulo {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.datos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px 16px;
+  margin: 0;
+}
+
+.datos div {
+  min-width: 0;
+}
+
+.datos dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.datos dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.item {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  min-width: 0;
+}
+
+.itemCabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+}
+
+.itemMeta {
+  color: var(--muted);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.tablaEnvoltura {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.tabla th,
+.tabla td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.tabla th {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.numero {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.historial {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.historial li {
+  padding-left: 10px;
+  border-left: 2px solid var(--line);
+  overflow-wrap: anywhere;
+}
+
+.pii {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+}
+
+.valorRevelado {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* ── Formularios ── */
+
+.formulario {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.formularioTitulo {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.formulario label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.formulario input[type='text'],
+.formulario input[type='number'],
+.formulario input[type='date'],
+.formulario select,
+.formulario textarea {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 400;
+}
+
+.formulario textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.formulario input[type='file'] {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  font-size: 12.5px;
+}
+
+.campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.fila2 {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.checkbox {
+  display: flex !important;
+  align-items: flex-start;
+  gap: 8px !important;
+  font-weight: 500 !important;
+  color: var(--ink) !important;
+  font-size: 13px !important;
+}
+
+.checkbox input {
+  margin-top: 3px;
+  flex: none;
+}
+
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.aviso {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--chip);
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.formularios {
+  display: grid;
+  gap: 10px;
+}
+
+@media (max-width: 640px) {
+  .fila2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
