@@ -63,6 +63,27 @@ export type Action =
   | 'script:read'
   | 'script:manage'
   | 'script:approve'
+  // V2 · Fase 8: operación y KPIs (DEC-049). Capacidades SEPARADAS de las
+  // creativas: el Operativo ejecuta y registra; Cuenta consulta el estado sin
+  // dinero ni datos personales; TCL no recibe nada hasta la Fase 9.
+  // `finance:read` (fee, costos, facturas, pagos) y `pii:read` (dirección,
+  // cédula, teléfono) son lecturas aparte: `shipment:manage` NO implica `pii:read`.
+  // `payment:report` REGISTRA que una persona/entidad externa reportó un pago;
+  // este sistema no ejecuta pagos (DEC-014).
+  | 'operations:read'
+  | 'agreement:read'
+  | 'agreement:manage'
+  | 'finance:read'
+  | 'shipment:read'
+  | 'shipment:manage'
+  | 'billing:manage'
+  | 'payment:report'
+  | 'pii:read'
+  | 'pii:manage'
+  | 'ops_evidence:attach'
+  | 'kpi:read'
+  | 'kpi:target_manage'
+  | 'kpi:measure'
   | 'glossary:propose'
   | 'glossary:approve'
   | 'comment:internal'
@@ -120,6 +141,20 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'airun:read',
     'chat:read',
     'chat:write',
+    'operations:read',
+    'agreement:read',
+    'agreement:manage',
+    'finance:read',
+    'shipment:read',
+    'shipment:manage',
+    'billing:manage',
+    'payment:report',
+    'pii:read',
+    'pii:manage',
+    'ops_evidence:attach',
+    'kpi:read',
+    'kpi:target_manage',
+    'kpi:measure',
     'admin:users',
     'admin:integrations',
     'admin:ai_flag',
@@ -164,6 +199,17 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'airun:read',
     'chat:read',
     'chat:write',
+    'operations:read',
+    'agreement:read',
+    'agreement:manage',
+    'finance:read',
+    'shipment:read',
+    'shipment:manage',
+    'billing:manage',
+    'ops_evidence:attach',
+    'kpi:read',
+    'kpi:target_manage',
+    'kpi:measure',
   ],
   consultor: [
     'campaign:create',
@@ -201,6 +247,11 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'comment:client_visible',
     'chat:read',
     'chat:write',
+    'operations:read',
+    'agreement:read',
+    'shipment:read',
+    'kpi:read',
+    'kpi:target_manage',
   ],
   analista: [
     'campaign:read',
@@ -227,6 +278,21 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'campaign_influencer:read',
     // Fase 7: ve las piezas y su estado (proyección sin contenido ni revisión).
     'deliverable:read',
+    // Fase 8: opera y registra (acuerdos, logística, facturación/pagos como
+    // SEGUIMIENTO, KPIs reales). Nada creativo: ni script:*, ni brief:*, ni chat:*.
+    'operations:read',
+    'agreement:read',
+    'agreement:manage',
+    'finance:read',
+    'shipment:read',
+    'shipment:manage',
+    'billing:manage',
+    'payment:report',
+    'pii:read',
+    'pii:manage',
+    'ops_evidence:attach',
+    'kpi:read',
+    'kpi:measure',
   ],
   // El cliente TCL es de solo lectura: consulta lo que ya tiene visible y
   // descarga el entregable (DEC-012 / ADR-004). No aprueba, no pide cambios y

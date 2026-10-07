@@ -41,6 +41,30 @@ function scope(overrides: Partial<ResourceScope> = {}): ResourceScope {
 
 // ─────────────────────────── Aislamiento horizontal ────────────────────────────
 
+// Fase 8 (DEC-049): el Operativo ejecuta y registra la operación. Las capacidades
+// operativas/financieras van SEPARADAS de las creativas; la lista es exacta.
+const OPERATIVO_ESPERADO = [
+  'agreement:manage',
+  'agreement:read',
+  'billing:manage',
+  'brief:read',
+  'campaign:read',
+  'campaign_influencer:read',
+  'deliverable:read',
+  'finance:read',
+  'influencer:read',
+  'kpi:measure',
+  'kpi:read',
+  'operations:read',
+  'ops_evidence:attach',
+  'payment:report',
+  'pii:manage',
+  'pii:read',
+  'shipment:manage',
+  'shipment:read',
+  'source:read',
+].sort();
+
 describe('aislamiento entre organizaciones (caso S-01)', () => {
   it('ningún rol accede a un recurso interno de otra organización', () => {
     const ajeno = scope({ organizationId: 'org-otra-agencia' });
@@ -204,14 +228,7 @@ describe('usuario operativo', () => {
     // campaña. Fase 7 añade UNA lectura más, `deliverable:read` (estado de cada
     // entregable, con una proyección sin versiones intermedias, hallazgos ni
     // comentarios). Sigue sin ninguna capacidad de escritura ni de `script:*`.
-    expect([...actionsFor('operativo')].sort()).toEqual([
-      'brief:read',
-      'campaign:read',
-      'campaign_influencer:read',
-      'deliverable:read',
-      'influencer:read',
-      'source:read',
-    ]);
+    expect([...actionsFor('operativo')].sort()).toEqual(OPERATIVO_ESPERADO);
   });
 
   it('no aprueba, no transiciona, no edita, no administra', () => {
@@ -288,9 +305,13 @@ describe('influencer y participación en campaña', () => {
     }
   });
 
-  it('no existen permisos financieros anticipados', () => {
-    const todas = ROLES.flatMap((rol) => [...actionsFor(rol)]) as string[];
-    expect(todas.filter((a) => /^(payment|invoice|agreement|kpi|shipping)/.test(a))).toEqual([]);
+  it('las capacidades financieras (pagos, facturas, acuerdos) nunca llegan a cliente, analista ni legal (Fase 8)', () => {
+    for (const rol of ['cliente', 'analista', 'legal'] as const) {
+      const f = [...actionsFor(rol)].filter((a) =>
+        /^(payment|invoice|agreement|finance|billing|shipment|pii|kpi|operations|ops_evidence)/.test(a),
+      );
+      expect(f, rol).toEqual([]);
+    }
   });
 });
 
@@ -366,14 +387,7 @@ describe('chat del agente de Cuenta (D4)', () => {
   });
 
   it('la matriz exacta de los demás roles no cambió (operativo: solo +deliverable:read de la Fase 7; el cliente conserva su lista)', () => {
-    expect([...actionsFor('operativo')].sort()).toEqual([
-      'brief:read',
-      'campaign:read',
-      'campaign_influencer:read',
-      'deliverable:read',
-      'influencer:read',
-      'source:read',
-    ]);
+    expect([...actionsFor('operativo')].sort()).toEqual(OPERATIVO_ESPERADO);
     expect([...actionsFor('cliente')].sort()).toEqual([
       'brief:export',
       'brief:read',
@@ -434,5 +448,89 @@ describe('contenido: entregables y versiones de guion', () => {
     expect(operativo.ok).toBe(false);
     if (!operativo.ok) expect(operativo.error.code).toBe('FORBIDDEN_ROLE');
     expect(authorizeInternalResource(user('operativo'), 'deliverable:read', 'org-smartpr').ok).toBe(true);
+  });
+});
+
+// ─────────────────────────── Operación y KPIs (V2 · Fase 8) ────────────────────
+
+describe('operación: capacidades separadas de las creativas (Fase 8)', () => {
+  const OPERATIVAS = [
+    'operations:read',
+    'agreement:read',
+    'agreement:manage',
+    'finance:read',
+    'shipment:read',
+    'shipment:manage',
+    'billing:manage',
+    'payment:report',
+    'pii:read',
+    'pii:manage',
+    'ops_evidence:attach',
+    'kpi:read',
+    'kpi:target_manage',
+    'kpi:measure',
+  ] as const;
+
+  it('cliente, analista y legal no reciben ninguna capacidad operativa', () => {
+    for (const rol of ['cliente', 'analista', 'legal'] as const) {
+      for (const a of OPERATIVAS) expect(roleCan(rol, a), `${rol} ${a}`).toBe(false);
+    }
+  });
+
+  it('el consultor consulta el estado SIN dinero ni PII y fija objetivos de KPI; no registra actuales', () => {
+    for (const a of [
+      'operations:read',
+      'agreement:read',
+      'shipment:read',
+      'kpi:read',
+      'kpi:target_manage',
+    ] as const) {
+      expect(roleCan('consultor', a), a).toBe(true);
+    }
+    for (const a of [
+      'finance:read',
+      'pii:read',
+      'pii:manage',
+      'payment:report',
+      'billing:manage',
+      'shipment:manage',
+      'agreement:manage',
+      'kpi:measure',
+    ] as const) {
+      expect(roleCan('consultor', a), a).toBe(false);
+    }
+  });
+
+  it('shipment:manage NO implica pii:read; el director no tiene PII ni reporta pagos (mínimo privilegio)', () => {
+    expect(roleCan('director', 'shipment:manage')).toBe(true);
+    expect(roleCan('director', 'pii:read')).toBe(false);
+    expect(roleCan('director', 'pii:manage')).toBe(false);
+    expect(roleCan('director', 'payment:report')).toBe(false);
+    expect(roleCan('director', 'finance:read')).toBe(true);
+  });
+
+  it('el Operativo no obtiene ninguna autoridad creativa ni de IA', () => {
+    for (const a of [
+      'script:read',
+      'script:manage',
+      'script:approve',
+      'brief:approve_internal',
+      'brief:transition',
+      'brief:edit',
+      'chat:read',
+      'chat:write',
+      'airun:read',
+      'kpi:target_manage',
+    ] as const) {
+      expect(roleCan('operativo', a), a).toBe(false);
+    }
+  });
+
+  it('solo admin y operativo reportan pagos y leen PII', () => {
+    for (const rol of ROLES) {
+      const esperado = rol === 'admin' || rol === 'operativo';
+      expect(roleCan(rol, 'payment:report'), `${rol} payment:report`).toBe(esperado);
+      expect(roleCan(rol, 'pii:read'), `${rol} pii:read`).toBe(esperado);
+    }
   });
 });
