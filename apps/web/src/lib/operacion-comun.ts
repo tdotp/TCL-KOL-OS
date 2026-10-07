@@ -9,18 +9,16 @@
  * necesita para decidir qué mostrar (la autorización real sigue siendo la del caso de uso).
  */
 
-import {
-  type DomainErrorCode,
-  NOTE_PII_WARNING,
-  type PiiField,
-  type Role,
-  roleCan,
-} from '@tcl-kol-os/domain';
+import { type DomainErrorCode, type PiiField, type Role, roleCan } from '@tcl-kol-os/domain';
+import { MENSAJE_GENERICO } from './operacion-cliente';
 
-/** Aviso que acompaña a todo campo de texto libre operativo (notas, motivos): no se escribe PII ahí. */
-export const AVISO_NOTAS_SIN_PII: string = NOTE_PII_WARNING;
-
-export const MENSAJE_GENERICO = 'Ocurrió un error inesperado. Inténtalo de nuevo.';
+// Re-exportado para el servidor; los componentes de cliente importan de `operacion-cliente.ts`.
+export {
+  AVISO_NOTAS_SIN_PII,
+  ESTADO_INICIAL,
+  MENSAJE_GENERICO,
+  type EstadoDeAccion,
+} from './operacion-cliente';
 export const MENSAJE_SESION = 'Tu sesión expiró. Inicia sesión de nuevo.';
 export const MENSAJE_NO_ENCONTRADO = 'No encontramos ese elemento. Recarga la página e inténtalo de nuevo.';
 export const MENSAJE_SIN_PERMISO = 'Tu rol no puede realizar esta acción.';
@@ -29,24 +27,6 @@ export const MENSAJE_OTRA_PERSONA =
   'Otra persona cambió este registro; recarga la página e inténtalo de nuevo.';
 
 // ─────────────────────────── Estado de una server action ───────────────────────
-
-/**
- * Lo que devuelve TODA server action de escritura de Operación (serializable, apto para `useActionState`).
- * `message` es siempre un texto en español para la persona. `field` es el campo del formulario con el
- * problema (si se conoce). `code` es estable para la interfaz: `SESSION`, `STALE`, `FORBIDDEN_ROLE`,
- * `RESOURCE_NOT_FOUND`, `VALIDATION_FAILED`, `RESOURCE_CONFLICT`, `INTERNAL`… Nunca lleva ids ni detalles.
- */
-export interface EstadoDeAccion {
-  readonly ok: boolean;
-  readonly message: string;
-  readonly field?: string;
-  readonly code?: string;
-  /** `true` si era un reintento idéntico (misma clave y solicitud): no se escribió nada nuevo. */
-  readonly repeated?: boolean;
-}
-
-/** Estado inicial para `useActionState`: ni éxito ni error (`message === ''` ⇒ aún sin enviar). */
-export const ESTADO_INICIAL: EstadoDeAccion = { ok: false, message: '' };
 
 /** Resultado de `revelarPiiAction`: los valores existen SOLO en la respuesta de ese clic; no se guardan en el estado. */
 export type ResultadoDeRevelacion =

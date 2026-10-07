@@ -70,7 +70,7 @@ TAREA = "conversar"
 
 # --- Límites (constantes de código: cambiarlos es una decisión, no un ajuste) ----
 MAX_MENSAJES = 300
-MAX_TOOLS = 40
+MAX_TOOLS = 64
 MAX_TOOL_CALLS_POR_MENSAJE = 8
 MAX_CARACTERES_POR_MENSAJE = 120_000
 #: Suma de caracteres de mensajes + tool calls previas + definiciones de tools.

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { type EstadoDeAccion, ESTADO_INICIAL, MENSAJE_GENERICO } from '@/lib/operacion-comun';
+import { type EstadoDeAccion, ESTADO_INICIAL, MENSAJE_GENERICO } from '@/lib/operacion-cliente';
 import { ACEPTA_EVIDENCIA } from './etiquetas';
 import styles from './operacion.module.css';
 

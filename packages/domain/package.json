@@ -7,7 +7,8 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./operational-events": "./src/operational-events.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

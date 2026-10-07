@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { AVISO_NOTAS_SIN_PII } from '@/lib/operacion-comun';
+import { AVISO_NOTAS_SIN_PII } from '@/lib/operacion-cliente';
 import { MODO_DE_ACUERDO } from './etiquetas';
 import styles from './operacion.module.css';
 
