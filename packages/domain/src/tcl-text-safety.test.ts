@@ -66,6 +66,11 @@ const SEGUROS: ReadonlyArray<readonly [string, string]> = [
   ['porcentaje', 'engagement de 4.7%'],
   ['lista de tamaños', '55 65 75 85 pulgadas'],
   ['tono', 'Cercano, aspiracional y directo'],
+  ['4K de resolución', 'Televisor 4K de 65 pulgadas con panel QLED'],
+  ['4 mil seguidores', 'Una comunidad de más de 4 mil seguidores'],
+  ['cinco colores', 'Disponible en cinco colores y tres tamaños'],
+  ['dos años de garantía', 'Incluye dos años de garantía'],
+  ['tasa de interacción', 'Alta tasa de interacción (engagement rate)'],
   ['nombre de persona', 'Valentina Ríos'],
   ['handle', 'valentina.rios'],
 ];

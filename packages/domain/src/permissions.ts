@@ -85,7 +85,7 @@ export type Action =
   | 'kpi:target_manage'
   | 'kpi:measure'
   // V2 · Fase 9 (DEC-050): dashboard TCL de solo lectura. Capacidades EXCLUSIVAS del
-  // cliente, espejo de `source:read_shared`: no reutilizan las internas (`campaign:read`,
+  // cliente: no reutilizan las internas (`campaign:read`,
   // `brief:read`, `kpi:read`…) y solo dan acceso a la PROYECCIÓN TCL (allowlist del servidor).
   // Ningún rol interno las recibe: personal de SmartPR no usa `/tcl`.
   | 'campaign:read_client'
@@ -93,6 +93,9 @@ export type Action =
   | 'operations:read_summary_client'
   | 'kpi:read_client'
   | 'export:client'
+  // Documentos que SmartPR marcó a propósito como visibles para TCL (lista de la proyección TCL: título, tipo,
+  // idioma y fecha; nunca hash, URL ni fragmentos). Reemplaza a `source:read_shared` en el cliente (Fase 9).
+  | 'document:read_client'
   | 'glossary:propose'
   | 'glossary:approve'
   | 'comment:internal'
@@ -309,14 +312,16 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
   // workflow cliente, `docs/product/CLIENT_WORKFLOW_CORRECTION.md`).
   // Fase 9: se RETIRAN `campaign:read`, `brief:read` y `brief:export` (cerraban
   // lecturas legadas de borradores, de `modelo/costoUsd` y de entidades internas);
-  // se conserva `source:read_shared` (cada fuente se comparte a propósito).
+  // también `source:read_shared` (sus lectores legados devolvían hash, URL externa y fragmentos de fuentes
+  // compartidas, incluso de una hoja marcada por error). Los documentos compartidos a propósito los lee la
+  // proyección TCL con `document:read_client`, sin esos campos.
   cliente: [
     'campaign:read_client',
     'content:read_approved_client',
     'operations:read_summary_client',
     'kpi:read_client',
     'export:client',
-    'source:read_shared',
+    'document:read_client',
   ],
 };
 

@@ -15,13 +15,13 @@ TCL nunca recibe una entidad interna ni un read model interno «con menos campos
 
 ## 2. Aislamiento del cliente (sin migración)
 
-- El cliente V2 **es TCL**. Contrato vigente: rol `cliente` + `campaigns.visibility IN ('tcl','compartida')` + `status ≠ cancelada` + capacidades específicas + guard único en servidor. Fallo ⇒ 404 idéntico (no existe / no visible / otra org).
+- El cliente V2 **es TCL**. Contrato vigente: rol `cliente` + `campaigns.visibility IN ('tcl','compartida')` + `status ≠ cancelada` + la organización del actor es de tipo `cliente` + capacidades específicas + guard único en servidor. Fallo ⇒ 404 idéntico (no existe / no visible / otra org).
 - `campaigns` no lleva organización cliente: una campaña de **otra agencia** puesta en `tcl|compartida` es visible por contrato (esa visibilidad es la compartición explícita con TCL). Las `interna` de cualquier agencia están denegadas. Un `client_organization_id` sería multi-cliente genérico (fuera de alcance): **deuda declarada**, sin migración 034.
 - Toda ruta por id verifica que la entidad pertenece a la campaña de la URL.
 
 ## 3. Permisos (solo `cliente`)
 
-Nuevas: `campaign:read_client`, `content:read_approved_client`, `operations:read_summary_client`, `kpi:read_client` (ya reservada), `export:client`. Se mantiene `source:read_shared`. Se **retiran** del cliente `campaign:read`, `brief:read`, `brief:export` (cierran lecturas legadas de borradores y de `modelo/costoUsd`); las rutas legadas `/campanas/**` redirigen al cliente a `/tcl`. Ningún rol obtiene `pii:read`/`finance:read` por F9. Personal interno: 404 en `/tcl/**`.
+Nuevas: `campaign:read_client`, `content:read_approved_client`, `operations:read_summary_client`, `kpi:read_client` (ya reservada), `export:client`. Se añade `document:read_client`. Se **retiran** del cliente `campaign:read`, `brief:read`, `brief:export` y `source:read_shared` (los lectores legados de fuentes deniegan al cliente; la proyección usa su propio SQL con visibilidad) (cierran lecturas legadas de borradores y de `modelo/costoUsd`); las rutas legadas `/campanas/**` redirigen al cliente a `/tcl`. Ningún rol obtiene `pii:read`/`finance:read` por F9. Personal interno: 404 en `/tcl/**`.
 
 ## 4. Proyecciones (`packages/domain/src/tcl-projection.ts` tipos + puras; `packages/db/src/tcl-projection.ts` consultas)
 

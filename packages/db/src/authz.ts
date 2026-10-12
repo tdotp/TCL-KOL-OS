@@ -28,7 +28,12 @@ export function assertCapability(actor: User, action: Action): Result<true> {
   if (!roleCan(actor.role, action)) {
     return err({
       code: 'FORBIDDEN_ROLE',
-      message: `El rol ${actor.role} no puede ejecutar la acción ${action}.`,
+      // Al cliente TCL (solo lectura) no se le revelan nombres de capacidades internas (P3 del QA de la Fase 9):
+      // las server actions devuelven este mensaje a la interfaz.
+      message:
+        actor.role === 'cliente'
+          ? 'No tiene permiso para esta acción.'
+          : `El rol ${actor.role} no puede ejecutar la acción ${action}.`,
       details: { action, role: actor.role },
     });
   }

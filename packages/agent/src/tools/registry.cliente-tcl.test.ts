@@ -18,6 +18,7 @@ const CAPACIDADES_DE_TCL: readonly Action[] = [
   'operations:read_summary_client',
   'kpi:read_client',
   'export:client',
+  'document:read_client',
 ];
 
 const CLIENTE: User = {
@@ -58,8 +59,8 @@ describe('el registro de tools no tiene superficie para el cliente TCL', () => {
     }
   });
 
-  it('el cliente no tiene ninguna capacidad interna: solo las de la proyección TCL y las fuentes compartidas', () => {
-    expect([...actionsFor('cliente')].sort()).toEqual([...CAPACIDADES_DE_TCL, 'source:read_shared'].sort());
+  it('el cliente no tiene ninguna capacidad interna: solo las de la proyección TCL', () => {
+    expect([...actionsFor('cliente')].sort()).toEqual([...CAPACIDADES_DE_TCL].sort());
   });
 
   it('ninguna tool reutiliza la proyección TCL (ni sus funciones, ni sus nombres)', () => {

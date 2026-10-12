@@ -52,17 +52,38 @@ export const SQL_FRAGMENTO_VIGENTE_SIN_ALIAS = `((snapshot_id IS NULL OR snapsho
   AND ${sqlFragmentoSinTextoHistorico('source_fragments')})`;
 
 /**
- * ¿La fuente (alias `alias` = source_documents) es el Sheet de influencers? Una fuente lo es si CUALQUIERA de sus
- * snapshots (vigente o histórico) lleva el marcador `TCL_KOL_OS_INFLUENCERS` en A1 de alguna pestaña. Ese Sheet trae
- * `fee`, `canje` y `condiciones` por influencer: la proyección de TCL (V2 · Fase 9) no lo muestra como documento ni
- * acepta campos del Brief que lo citen como evidencia, sea cual sea su visibilidad.
+ * ¿La fuente (alias `alias` = source_documents) es el Sheet de influencers? Dos señales, cualquiera basta:
+ *   · SNAPSHOT: alguno de sus snapshots (vigente o histórico) lleva el marcador `TCL_KOL_OS_INFLUENCERS` en A1 de
+ *     alguna pestaña (fuente enlazada de Google Sheets);
+ *   · ARCHIVO: el marcador aparece en uno de los primeros fragmentos de la fuente (la celda A1 del xlsx/CSV subido
+ *     como archivo, sin snapshots; el parser la emite en el primer fragmento: «A: TCL_KOL_OS_INFLUENCERS_V1»).
+ * Ese Sheet trae `fee`, `canje` y `condiciones` por influencer: la proyección de TCL (V2 · Fase 9) no lo muestra como
+ * documento ni acepta campos del Brief que lo citen como evidencia, sea cual sea su visibilidad.
  */
 export function sqlFuenteEsSheetDeInfluencers(alias: string): string {
-  return `EXISTS (
+  return `(EXISTS (
   SELECT 1
     FROM source_snapshots es
     JOIN source_snapshot_rows er ON er.snapshot_id = es.id
    WHERE es.source_id = ${alias}.id
      AND er.row_number = 1
-     AND jsonb_path_exists(er.cells, '$[*] ? (@.col == 1 && @.text like_regex "TCL_KOL_OS_INFLUENCERS" flag "i")'))`;
+     AND jsonb_path_exists(er.cells, '$[*] ? (@.col == 1 && @.text like_regex "TCL_KOL_OS_INFLUENCERS" flag "i")'))
+  OR EXISTS (
+  SELECT 1
+    FROM source_fragments ef
+   WHERE ef.source_id = ${alias}.id
+     AND ef.ordinal <= 3
+     AND ef.text ~* 'TCL_KOL_OS_INFLUENCERS'))`;
+}
+
+/**
+ * ¿La fuente es una HOJA DE CÁLCULO (xlsx/xls/csv/tsv/ods por tipo MIME o extensión, o una fuente enlazada de
+ * Google Sheets)? Una hoja puede ser el Sheet de influencers aunque no se reconozca su marcador (subida antes del
+ * esquema, columnas desplazadas…): la evidencia de Brief que proviene de una hoja se trata como NO servible a TCL
+ * (fail-closed). Solo se usa para evidencia del Brief; los documentos compartidos a propósito no se filtran por esto.
+ */
+export function sqlFuenteEsHojaDeCalculo(alias: string): string {
+  return `(${alias}.external_provider ILIKE '%sheets%'
+  OR ${alias}.mime_type ~* '(spreadsheet|ms-excel|csv|tab-separated|opendocument\\.spreadsheet)'
+  OR ${alias}.filename ~* '\\.(xlsx|xlsm|xls|csv|tsv|ods)$')`;
 }

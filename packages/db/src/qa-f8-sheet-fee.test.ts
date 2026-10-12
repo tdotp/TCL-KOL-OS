@@ -82,8 +82,9 @@ describe('P0 corregido · búsqueda textual', () => {
   it('TCL (cliente), con campaña y fuente compartidas, no encuentra el fee buscando «fee»', async () => {
     await query(`UPDATE campaigns SET visibility = 'tcl' WHERE id = $1`, [op.campanaId]);
     expect((await setSourceVisibility(op.admin, sourceId, 'tcl')).ok).toBe(true);
+    // Fase 9 (ciclo QA): sin `source:read_shared` la búsqueda del cliente se deniega por completo.
     const r = await buscarTextoEnFuentes(op.cliente, { campaignId: op.campanaId, texto: 'fee' });
-    expect(r.ok).toBe(true);
+    expect(r.ok).toBe(false);
     expect(JSON.stringify(r)).not.toContain(FEE);
   });
 });

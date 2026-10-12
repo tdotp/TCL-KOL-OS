@@ -1067,10 +1067,9 @@ describe('documentos: cada fuente se comparte a propósito', () => {
   it('campaña visible NO sobreescribe la visibilidad de la fuente (interna ⇒ no sale)', async () => {
     const ids = exito(await obtenerDocumentosParaTcl(tcl, op.campanaId)).map((d) => d.sourceId);
     expect(ids).not.toContain(docInterno);
-    // y la lectura legada por id sigue denegada para la interna
-    const fuentes = exito(await listSources(tcl, op.campanaId));
-    expect(fuentes.map((f) => f.id)).not.toContain(docInterno);
-    expect(fuentes.map((f) => f.id)).toContain(docTcl);
+    // y el lector legado de fuentes ya no existe para el cliente (sin `source:read_shared`)
+    expect(codigo(await listSources(tcl, op.campanaId))).toBe('FORBIDDEN_ROLE');
+    expect(ids).toContain(docTcl);
   });
 
   it('sin hash, URLs, jobs, fragmentos, tamaño ni confidencialidad', async () => {

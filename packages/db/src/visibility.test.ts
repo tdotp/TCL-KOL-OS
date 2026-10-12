@@ -9,6 +9,7 @@
  * Campaña propia y desechable (INC-001A).
  */
 
+import { obtenerDocumentosParaTcl } from './tcl-projection.ts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { User } from '@tcl-kol-os/domain';
 import { closePool, query } from './client.ts';
@@ -89,59 +90,39 @@ afterAll(async () => {
   await closePool();
 });
 
-describe('cliente: listados', () => {
-  it('NO lista la fuente interna de una campaña visible; sí la marcada para TCL', async () => {
-    const r = await listSources(cliente, campaignId);
+// V2 · Fase 9 (ciclo QA): el cliente ya no tiene `source:read_shared`. Los lectores legados de fuentes (lista, lectura por
+// id, fragmentos, búsqueda) le deniegan SIEMPRE: devolvían hash, URL externa y texto de fragmentos de lo compartido.
+// Lo compartido a propósito lo ve por la proyección TCL de documentos (título, tipo, idioma, fecha).
+describe('cliente: lectores legados de fuentes cerrados; documentos solo por la proyección TCL', () => {
+  it('listSources, getFragments y la búsqueda deniegan por capacidad (FORBIDDEN_ROLE)', async () => {
+    for (const r of [
+      await listSources(cliente, campaignId),
+      await listSources(cliente, campanaInternaId),
+      await getFragments(cliente, fuenteInterna),
+      await getFragments(cliente, fuenteTcl),
+      await buscarEvidenciaComoActor(cliente, { campaignId, vector: VECTOR }),
+    ]) {
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error.code).toBe('FORBIDDEN_ROLE');
+    }
+  });
+
+  it('la proyección TCL lista solo la fuente marcada para TCL (sin estado técnico, hash ni texto)', async () => {
+    const r = await obtenerDocumentosParaTcl(cliente, campaignId);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.value.map((f) => f.filename)).toEqual(['tcl.md']);
+    expect(r.value.map((d) => d.titulo)).toEqual(['tcl.md']);
+    expect(Object.keys(r.value[0]!).sort()).toEqual(['fecha', 'idioma', 'sourceId', 'tipo', 'titulo']);
   });
 
   it('una campaña interna no se lista aunque la fuente esté marcada TCL', async () => {
-    const r = await listSources(cliente, campanaInternaId);
+    const r = await obtenerDocumentosParaTcl(cliente, campanaInternaId);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.code).toBe('RESOURCE_NOT_FOUND');
   });
-
-  it('no recibe el estado técnico del procesamiento', async () => {
-    const r = await listSources(cliente, campaignId);
-    if (!r.ok) throw new Error('lectura falló');
-    expect(r.value[0]!.job_error).toBeNull();
-    expect(r.value[0]!.job_status).toBeNull();
-  });
 });
 
-describe('cliente: lectura por id', () => {
-  it('NO obtiene los fragmentos de una fuente interna (mismo error que «no existe»)', async () => {
-    const r = await getFragments(cliente, fuenteInterna);
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.code).toBe('RESOURCE_NOT_FOUND');
-  });
-
-  it('SÍ obtiene los fragmentos de una fuente marcada para TCL', async () => {
-    const r = await getFragments(cliente, fuenteTcl);
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(r.value[0]!.text).toContain('tcl.md');
-  });
-
-  it('una fuente marcada TCL de una campaña interna tampoco se lee', async () => {
-    const [f] = await query<{ id: string }>(`SELECT id FROM source_documents WHERE campaign_id = $1`, [
-      campanaInternaId,
-    ]);
-    const r = await getFragments(cliente, f!.id);
-    expect(r.ok).toBe(false);
-  });
-});
-
-describe('cliente: búsqueda', () => {
-  it('NO encuentra la fuente interna; sí la marcada para TCL', async () => {
-    const r = await buscarEvidenciaComoActor(cliente, { campaignId, vector: VECTOR });
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(r.value.map((h) => h.filename)).toEqual(['tcl.md']);
-  });
-
+describe('búsqueda de SmartPR', () => {
   it('el personal de SmartPR busca en todas las fuentes de su organización', async () => {
     const r = await buscarEvidenciaComoActor(consultor, { campaignId, vector: VECTOR });
     if (!r.ok) throw new Error('búsqueda falló');
@@ -201,7 +182,8 @@ describe('marcar visibilidad: decisión explícita y auditada de SmartPR', () =>
 
     const ok = await setSourceVisibility(consultor, fuenteInterna, 'tcl');
     expect(ok.ok).toBe(true);
-    expect((await getFragments(cliente, fuenteInterna)).ok).toBe(true);
+    const docs = await obtenerDocumentosParaTcl(cliente, campaignId);
+    expect(docs.ok && docs.value.some((d) => d.sourceId === fuenteInterna)).toBe(true);
 
     const [evento] = await query<{ metadata: { from: string; to: string }; origin: string | null }>(
       `SELECT metadata, origin FROM audit_events
@@ -212,7 +194,8 @@ describe('marcar visibilidad: decisión explícita y auditada de SmartPR', () =>
 
     // Revertir vuelve a esconderla.
     await setSourceVisibility(consultor, fuenteInterna, 'interna');
-    expect((await getFragments(cliente, fuenteInterna)).ok).toBe(false);
+    const oculta = await obtenerDocumentosParaTcl(cliente, campaignId);
+    expect(oculta.ok && oculta.value.some((d) => d.sourceId === fuenteInterna)).toBe(false);
   });
 
   it('un valor inválido se rechaza', async () => {

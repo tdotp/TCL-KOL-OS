@@ -6,6 +6,7 @@
  * ni la evidencia del Brief (el análisis se haría contra un Brief alimentado por el propio guion).
  */
 
+import { obtenerDocumentosParaTcl } from './tcl-projection.ts';
 import { CON_REVISION_DE_LA_VERSION, prepararRevisionPorSql } from './aprobacion-sql-test-support.ts';
 import type pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -360,11 +361,12 @@ describe('el Operativo no lee guiones que no están aprobados', () => {
     await query(`UPDATE campaigns SET visibility = 'tcl' WHERE id = $1`, [e.campanaId]);
     try {
       valor(await setSourceVisibility(e.admin, aprobado.sourceId, 'tcl'));
-      const lista = valor(await listSources(e.cliente, e.campanaId)).map((f) => f.id);
+      // Fase 9 (ciclo QA): los lectores legados de fuentes están cerrados al cliente; lo ve por la proyección TCL.
+      expect(codigo(await listSources(e.cliente, e.campanaId))).toBe('FORBIDDEN_ROLE');
+      expect(codigo(await getSource(e.cliente, aprobado.sourceId))).toBe('FORBIDDEN_ROLE');
+      const lista = valor(await obtenerDocumentosParaTcl(e.cliente, e.campanaId)).map((d) => d.sourceId);
       expect(lista).toContain(aprobado.sourceId);
       expect(lista).not.toContain(borrador.sourceId);
-      expect(codigo(await getSource(e.cliente, borrador.sourceId))).toBe('RESOURCE_NOT_FOUND');
-      expect(valor(await getSource(e.cliente, aprobado.sourceId)).id).toBe(aprobado.sourceId);
     } finally {
       await query(`UPDATE campaigns SET visibility = 'interna' WHERE id = $1`, [e.campanaId]);
     }

@@ -11,6 +11,7 @@
  * Python del worker se omite con un aviso explícito (nunca en silencio).
  */
 
+import { obtenerDocumentosParaTcl } from './tcl-projection.ts';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -356,7 +357,7 @@ describe('procesar una hoja de cálculo (worker real)', () => {
     ]);
   });
 
-  it('visibilidad (Fase 1): el cliente no ve las filas de una hoja interna; sí cuando SmartPR la expone', async () => {
+  it('visibilidad: el cliente nunca lee filas ni fragmentos de una hoja (ni interna ni expuesta); el personal sí', async () => {
     if (!hayWorker) return;
     const [{ id: sourceId }] = (await query<{ id: string }>(
       `SELECT id FROM source_documents WHERE campaign_id = $1 AND filename = $2`,
@@ -364,25 +365,25 @@ describe('procesar una hoja de cálculo (worker real)', () => {
     )) as [{ id: string }];
     await query(`UPDATE campaigns SET visibility = 'tcl' WHERE id = $1`, [campanaId]);
     try {
-      // Interna: ni fragmentos, ni búsqueda, ni representación, ni el listado.
-      expect(codigo(await getFragments(cliente, sourceId))).toBe('RESOURCE_NOT_FOUND');
-      expect(codigo(await obtenerRepresentacionNormalizada(cliente, sourceId))).toBe('RESOURCE_NOT_FOUND');
-      expect(
-        valor(await buscarTextoEnFuentes(cliente, { campaignId: campanaId, texto: 'Valentina' })),
-      ).toEqual([]);
-      expect(valor(await listSources(cliente, campanaId)).some((f) => f.id === sourceId)).toBe(false);
+      // Fase 9 (ciclo QA): el cliente ya no tiene `source:read_shared`: ni fragmentos, ni búsqueda, ni representación,
+      // ni el listado, estén o no expuestas. Lo compartido a propósito lo ve por la proyección TCL (solo metadatos).
+      const leer = async () => {
+        expect(codigo(await getFragments(cliente, sourceId))).toBe('FORBIDDEN_ROLE');
+        expect(codigo(await obtenerRepresentacionNormalizada(cliente, sourceId))).toBe('FORBIDDEN_ROLE');
+        expect(
+          codigo(await buscarTextoEnFuentes(cliente, { campaignId: campanaId, texto: 'Valentina' })),
+        ).toBe('FORBIDDEN_ROLE');
+        expect(codigo(await listSources(cliente, campanaId))).toBe('FORBIDDEN_ROLE');
+      };
+      await leer();
       // Operativo (SmartPR) sí; otra agencia no.
       expect((await getFragments(operativo, sourceId)).ok).toBe(true);
       expect(codigo(await getFragments(ajeno, sourceId))).toBe('RESOURCE_NOT_FOUND');
 
       valor(await setSourceVisibility(consultor, sourceId, 'tcl'));
-      const fragmentos = valor(await getFragments(cliente, sourceId));
-      expect(fragmentos.length).toBeGreaterThan(0);
-      expect(
-        valor(await buscarTextoEnFuentes(cliente, { campaignId: campanaId, texto: 'Valentina' })).length,
-      ).toBeGreaterThan(0);
-      // El estado técnico del procesamiento sigue siendo interno.
-      expect(valor(await getSource(cliente, sourceId)).job_status).toBeNull();
+      await leer();
+      const docs = await obtenerDocumentosParaTcl(cliente, campanaId);
+      expect(docs.ok && docs.value.some((d) => d.sourceId === sourceId)).toBe(true);
     } finally {
       await query(`UPDATE campaigns SET visibility = 'interna' WHERE id = $1`, [campanaId]);
     }

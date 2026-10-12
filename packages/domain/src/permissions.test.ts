@@ -125,6 +125,7 @@ describe('vista del cliente TCL (DEC-012 / ADR-004)', () => {
     ).toEqual([
       'campaign:read_client',
       'content:read_approved_client',
+      'document:read_client',
       'export:client',
       'kpi:read_client',
       'operations:read_summary_client',
@@ -143,17 +144,17 @@ describe('vista del cliente TCL (DEC-012 / ADR-004)', () => {
   });
 
   it('solo observa la proyección TCL (campaña, contenido aprobado, resumen operativo, KPI), sus fuentes compartidas y su exportación — nada más', () => {
-    // V2 · Fase 1A: `source:read_shared` (fuentes marcadas visibles para TCL; NO es `source:read`).
-    // V2 · Fase 9 (DEC-050): capacidades propias del cliente; se retiran `campaign:read`, `brief:read`, `brief:export`.
+    // V2 · Fase 9 (DEC-050): capacidades propias del cliente; se retiran `campaign:read`, `brief:read`, `brief:export`
+    // y (ciclo de corrección QA) `source:read_shared`: sus lectores legados devolvían hash, URL externa y fragmentos.
     expect([...actionsFor('cliente')].sort()).toEqual([
       'campaign:read_client',
       'content:read_approved_client',
+      'document:read_client',
       'export:client',
       'kpi:read_client',
       'operations:read_summary_client',
-      'source:read_shared',
     ]);
-    for (const retirada of ['campaign:read', 'brief:read', 'brief:export'] as const) {
+    for (const retirada of ['campaign:read', 'brief:read', 'brief:export', 'source:read_shared'] as const) {
       expect(roleCan('cliente', retirada), `el cliente conserva ${retirada}`).toBe(false);
     }
     expect(roleCan('cliente', 'source:read')).toBe(false);
@@ -408,10 +409,10 @@ describe('chat del agente de Cuenta (D4)', () => {
     expect([...actionsFor('cliente')].sort()).toEqual([
       'campaign:read_client',
       'content:read_approved_client',
+      'document:read_client',
       'export:client',
       'kpi:read_client',
       'operations:read_summary_client',
-      'source:read_shared',
     ]);
   });
 });

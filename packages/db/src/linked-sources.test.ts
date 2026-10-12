@@ -5,6 +5,7 @@
  * prueba lo comprueba sustituyendo `fetch`). Datos propios y desechables.
  */
 
+import { obtenerDocumentosParaTcl } from './tcl-projection.ts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Result, User } from '@tcl-kol-os/domain';
 import { closePool, query } from './client.ts';
@@ -350,24 +351,28 @@ describe('permisos y aislamiento', () => {
     try {
       const r = valor(await registerLinkedSource(admin, { campaignId: campanaId, url: SHEET(14) }));
 
-      // Interna: el cliente no la ve en ningún camino.
-      expect(valor(await listSources(cliente, campanaId)).some((f) => f.id === r.id)).toBe(false);
-      expect(codigo(await getSource(cliente, r.id))).toBe('RESOURCE_NOT_FOUND');
-      expect(codigo(await obtenerRepresentacionNormalizada(cliente, r.id))).toBe('RESOURCE_NOT_FOUND');
+      // V2 · Fase 9 (ciclo QA): el cliente ya no tiene `source:read_shared`; los lectores legados le deniegan SIEMPRE
+      // (lo compartido a propósito lo ve por la proyección TCL de documentos, sin hash, URL ni fragmentos).
+      expect(codigo(await listSources(cliente, campanaId))).toBe('FORBIDDEN_ROLE');
+      expect(codigo(await getSource(cliente, r.id))).toBe('FORBIDDEN_ROLE');
+      expect(codigo(await obtenerRepresentacionNormalizada(cliente, r.id))).toBe('FORBIDDEN_ROLE');
       // El personal de SmartPR sí.
       expect((await getSource(consultor, r.id)).ok).toBe(true);
       expect((await getSource(operativo, r.id)).ok).toBe(true);
 
       // SmartPR decide exponerla: es la misma decisión explícita y auditada.
       valor(await setSourceVisibility(admin, r.id, 'tcl'));
-      expect(valor(await listSources(cliente, campanaId)).some((f) => f.id === r.id)).toBe(true);
-      const vista = valor(await getSource(cliente, r.id));
-      expect(vista.origin).toBe('link');
-      expect(vista.job_status).toBeNull(); // el estado técnico sigue siendo interno
+      // Un enlace a un Google Sheet compartido: el lector legado sigue denegado (no entrega external_url) y la
+      // proyección TCL de documentos lo muestra sin URL.
+      expect(codigo(await getSource(cliente, r.id))).toBe('FORBIDDEN_ROLE');
+      const docs = await obtenerDocumentosParaTcl(cliente, campanaId);
+      expect(docs.ok && docs.value.some((d) => d.sourceId === r.id)).toBe(true);
+      expect(JSON.stringify(docs)).not.toMatch(/docs\.google|external|canonical/iu);
 
       // Volver a interna la oculta de nuevo.
       valor(await setSourceVisibility(admin, r.id, 'interna'));
-      expect(codigo(await getSource(cliente, r.id))).toBe('RESOURCE_NOT_FOUND');
+      const oculto = await obtenerDocumentosParaTcl(cliente, campanaId);
+      expect(oculto.ok && oculto.value.some((d) => d.sourceId === r.id)).toBe(false);
     } finally {
       await query(`UPDATE campaigns SET visibility = 'interna' WHERE id = $1`, [campanaId]);
     }
@@ -377,9 +382,10 @@ describe('permisos y aislamiento', () => {
     await query(`UPDATE campaigns SET visibility = 'tcl' WHERE id = $1`, [campanaId]);
     try {
       const r = valor(await registerLinkedSource(admin, { campaignId: campanaId, url: SHEET(15) }));
-      expect(codigo(await getFragments(cliente, r.id))).toBe('RESOURCE_NOT_FOUND');
-      const hits = valor(await buscarTextoEnFuentes(cliente, { campaignId: campanaId, texto: 'cualquier' }));
-      expect(hits).toEqual([]);
+      expect(codigo(await getFragments(cliente, r.id))).toBe('FORBIDDEN_ROLE');
+      expect(codigo(await buscarTextoEnFuentes(cliente, { campaignId: campanaId, texto: 'cualquier' }))).toBe(
+        'FORBIDDEN_ROLE',
+      );
     } finally {
       await query(`UPDATE campaigns SET visibility = 'interna' WHERE id = $1`, [campanaId]);
     }

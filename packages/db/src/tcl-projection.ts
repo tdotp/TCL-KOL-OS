@@ -15,7 +15,8 @@
  * Qué reutiliza (sin duplicar su lógica): `cargarDatosOperativos` / `derivarDeParticipacion` (solo secciones
  * `acuerdo`, `logistica` y `contenido`: NUNCA `facturacion_pagos`), la fila `approved` de `script_versions`,
  * `leerRector` (Brief vigente) + `cargarRepresentaciones` + `construirRepresentacionLocalizada` (ES/EN y su estado
- * de sincronización), `kpisPublicosDeCampana` (bloque `public` de KPI), `resolverAlcanceDeFuentes` (alcance solo-TCL)
+ * de sincronización), `kpisPublicosDeCampana` (bloque `public` de KPI), `sqlFuenteSinGuionNoAprobado` /
+ * `SQL_FUENTE_SIN_EVIDENCIA_OPERATIVA` (alcance solo-TCL de las fuentes: su propio SQL con visibilidad `tcl|compartida`)
  * y `sqlFragmentoSinTextoHistorico` (snapshots históricos del Sheet con fee/canje/condiciones).
  *
  * Qué NO toca jamás: `payment_obligations`, `billing_documents`, `influencer_pii_records`, `content_findings`,
@@ -67,12 +68,15 @@ import { getPool } from './client.ts';
 import { leerRector } from './content-analysis.ts';
 import { NO_ENCONTRADO_DE_CONTENIDO, esUuid } from './deliverables.ts';
 import { camposDeVersion } from './extraction.ts';
-import { sqlFragmentoSinTextoHistorico, sqlFuenteEsSheetDeInfluencers } from './fragment-scope.ts';
+import {
+  sqlFragmentoSinTextoHistorico,
+  sqlFuenteEsHojaDeCalculo,
+  sqlFuenteEsSheetDeInfluencers,
+} from './fragment-scope.ts';
 import { kpisPublicosDeCampana } from './kpi-views.ts';
 import { cargarDatosOperativos, derivarDeParticipacion } from './operativo-views.ts';
 import { SQL_FUENTE_SIN_EVIDENCIA_OPERATIVA } from './ops-source-scope.ts';
 import { sqlFuenteSinGuionNoAprobado } from './script-scope.ts';
-import { resolverAlcanceDeFuentes } from './sources.ts';
 
 type Consultor = pg.Pool | pg.PoolClient;
 
@@ -82,7 +86,7 @@ const CAP_CAMPANA: Action = 'campaign:read_client';
 const CAP_CONTENIDO: Action = 'content:read_approved_client';
 const CAP_OPERACION: Action = 'operations:read_summary_client';
 const CAP_KPI: Action = 'kpi:read_client';
-const CAP_DOCUMENTOS: Action = 'source:read_shared';
+const CAP_DOCUMENTOS: Action = 'document:read_client';
 const CAP_EXPORT: Action = 'export:client';
 
 /** La proyección completa exige todas las capacidades de lectura del cliente. */
@@ -136,6 +140,14 @@ const SELECT_CAMPANA_TCL = `SELECT c.id, c.organization_id, c.name, c.market, c.
        c.visibility::text AS visibility
   FROM campaigns c`;
 
+/**
+ * La organización del actor (parámetro `$2` en el guard, `$1` en la lista) es de TIPO `cliente`: un usuario con rol
+ * `cliente` dentro de una organización agencia no entra. Sin migración ni multi-cliente genérico: el límite restante
+ * (cualquier organización cliente ve las campañas `tcl|compartida` de cualquier agencia) es el contrato de DEC-050.
+ */
+const sqlOrganizacionCliente = (parametro: string): string =>
+  `EXISTS (SELECT 1 FROM organizations o WHERE o.id = ${parametro} AND o.type = 'cliente')`;
+
 function actorTclValido(actor: User, capacidades: readonly Action[]): boolean {
   return (
     typeof actor === 'object' &&
@@ -157,8 +169,10 @@ export async function autorizarCampanaParaTcl(
 ): Promise<Result<CampanaAutorizadaParaTcl>> {
   if (!actorTclValido(actor, capacidades) || !esUuid(campaignId)) return err(NO_ENCONTRADO_DE_CONTENIDO);
   const { rows } = await getPool().query<FilaDeCampana>(
-    `${SELECT_CAMPANA_TCL} WHERE c.id = $1 AND c.visibility IN ('tcl', 'compartida') AND c.status <> 'cancelada'`,
-    [campaignId],
+    `${SELECT_CAMPANA_TCL}
+      WHERE c.id = $1 AND c.visibility IN ('tcl', 'compartida') AND c.status <> 'cancelada'
+        AND ${sqlOrganizacionCliente('$2::uuid')}`,
+    [campaignId, actor.organizationId],
   );
   const c = rows[0];
   if (c === undefined || !isTclVisible(c.visibility)) return err(NO_ENCONTRADO_DE_CONTENIDO);
@@ -194,7 +208,9 @@ export async function listarCampanasParaTcl(actor: User): Promise<Result<Campana
   const { rows } = await getPool().query<FilaDeCampana>(
     `${SELECT_CAMPANA_TCL}
       WHERE c.visibility IN ('tcl', 'compartida') AND c.status <> 'cancelada'
+        AND ${sqlOrganizacionCliente('$1::uuid')}
       ORDER BY c.start_date DESC NULLS LAST, c.created_at DESC, c.id`,
+    [actor.organizationId],
   );
   return ok(
     asegurarProyeccionTcl(
@@ -412,8 +428,8 @@ async function contenidoDe(c: CampanaAutorizadaParaTcl): Promise<ContenidoAproba
 
 /**
  * Campos del Brief cuya evidencia NO se puede servir a TCL: cita un fragmento ilegible por `fragment-scope`
- * (snapshot histórico del Sheet de influencers con fee/canje/condiciones), proviene del Sheet de influencers o de
- * evidencia operativa. Esos campos se excluyen COMPLETOS (el valor pudo derivarse de ese texto), sin importar la
+ * (snapshot histórico del Sheet de influencers con fee/canje/condiciones), proviene del Sheet de influencers (por
+ * snapshot o por archivo), de CUALQUIER hoja de cálculo (fail-closed) o de evidencia operativa. Esos campos se excluyen COMPLETOS (el valor pudo derivarse de ese texto), sin importar la
  * visibilidad de la fuente.
  */
 async function camposConEvidenciaNoServible(versionId: string): Promise<ReadonlySet<string>> {
@@ -426,6 +442,7 @@ async function camposConEvidenciaNoServible(versionId: string): Promise<Readonly
       WHERE bf.brief_version_id = $1
         AND ((f.id IS NOT NULL AND NOT ${sqlFragmentoSinTextoHistorico('f')})
              OR ${sqlFuenteEsSheetDeInfluencers('s')}
+             OR ${sqlFuenteEsHojaDeCalculo('s')}
              OR s.type::text = 'soporte_operativo')`,
     [versionId],
   );
@@ -514,13 +531,11 @@ function kpisDe(base: BaseDeCampana): KpiPorParticipacionTcl[] {
 }
 
 /**
- * Documentos: fuentes que SmartPR marcó `tcl | compartida` (alcance de `resolverAlcanceDeFuentes`, el único punto
- * de decisión), sin evidencia operativa, sin guiones NO aprobados y sin el Sheet de influencers. Columnas de lista
+ * Documentos: fuentes que SmartPR marcó `tcl | compartida` (visibilidad por fuente; la campaña ya pasó el guard),
+ * sin evidencia operativa, sin guiones NO aprobados y sin el Sheet de influencers. Columnas de lista
  * blanca: nada de hash, URLs, jobs ni fragmentos.
  */
-async function documentosDe(actor: User, c: CampanaAutorizadaParaTcl): Promise<DocumentoTcl[]> {
-  const alcance = await resolverAlcanceDeFuentes(actor, c.id);
-  if (!alcance.ok || !alcance.value.soloVisibleParaTcl) return [];
+async function documentosDe(c: CampanaAutorizadaParaTcl): Promise<DocumentoTcl[]> {
   const { rows } = await getPool().query<{
     id: string;
     filename: string;
@@ -536,7 +551,7 @@ async function documentosDe(actor: User, c: CampanaAutorizadaParaTcl): Promise<D
         AND ${SQL_FUENTE_SIN_EVIDENCIA_OPERATIVA}
         AND NOT (${sqlFuenteEsSheetDeInfluencers('s')})
       ORDER BY s.created_at DESC, s.id`,
-    [c.id, alcance.value.organizationId],
+    [c.id, c.organizationId],
   );
   return rows.map((r) =>
     proyectarDocumentoParaTcl({
@@ -628,23 +643,23 @@ export async function obtenerKpisParaTcl(
   return ok(asegurarProyeccionTcl(kpisDe(await cargarBase(c.value))));
 }
 
-/** Documentos compartidos con TCL a propósito. `source:read_shared`. */
+/** Documentos compartidos con TCL a propósito. `document:read_client`. */
 export async function obtenerDocumentosParaTcl(
   actor: User,
   campaignId: string,
 ): Promise<Result<DocumentoTcl[]>> {
   const c = await autorizarCampanaParaTcl(actor, campaignId, [CAP_DOCUMENTOS]);
   if (!c.ok) return c;
-  return ok(asegurarProyeccionTcl(await documentosDe(actor, c.value)));
+  return ok(asegurarProyeccionTcl(await documentosDe(c.value)));
 }
 
-async function componer(actor: User, c: CampanaAutorizadaParaTcl): Promise<ProyeccionTclDeCampana> {
+async function componer(c: CampanaAutorizadaParaTcl): Promise<ProyeccionTclDeCampana> {
   const base = await cargarBase(c);
   const campana = await detalleDe(c, base);
   const influencers = await influencersDe(c, base);
   const contenido = await contenidoDe(c);
   const brief = await briefDe(c);
-  const documentos = await documentosDe(actor, c);
+  const documentos = await documentosDe(c);
   return asegurarProyeccionTcl({
     campana,
     influencers,
@@ -663,7 +678,7 @@ export async function obtenerProyeccionTclDeCampana(
 ): Promise<Result<ProyeccionTclDeCampana>> {
   const c = await autorizarCampanaParaTcl(actor, campaignId, CAPS_DE_LECTURA_COMPLETA);
   if (!c.ok) return c;
-  return ok(await componer(actor, c.value));
+  return ok(await componer(c.value));
 }
 
 export interface ExportDeCampanaTcl extends ExportDeTcl {
@@ -689,7 +704,7 @@ export async function exportarCampanaParaTcl(
       details: { field: 'formato' },
     });
   }
-  const proyeccion = await componer(actor, c.value);
+  const proyeccion = await componer(c.value);
   const exportado = serializarExportTcl(proyeccion, formato);
   return ok({
     ...exportado,
