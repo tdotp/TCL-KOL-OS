@@ -9,6 +9,7 @@ import {
 } from '@tcl-kol-os/db';
 import { roleCan } from '@tcl-kol-os/domain';
 import { currentUser } from '@/lib/session';
+import { desviarClienteDeRutaLegada } from '@/lib/tcl-guard';
 import { estadoDelAsistente, etiquetaDeTool, limiteDeAdjuntoBytes } from '@/lib/chat-server';
 import { ChatComposer } from './ChatComposer';
 import { ChatHilo } from './ChatHilo';
@@ -33,6 +34,8 @@ export const dynamic = 'force-dynamic';
 export default async function ChatDeCampanaPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await currentUser();
   if (user === undefined) redirect('/login');
+  // Cliente TCL: a su equivalente de `/tcl` (o 404) ANTES de cualquier cargador interno.
+  desviarClienteDeRutaLegada(user, { tipo: 'oculta' });
 
   const { id } = await params;
   const campana = await getCampaign(user, id);

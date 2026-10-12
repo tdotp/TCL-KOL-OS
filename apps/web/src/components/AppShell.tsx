@@ -48,7 +48,10 @@ export function AppShell({ user, children }: { user: User; children: React.React
   const [busqueda, setBusqueda] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const enInicio = pathname === '/';
-  const enCampanas = pathname.startsWith('/campanas');
+  // El cliente TCL (solo lectura) tiene su propia zona: «Campañas» apunta a `/tcl`, no a las rutas internas.
+  const esCliente = user.role === 'cliente';
+  const rutaDeCampanas = esCliente ? '/tcl' : '/campanas';
+  const enCampanas = pathname.startsWith(rutaDeCampanas);
 
   useEffect(() => {
     const manejarAtajo = (event: KeyboardEvent) => {
@@ -81,7 +84,7 @@ export function AppShell({ user, children }: { user: User; children: React.React
           onSubmit={(event) => {
             event.preventDefault();
             const q = busqueda.trim();
-            router.push(q === '' ? '/campanas' : `/campanas?q=${encodeURIComponent(q)}`);
+            router.push(q === '' ? rutaDeCampanas : `${rutaDeCampanas}?q=${encodeURIComponent(q)}`);
           }}
         >
           <span className="shell-search-icon">
@@ -119,7 +122,7 @@ export function AppShell({ user, children }: { user: User; children: React.React
             <span className="shell-nav-ico"><IconoInicio /></span>
             <span>Inicio</span>
           </a>
-          <a href="/campanas" className={enCampanas ? 'active' : undefined}>
+          <a href={rutaDeCampanas} className={enCampanas ? 'active' : undefined}>
             <span className="shell-nav-ico"><IconoCampanas /></span>
             <span>Campañas</span>
           </a>

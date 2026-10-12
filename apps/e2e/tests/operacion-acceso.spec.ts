@@ -97,7 +97,8 @@ for (const [etiqueta, email] of [
     for (const ruta of [`/campanas/${campaignId}`, `/campanas/${campaignId}/brief`, '/campanas']) {
       await gotoConReintento(page, ruta);
       await expect(page.getByTestId('operacion-nav-link'), `enlace en ${ruta}`).toHaveCount(0);
-      await expect(page.getByRole('link', { name: 'Operación' })).toHaveCount(0);
+      // El cliente es redirigido a `/tcl`, que tiene su propia sección «Operación» de solo lectura (resumen seguro).
+      if (email !== 'marena@tcl.com') await expect(page.getByRole('link', { name: 'Operación' })).toHaveCount(0);
     }
 
     const antesObligaciones = (await obligacionesDe(campaignId)).map(

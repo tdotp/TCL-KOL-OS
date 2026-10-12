@@ -9,6 +9,7 @@ import {
 import { roleCan } from '@tcl-kol-os/domain';
 import { limiteDeAdjuntoBytes } from '@/lib/chat-server';
 import { currentUser } from '@/lib/session';
+import { desviarClienteDeRutaLegada } from '@/lib/tcl-guard';
 import { BloqueDeAprobacion } from '../../BloqueDeAprobacion';
 import { FormularioSubirVersion } from '../../FormularioSubirVersion';
 import { FormulariosDeComentario } from '../../FormulariosDeComentario';
@@ -51,6 +52,8 @@ export default async function ContenidoDeEntregablePage({
 }) {
   const user = await currentUser();
   if (user === undefined) redirect('/login');
+  // Cliente TCL: a su equivalente de `/tcl` (o 404) ANTES de cualquier cargador interno.
+  desviarClienteDeRutaLegada(user, { tipo: 'oculta' });
 
   const { id, participacionId, deliverableId } = await params;
   const { v } = await searchParams;

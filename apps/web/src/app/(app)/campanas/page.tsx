@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { roleCan } from '@tcl-kol-os/domain';
 import { getPool, listAudit, listCampaigns, listarPreguntas } from '@tcl-kol-os/db';
 import { currentUser } from '@/lib/session';
+import { desviarClienteDeRutaLegada } from '@/lib/tcl-guard';
 import { TablaCampanas } from './TablaCampanas';
 
 export const dynamic = 'force-dynamic';
@@ -26,6 +27,8 @@ export default async function CampanasPage({ searchParams }: { searchParams: Pro
   const user = await currentUser();
   const { q } = await searchParams;
   if (user === undefined) redirect('/login');
+  // Cliente TCL: a su equivalente de `/tcl` (o 404) ANTES de cualquier cargador interno.
+  desviarClienteDeRutaLegada(user, { tipo: 'lista' });
 
   const resultado = await listCampaigns(user);
   const campanas = resultado.ok ? resultado.value : [];

@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import { esUuid, getCampaign, listarContenidoDeCampana } from '@tcl-kol-os/db';
 import { roleCan } from '@tcl-kol-os/domain';
 import { currentUser } from '@/lib/session';
+import { desviarClienteDeRutaLegada } from '@/lib/tcl-guard';
 import { NavCampana } from '../NavCampana';
 import { TarjetaDeParticipacion } from '../TarjetaDeParticipacion';
 import styles from '../contenido.module.css';
@@ -20,6 +21,8 @@ export default async function ContenidoDeParticipacionPage({
 }) {
   const user = await currentUser();
   if (user === undefined) redirect('/login');
+  // Cliente TCL: a su equivalente de `/tcl` (o 404) ANTES de cualquier cargador interno.
+  desviarClienteDeRutaLegada(user, { tipo: 'oculta' });
 
   const { id, participacionId } = await params;
   // Un id que no es UUID es «no existe»: no llega a la base (getCampaign reventaría con 500).

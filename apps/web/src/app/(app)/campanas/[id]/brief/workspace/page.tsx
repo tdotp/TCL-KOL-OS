@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { obtenerBriefWorkspace } from '@tcl-kol-os/db';
 import { currentUser } from '@/lib/session';
+import { desviarClienteDeRutaLegada } from '@/lib/tcl-guard';
 import { WorkspaceGuiado } from './WorkspaceGuiado';
 import { RevisarBrief } from './RevisarBrief';
 import { Actividad } from './Actividad';
@@ -46,6 +47,8 @@ export default async function BriefWorkspaceGuiadoPage({
 }) {
   const user = await currentUser();
   if (user === undefined) redirect('/login');
+  // Cliente TCL: a su equivalente de `/tcl` (o 404) ANTES de cualquier cargador interno.
+  desviarClienteDeRutaLegada(user, { tipo: 'brief', id: (await params).id });
 
   const { id } = await params;
 

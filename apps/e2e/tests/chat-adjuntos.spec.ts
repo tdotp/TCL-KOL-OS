@@ -198,7 +198,11 @@ test('E2E-14e — la fuente adjuntada es interna: el cliente TCL no la ve', asyn
   if (lectura.ok) expect(lectura.value.map((s) => s.filename)).not.toContain('brief-de-reunion.csv');
 
   await login(page, cliente.email);
-  for (const ruta of [`/campanas/${campaignId}`, `/campanas/${campaignId}/fuentes`]) {
+  for (const ruta of [
+    `/campanas/${campaignId}`,
+    `/campanas/${campaignId}/fuentes`,
+    `/tcl/campanas/${campaignId}/documentos`,
+  ]) {
     await gotoConReintento(page, ruta);
     const cuerpo = await page.locator('body').innerText();
     expect(cuerpo, `cuerpo de ${ruta}`).not.toContain('brief-de-reunion.csv');

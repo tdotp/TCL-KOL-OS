@@ -8,6 +8,7 @@ import {
 } from '@tcl-kol-os/db';
 import { allowedTransitions, roleCan, type BriefStatus } from '@tcl-kol-os/domain';
 import { currentUser } from '@/lib/session';
+import { desviarClienteDeRutaLegada } from '@/lib/tcl-guard';
 import { archivarCampana, crearBriefManualDeCampana } from '@/lib/actions';
 import { ConfirmarAccion } from '@/components/ConfirmarAccion';
 import { ESTADO_EN_ESPANOL, ETAPAS, TEXTO_DEL_BOTON, etapaDeStatus } from '@/lib/brief-ui';
@@ -36,6 +37,8 @@ export default async function DetalleCampanaPage({
 }) {
   const user = await currentUser();
   if (user === undefined) redirect('/login');
+  // Cliente TCL: a su equivalente de `/tcl` (o 404) ANTES de cualquier cargador interno.
+  desviarClienteDeRutaLegada(user, { tipo: 'detalle', id: (await params).id });
 
   const { id } = await params;
   const { error } = await searchParams;

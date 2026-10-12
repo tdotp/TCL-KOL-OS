@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import { getCampaign, listSources, versionesDelBrief } from '@tcl-kol-os/db';
 import type { BriefStatus } from '@tcl-kol-os/domain';
 import { currentUser } from '@/lib/session';
+import { desviarClienteDeRutaLegada } from '@/lib/tcl-guard';
 import { ETAPAS, etapaDeStatus } from '@/lib/brief-ui';
 import { monogramaColor, monogramaIniciales } from '@/lib/monograma';
 import { FormularioFuente } from './FormularioFuente';
@@ -12,6 +13,8 @@ export const dynamic = 'force-dynamic';
 export default async function FuentesPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await currentUser();
   if (user === undefined) redirect('/login');
+  // Cliente TCL: a su equivalente de `/tcl` (o 404) ANTES de cualquier cargador interno.
+  desviarClienteDeRutaLegada(user, { tipo: 'fuentes', id: (await params).id });
 
   const { id } = await params;
   const campana = await getCampaign(user, id);

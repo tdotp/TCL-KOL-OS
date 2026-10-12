@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
 import { currentUser } from '@/lib/session';
+import { desviarClienteDeRutaLegada } from '@/lib/tcl-guard';
 import { cargarResumenOperacion, filtrosDeOperacionDesdeUrl } from '@/lib/operacion-server';
 import { NavCampana } from '../contenido/NavCampana';
 import { Insignia } from './Insignia';
@@ -35,6 +36,8 @@ export default async function OperacionDeCampanaPage({
 }) {
   const user = await currentUser();
   if (user === undefined) redirect('/login');
+  // Cliente TCL: a su equivalente de `/tcl` (o 404) ANTES de cualquier cargador interno.
+  desviarClienteDeRutaLegada(user, { tipo: 'oculta' });
 
   const { id } = await params;
   const busqueda = await searchParams;

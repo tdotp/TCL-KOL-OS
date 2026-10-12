@@ -65,6 +65,7 @@ const ENV_BASE = {
  *     el spec levanta (y apaga) ese worker a mano para probar «cae → reintentar → completa».
  *   · 3015 `contenido` (V2 · Fase 7) IA encendida contra el mismo worker 8011.
  *   · 3016 `operacion` (V2 · Fase 8) IA encendida contra el mismo worker 8011.
+ *   · 3017 `tcl` (V2 · Fase 9) sin IA: dashboard de solo lectura del cliente TCL.
  *   · 8011 worker `uvicorn app.main:app` (venv local del servicio) con el modelo falso
  *     determinista: es el proceso REAL de `POST /modelo/turno`, sin red ni clave.
  * Ninguno toca la base de desarrollo: `DATABASE_URL` es la de esta corrida (`_test`).
@@ -157,6 +158,15 @@ export default defineConfig({
       timeout: 120_000,
       testMatch: /operacion-[a-z-]+\.spec\.ts$/,
       use: { baseURL: 'http://localhost:3016' },
+    },
+    {
+      // V2 · Fase 9 — Dashboard TCL de solo lectura (`/tcl`, export, aislamiento del cliente). Sin IA: la IA no
+      // interviene en la proyección ni en el dashboard. Mismo patrón de arranque que `operacion`.
+      name: 'tcl',
+      // Compilación bajo demanda de `next dev` en la primera visita (ver nota en `src/nav.ts`): holgura de arranque.
+      timeout: 120_000,
+      testMatch: /tcl-dashboard\.spec\.ts$/,
+      use: { baseURL: 'http://localhost:3017' },
     },
     {
       name: 'chat-ia-off',
@@ -271,6 +281,26 @@ export default defineConfig({
         PII_INDEX_KEY,
         WEB_PORT: '3016',
         AI_WORKER_URL: `http://127.0.0.1:${PUERTO_WORKER}`,
+      },
+      reuseExistingServer: reutilizar,
+      timeout: 600_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+    {
+      // V2 · Fase 9 — proyecto `tcl`: sin IA. Lleva el secreto de sesión de prueba (cookies firmadas de usuarios
+      // que el selector del login no ofrece) y las claves de PII de prueba (el escenario siembra datos de entrega).
+      command: 'npm run dev --workspace=@tcl-kol-os/web',
+      cwd: '../../',
+      url: 'http://localhost:3017/login',
+      env: {
+        ...ENV_BASE,
+        SESSION_SECRET,
+        STORAGE_LOCAL_PATH,
+        PII_ENCRYPTION_KEYS,
+        PII_INDEX_KEY,
+        BRIEF_WORKSPACE_V2: 'true',
+        WEB_PORT: '3017',
       },
       reuseExistingServer: reutilizar,
       timeout: 600_000,

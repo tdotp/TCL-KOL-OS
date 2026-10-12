@@ -64,8 +64,10 @@ test('E2E-08 — cliente no accede al workspace interno ni recibe comentarios ni
   await login(page, cliente.email);
   await gotoConReintento(page, `/campanas/${campaignId}/brief/workspace?modo=actividad`);
 
-  // Nunca el workspace interno: redirige a la pantalla de cliente existente.
-  await expect(page).toHaveURL(new RegExp(`/campanas/${campaignId}/brief$`));
+  // Nunca el workspace interno: el cliente termina en su zona de solo lectura (`/tcl`; esta campaña es interna,
+  // así que allí es un 404), jamás en el workspace ni en el Brief interno.
+  await expect(page).toHaveURL(new RegExp(`/tcl/campanas/${campaignId}/brief$`));
+  await expect(page).not.toHaveURL(/workspace/);
   await expect(page.getByRole('link', { name: 'Revisar brief' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Actividad' })).toHaveCount(0);
 

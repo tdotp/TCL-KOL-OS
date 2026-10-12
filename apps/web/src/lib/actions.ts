@@ -66,7 +66,8 @@ export async function iniciarSesion(_previo: unknown, formData: FormData): Promi
     maxAge: SESSION_MAX_AGE,
   });
 
-  redirect('/campanas');
+  // El cliente TCL entra directo a su zona de solo lectura.
+  redirect(user.role === 'cliente' ? '/tcl' : '/campanas');
 }
 
 export async function cerrarSesion(): Promise<void> {

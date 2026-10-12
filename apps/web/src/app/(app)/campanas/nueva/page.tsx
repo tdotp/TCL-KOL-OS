@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { listProducts } from '@tcl-kol-os/db';
 import { currentUser } from '@/lib/session';
+import { desviarClienteDeRutaLegada } from '@/lib/tcl-guard';
 import { FormularioCampana } from './FormularioCampana';
 
 export const dynamic = 'force-dynamic';
@@ -9,6 +10,8 @@ export const dynamic = 'force-dynamic';
 export default async function NuevaCampanaPage() {
   const user = await currentUser();
   if (user === undefined) redirect('/login');
+  // Cliente TCL: a su equivalente de `/tcl` (o 404) ANTES de cualquier cargador interno.
+  desviarClienteDeRutaLegada(user, { tipo: 'oculta' });
 
   const productos = await listProducts();
 

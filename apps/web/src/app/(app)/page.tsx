@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { roleCan } from '@tcl-kol-os/domain';
 import { listAudit, getPool, listCampaigns } from '@tcl-kol-os/db';
 import { currentUser } from '@/lib/session';
+import { desviarClienteDeRutaLegada } from '@/lib/tcl-guard';
 import { monogramaColor, monogramaIniciales } from '@/lib/monograma';
 
 export const dynamic = 'force-dynamic';
@@ -14,6 +15,8 @@ function accionLegible(action: string): string {
 export default async function Home() {
   const user = await currentUser();
   if (user === undefined) redirect('/login');
+  // Cliente TCL: a su equivalente de `/tcl` (o 404) ANTES de cualquier cargador interno.
+  desviarClienteDeRutaLegada(user, { tipo: 'lista' });
 
   const campanas = await listCampaigns(user);
   const visibles = campanas.ok ? campanas.value : [];

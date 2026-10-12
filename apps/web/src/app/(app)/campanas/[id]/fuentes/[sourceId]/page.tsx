@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { getFragments, listSources } from '@tcl-kol-os/db';
 import { currentUser } from '@/lib/session';
+import { desviarClienteDeRutaLegada } from '@/lib/tcl-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,6 +19,8 @@ export default async function FragmentosPage({
 }) {
   const user = await currentUser();
   if (user === undefined) redirect('/login');
+  // Cliente TCL: a su equivalente de `/tcl` (o 404) ANTES de cualquier cargador interno.
+  desviarClienteDeRutaLegada(user, { tipo: 'oculta' });
 
   const { id, sourceId } = await params;
 

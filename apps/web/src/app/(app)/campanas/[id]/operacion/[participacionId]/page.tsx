@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/session';
+import { desviarClienteDeRutaLegada } from '@/lib/tcl-guard';
 import {
   cargarAcuerdoConHistorial,
   cargarEnvios,
@@ -37,6 +38,8 @@ export default async function OperacionDeParticipacionPage({
 }) {
   const user = await currentUser();
   if (user === undefined) redirect('/login');
+  // Cliente TCL: a su equivalente de `/tcl` (o 404) ANTES de cualquier cargador interno.
+  desviarClienteDeRutaLegada(user, { tipo: 'oculta' });
 
   const { id, participacionId } = await params;
   const { campana, estado, permisos } = await cargarEstadoOperativo(user, participacionId, id);

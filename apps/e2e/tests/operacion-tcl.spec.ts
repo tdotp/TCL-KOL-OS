@@ -12,6 +12,7 @@ import {
   sembrarOperacionConCentinelas,
   type OperacionSembrada,
 } from '../src/operacion';
+import { query } from '@tcl-kol-os/db';
 import { login } from '../src/login';
 import { gotoConReintento } from '../src/nav';
 
@@ -34,6 +35,8 @@ let participacionId = '';
 test.beforeAll(async () => {
   op = await escenarioDeOperacion('e2e-27-tcl', { acuerdo: 'mixed', monto: `${CENTINELA.fee}.00` });
   campaignId = op.campanaId;
+  // La campaña se comparte con TCL (como ocurre en producción): así el recorrido del cliente es significativo.
+  await query(`UPDATE campaigns SET visibility = 'tcl' WHERE id = $1`, [campaignId]);
   participacionId = op.participaciones.valentinaRios;
   sembrado = await sembrarOperacionConCentinelas(op, { reportarPago: true });
   await sembrarKpiDeViews(op, participacionId);
@@ -52,6 +55,7 @@ test('E2E-27a — las rutas de campaña y Brief que el cliente TCL puede abrir n
 }) => {
   await login(page, 'marena@tcl.com');
 
+  // Rutas legadas (el cliente es redirigido a `/tcl` o recibe 404) y las pantallas de `/tcl` que SÍ puede abrir.
   const rutas = [
     '/campanas',
     `/campanas/${campaignId}`,
@@ -59,6 +63,10 @@ test('E2E-27a — las rutas de campaña y Brief que el cliente TCL puede abrir n
     `/campanas/${campaignId}/fuentes`,
     `/campanas/${campaignId}/contenido`,
     `/campanas/${campaignId}/chat`,
+    '/tcl',
+    ...['', '/influencers', '/contenido', '/operacion', '/kpi', '/documentos', '/brief'].map(
+      (s) => `/tcl/campanas/${campaignId}${s}`,
+    ),
   ];
   const abiertas: string[] = [];
   for (const ruta of rutas) {

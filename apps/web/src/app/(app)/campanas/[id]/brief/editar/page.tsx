@@ -8,6 +8,7 @@ import {
 } from '@tcl-kol-os/db';
 import { campoDelCatalogo, type BriefStatus } from '@tcl-kol-os/domain';
 import { currentUser } from '@/lib/session';
+import { desviarClienteDeRutaLegada } from '@/lib/tcl-guard';
 import { ORDEN_DE_SECCIONES, TITULO_SECCION } from '@/lib/brief-sections';
 import { ESTADO_EN_ESPANOL } from '@/lib/brief-ui';
 import { monogramaColor, monogramaIniciales } from '@/lib/monograma';
@@ -24,6 +25,8 @@ export default async function EditorBriefPage({
 }) {
   const user = await currentUser();
   if (user === undefined) redirect('/login');
+  // Cliente TCL: a su equivalente de `/tcl` (o 404) ANTES de cualquier cargador interno.
+  desviarClienteDeRutaLegada(user, { tipo: 'brief', id: (await params).id });
   if (user.role === 'cliente') redirect(`/campanas/${(await params).id}/brief`);
 
   const { id } = await params;
