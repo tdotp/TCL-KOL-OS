@@ -415,6 +415,22 @@ export const MANIFIESTO_DE_DB: Readonly<Record<string, ClasificacionDeExport>> =
   obtenerResumenOperativoDeCampana: X,
   obtenerEstadoOperativoDeParticipacion: X,
 
+  // tcl-projection.ts (Fase 9, DEC-050) · proyección de solo lectura del DASHBOARD TCL (rol `cliente`). No hay
+  // agente para TCL ni tools de cliente: ninguna de estas funciones llega al agente de Cuenta, que además las
+  // rechazaría por rol (el guard exige `cliente`, y el agente rechaza a `cliente` en `agent-context`).
+  construirRepresentacionLocalizada: X, // núcleo SIN actor de `obtenerRepresentacion`: no autoriza; solo la proyección TCL
+  resumirRepresentaciones: UI, // puro: resume el estado de sincronización de ES/EN
+  listarCampanasParaTcl: X,
+  obtenerDetalleTclDeCampana: X,
+  obtenerInfluencersParaTcl: X,
+  obtenerContenidoParaTcl: X,
+  obtenerBriefParaTcl: X,
+  obtenerOperacionParaTcl: X,
+  obtenerKpisParaTcl: X,
+  obtenerDocumentosParaTcl: X,
+  obtenerProyeccionTclDeCampana: X,
+  exportarCampanaParaTcl: X,
+
   // audit.ts (F8) · allowlist de metadata de eventos operativos: infraestructura.
   esAccionOperativa: UI,
   esAccionDeKpi: UI,

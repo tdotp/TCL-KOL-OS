@@ -19,6 +19,7 @@
 
 import {
   type AuditCorrelation,
+  type BriefRepresentation,
   type AuditOrigin,
   type Language,
   type LegacyLanguageLink,
@@ -40,7 +41,7 @@ import { assertCapability } from './authz.ts';
 import { recordAudit, resolveOrigin } from './audit.ts';
 import { getPool, transaction } from './client.ts';
 import { cargarRepresentaciones } from './brief-version.ts';
-import { verCamposDeVersion } from './extraction.ts';
+import { type camposDeVersion, verCamposDeVersion } from './extraction.ts';
 
 const NO_ENCONTRADO = {
   code: 'RESOURCE_NOT_FOUND',
@@ -91,6 +92,36 @@ async function autorizarLectura(actor: User, versionId: string): Promise<Result<
 // ─────────────────────────── Lectura ───────────────────────────────────────────
 
 /**
+ * Resumen de cada representación (idioma → resumen). Puro: no consulta. Personal de SmartPR recibe además el detalle
+ * de campos desactualizados/sin verificar/ausentes; el cliente (y la proyección TCL) solo el estado agregado.
+ */
+export function resumirRepresentaciones(
+  reps: readonly BriefRepresentation[],
+  personal: boolean,
+): Partial<Record<Language, RepresentationSummary>> {
+  const resumenes: Partial<Record<Language, RepresentationSummary>> = {};
+  for (const r of reps) {
+    resumenes[r.language] = {
+      id: r.id,
+      language: r.language,
+      kind: r.kind,
+      sourceLanguage: r.sourceLanguage,
+      copiedFromRepresentationId: r.copiedFromRepresentationId,
+      createdAt: r.createdAt,
+      sync: resumirSincronizacion(r),
+      ...(personal
+        ? {
+            staleFieldKeys: r.staleFieldKeys,
+            unverifiedFieldKeys: r.unverifiedFieldKeys,
+            missingFieldKeys: r.missingFieldKeys,
+          }
+        : {}),
+    };
+  }
+  return resumenes;
+}
+
+/**
  * La versión lógica con sus representaciones: metadatos y estado ÚNICOS, y ES /
  * EN como hijas. Personal de SmartPR ve el detalle de sincronización y las
  * inconsistencias históricas; el cliente solo ve qué idiomas existen.
@@ -122,25 +153,7 @@ export async function obtenerVersionLogica(
   const personal =
     roleCan(actor.role, 'brief:edit') || roleCan(actor.role, 'audit:read') || actor.role === 'operativo';
   const reps = await cargarRepresentaciones(getPool(), versionId);
-  const representaciones: Partial<Record<Language, RepresentationSummary>> = {};
-  for (const r of reps) {
-    representaciones[r.language] = {
-      id: r.id,
-      language: r.language,
-      kind: r.kind,
-      sourceLanguage: r.sourceLanguage,
-      copiedFromRepresentationId: r.copiedFromRepresentationId,
-      createdAt: r.createdAt,
-      sync: resumirSincronizacion(r),
-      ...(personal
-        ? {
-            staleFieldKeys: r.staleFieldKeys,
-            unverifiedFieldKeys: r.unverifiedFieldKeys,
-            missingFieldKeys: r.missingFieldKeys,
-          }
-        : {}),
-    };
-  }
+  const representaciones = resumirRepresentaciones(reps, personal);
 
   let legacyLanguageLinks: LegacyLanguageLink[] = [];
   if (personal) {
@@ -202,7 +215,24 @@ export async function obtenerRepresentacion(
   const campos = await verCamposDeVersion(actor, versionId);
   if (!campos.ok) return campos;
 
-  const evidencias = (c: (typeof campos.value)[number]) =>
+  return ok(await construirRepresentacionLocalizada(versionId, language, resumen, campos.value));
+}
+
+/** Los campos de una versión tal como los entrega `camposDeVersion` / `verCamposDeVersion`. */
+export type CamposDeVersion = Awaited<ReturnType<typeof camposDeVersion>>;
+
+/**
+ * Núcleo SIN actor de `obtenerRepresentacion` (V2 · Fase 9): arma la representación localizada a partir de los
+ * campos YA autorizados y filtrados por quien llama. No autoriza nada: lo reutiliza la proyección TCL, que decide
+ * antes qué campos entran (y vacía la evidencia) y qué representaciones se sirven.
+ */
+export async function construirRepresentacionLocalizada(
+  versionId: string,
+  language: Language,
+  resumen: RepresentationSummary,
+  campos: CamposDeVersion,
+): Promise<LocalizedRepresentation> {
+  const evidencias = (c: CamposDeVersion[number]) =>
     c.evidencias.map((e) => ({
       quote: e.quote,
       filename: e.filename,
@@ -212,12 +242,12 @@ export async function obtenerRepresentacion(
     }));
 
   if (resumen.kind === 'original') {
-    return ok({
+    return {
       versionId,
       language,
       kind: resumen.kind,
       sync: 'original',
-      fields: campos.value.map<LocalizedField>((c) => ({
+      fields: campos.map<LocalizedField>((c) => ({
         key: c.key,
         campaignProductId: c.campaignProductId,
         value: c.value,
@@ -226,7 +256,7 @@ export async function obtenerRepresentacion(
         sync: 'original',
         evidencias: evidencias(c),
       })),
-    });
+    };
   }
 
   const { rows } = await getPool().query<{
@@ -246,12 +276,12 @@ export async function obtenerRepresentacion(
   );
   const porCampo = new Map(rows.map((r) => [r.brief_field_id, r]));
 
-  return ok({
+  return {
     versionId,
     language,
     kind: resumen.kind,
     sync: resumen.sync,
-    fields: campos.value
+    fields: campos
       .filter((c) => c.value !== null && c.value !== undefined)
       .map<LocalizedField>((c) => {
         const t = porCampo.get(c.id);
@@ -267,7 +297,7 @@ export async function obtenerRepresentacion(
           evidencias: evidencias(c),
         };
       }),
-  });
+  };
 }
 
 // ─────────────────────────── Escritura: traducciones ───────────────────────────

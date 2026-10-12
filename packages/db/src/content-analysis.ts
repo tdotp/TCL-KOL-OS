@@ -499,7 +499,7 @@ interface FilaDeRector {
  * versión lógica `es` con `approved_at` y estado approved|superseded, la de mayor `approved_at` (luego
  * `version`). Una hija en borrador NO desplaza al padre. Jamás devuelve un borrador.
  */
-async function leerRector(
+export async function leerRector(
   db: Consultor,
   campaignId: string,
   organizationId: string,

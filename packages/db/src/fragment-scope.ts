@@ -50,3 +50,19 @@ export const SQL_FRAGMENTO_VIGENTE = `((f.snapshot_id IS NULL OR f.snapshot_id =
 export const SQL_FRAGMENTO_VIGENTE_SIN_ALIAS = `((snapshot_id IS NULL OR snapshot_id = (
   SELECT d.current_snapshot_id FROM source_documents d WHERE d.id = source_fragments.source_id))
   AND ${sqlFragmentoSinTextoHistorico('source_fragments')})`;
+
+/**
+ * ¿La fuente (alias `alias` = source_documents) es el Sheet de influencers? Una fuente lo es si CUALQUIERA de sus
+ * snapshots (vigente o histórico) lleva el marcador `TCL_KOL_OS_INFLUENCERS` en A1 de alguna pestaña. Ese Sheet trae
+ * `fee`, `canje` y `condiciones` por influencer: la proyección de TCL (V2 · Fase 9) no lo muestra como documento ni
+ * acepta campos del Brief que lo citen como evidencia, sea cual sea su visibilidad.
+ */
+export function sqlFuenteEsSheetDeInfluencers(alias: string): string {
+  return `EXISTS (
+  SELECT 1
+    FROM source_snapshots es
+    JOIN source_snapshot_rows er ON er.snapshot_id = es.id
+   WHERE es.source_id = ${alias}.id
+     AND er.row_number = 1
+     AND jsonb_path_exists(er.cells, '$[*] ? (@.col == 1 && @.text like_regex "TCL_KOL_OS_INFLUENCERS" flag "i")'))`;
+}

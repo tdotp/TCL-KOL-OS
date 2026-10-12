@@ -4,6 +4,7 @@ import {
   type EntradaPublicaDeOperacionParaTcl,
   clavesProhibidasEn,
   derivarEstadoDeGuionParaTcl,
+  derivarEtapaParaTcl,
   derivarProductoRecibido,
   esClaveProhibidaTcl,
   proyectarOperacionParaTcl,
@@ -14,12 +15,9 @@ const ENTRADA: EntradaPublicaDeOperacionParaTcl = {
   nombreVisible: 'Valentina Sintética',
   unidadesComprometidas: 4,
   unidadesEntregadas: 4,
+  hayEnvioAbierto: false,
   entregablesTotales: 2,
   entregablesConGuionAprobado: 1,
-  kpis: [
-    { metric: 'views', unit: 'count', target: 100000, actual: 85000, achievement: 85 },
-    { metric: 'engagement_rate', unit: 'percent', target: 4.7, actual: null, achievement: null },
-  ],
 };
 
 function claves(valor: unknown, ruta = ''): string[] {
@@ -58,6 +56,8 @@ describe('lista de claves prohibidas', () => {
     expect(esClaveProhibidaTcl('claimedAmount')).toBe(true);
     expect(esClaveProhibidaTcl('Tracking-Ref')).toBe(true);
     expect(esClaveProhibidaTcl('metric')).toBe(false);
+    expect(esClaveProhibidaTcl('shippingcost')).toBe(true);
+    expect(esClaveProhibidaTcl('feeAmount')).toBe(true);
     expect(clavesProhibidasEn({ a: { b: [{ feeAmount: 1 }] } })).toEqual(['a.b[0].feeAmount']);
     expect(clavesProhibidasEn({ ok: 1 })).toEqual([]);
   });
@@ -68,14 +68,11 @@ describe('proyectarOperacionParaTcl', () => {
     expect(proyectarOperacionParaTcl(ENTRADA)).toEqual({
       participacionId: ENTRADA.participacionId,
       nombreVisible: 'Valentina Sintética',
+      etapa: 'en_curso',
       productoRecibido: 'si',
       guion: { estado: 'parcial', aprobados: 1, total: 2 },
-      produccion: 'desconocido',
-      publicacion: 'desconocido',
-      kpis: [
-        { metric: 'views', unit: 'count', target: 100000, actual: 85000, achievement: 85 },
-        { metric: 'engagement_rate', unit: 'percent', target: 4.7, actual: null, achievement: null },
-      ],
+      produccion: 'no_disponible',
+      publicacion: 'no_disponible',
     });
   });
 
@@ -109,7 +106,7 @@ describe('proyectarOperacionParaTcl', () => {
       carrier: 'Servientrega',
       pii: true,
       finance: { x: 1 },
-      kpis: [{ ...ENTRADA.kpis[0]!, costPerView: 1, provenance: 'x', note: 'n' }, ENTRADA.kpis[1]!],
+      kpis: [{ metric: 'views', costPerView: 1, provenance: 'x', note: 'n' }],
     } as unknown as EntradaPublicaDeOperacionParaTcl;
     const r = proyectarOperacionParaTcl(sucia);
     expect(r).toEqual(proyectarOperacionParaTcl(ENTRADA));
@@ -126,7 +123,15 @@ describe('proyectarOperacionParaTcl', () => {
     ]) {
       expect(texto).not.toContain(centinela);
     }
-    expect(Object.keys(r.kpis[0]!).sort()).toEqual(['achievement', 'actual', 'metric', 'target', 'unit']);
+    expect(Object.keys(r).sort()).toEqual([
+      'etapa',
+      'guion',
+      'nombreVisible',
+      'participacionId',
+      'produccion',
+      'productoRecibido',
+      'publicacion',
+    ]);
   });
 
   it('producto recibido: sí / no / parcial', () => {
@@ -147,24 +152,56 @@ describe('proyectarOperacionParaTcl', () => {
       ...ENTRADA,
       entregablesTotales: -1,
       unidadesEntregadas: Number.NaN,
-      kpis: [
-        {
-          metric: 'views',
-          unit: 'count',
-          target: Number.NaN,
-          actual: Number.POSITIVE_INFINITY,
-          achievement: 1,
-        },
-      ],
     });
     expect(r.guion).toEqual({ estado: 'sin_entregables', aprobados: 0, total: 0 });
     expect(r.productoRecibido).toBe('no');
-    expect(r.kpis[0]).toMatchObject({ target: 0, actual: null, achievement: 1 });
   });
 
-  it('producción y publicación siguen desconocidas', () => {
+  it('producción y publicación: «no disponible» (no existe ese dominio; no se simula)', () => {
     const r = proyectarOperacionParaTcl(ENTRADA);
-    expect(r.produccion).toBe('desconocido');
-    expect(r.publicacion).toBe('desconocido');
+    expect(r.produccion).toBe('no_disponible');
+    expect(r.publicacion).toBe('no_disponible');
+  });
+
+  it('un nombre con dinero, contacto o cifras largas se omite completo (null)', () => {
+    for (const nombre of ['Ana fee 5 millones', 'Ana 3001234567', 'ana@correo.com', '']) {
+      expect(proyectarOperacionParaTcl({ ...ENTRADA, nombreVisible: nombre }).nombreVisible).toBeNull();
+    }
+    expect(proyectarOperacionParaTcl({ ...ENTRADA, nombreVisible: 'Ana María Ríos' }).nombreVisible).toBe(
+      'Ana María Ríos',
+    );
+  });
+});
+
+describe('etapa para TCL: tres valores', () => {
+  const base = {
+    unidadesComprometidas: 2,
+    unidadesEntregadas: 0,
+    hayEnvioAbierto: false,
+    entregablesTotales: 2,
+    entregablesConGuionAprobado: 0,
+  };
+  it('pendiente: nada ha avanzado', () => {
+    expect(derivarEtapaParaTcl(base)).toBe('pendiente');
+    expect(derivarEtapaParaTcl({ ...base, entregablesTotales: 0 })).toBe('pendiente');
+  });
+  it('en curso: algún avance (guion aprobado, envío abierto o producto recibido)', () => {
+    expect(derivarEtapaParaTcl({ ...base, entregablesConGuionAprobado: 1 })).toBe('en_curso');
+    expect(derivarEtapaParaTcl({ ...base, hayEnvioAbierto: true })).toBe('en_curso');
+    expect(derivarEtapaParaTcl({ ...base, unidadesEntregadas: 1 })).toBe('en_curso');
+  });
+  it('listo: todo guion aprobado y producto recibido (o sin producto que enviar)', () => {
+    expect(derivarEtapaParaTcl({ ...base, entregablesConGuionAprobado: 2, unidadesEntregadas: 2 })).toBe(
+      'listo',
+    );
+    expect(derivarEtapaParaTcl({ ...base, unidadesComprometidas: 0, entregablesConGuionAprobado: 2 })).toBe(
+      'listo',
+    );
+    expect(derivarEtapaParaTcl({ ...base, entregablesConGuionAprobado: 2, unidadesEntregadas: 1 })).toBe(
+      'en_curso',
+    );
+  });
+  it('sin entregables y producto recibido nunca es «listo» (falta el guion)', () => {
+    expect(derivarEtapaParaTcl({ ...base, entregablesTotales: 0, unidadesEntregadas: 2 })).toBe('en_curso');
   });
 });

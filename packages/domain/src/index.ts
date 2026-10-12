@@ -43,3 +43,5 @@ export * from './kpi';
 // Fase 8 (W2b)
 export * from './operational-summary';
 export * from './tcl-projection-operacion';
+export * from './tcl-projection';
+export * from './tcl-export';

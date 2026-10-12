@@ -27,6 +27,7 @@ import { transicionarBrief } from './transitions.ts';
 import { aprobarBrief, solicitarCambiosInternos } from './client-review.ts';
 import { motivoDeUltimaDevolucion } from './transitions.ts';
 import { listCampaigns } from './campaigns.ts';
+import { listarCampanasParaTcl } from './tcl-projection.ts';
 
 let orgId: string;
 let userId: string;
@@ -234,15 +235,17 @@ describe('aprobación del brief por SmartPR', () => {
     );
     expect(despues!.visibility).toBe('tcl');
 
-    const listado = await listCampaigns(cliente);
+    // V2 · Fase 9: el cliente ve la campaña por la proyección TCL (ya no por `listCampaigns`: sin `campaign:read`).
+    const listado = await listarCampanasParaTcl(cliente);
     expect(listado.ok).toBe(true);
     if (!listado.ok) return;
     expect(listado.value.some((c) => c.id === campaignId)).toBe(true);
+    expect((await listCampaigns(cliente)).ok).toBe(false);
   });
 
   it('antes de la aprobación el cliente no ve la campaña', async () => {
     const { campaignId } = await nuevoBriefEnInternalReview('cliente-no-ve-antes');
-    const listado = await listCampaigns(cliente);
+    const listado = await listarCampanasParaTcl(cliente);
     expect(listado.ok).toBe(true);
     if (!listado.ok) return;
     expect(listado.value.some((c) => c.id === campaignId)).toBe(false);

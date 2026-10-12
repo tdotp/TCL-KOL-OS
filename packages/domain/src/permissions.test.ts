@@ -117,7 +117,18 @@ describe('vista del cliente TCL (DEC-012 / ADR-004)', () => {
     expect(roleCan('cliente', 'brief:approve_internal')).toBe(false);
     expect(roleCan('cliente', 'brief:transition')).toBe(false);
     expect(roleCan('cliente', 'brief:request_review')).toBe(false);
-    expect(actionsFor('cliente').filter((a) => a.includes('client'))).toEqual([]);
+    // Fase 9: las únicas acciones con «client» son las capacidades de LECTURA de la proyección TCL.
+    expect(
+      actionsFor('cliente')
+        .filter((a) => a.includes('client'))
+        .sort(),
+    ).toEqual([
+      'campaign:read_client',
+      'content:read_approved_client',
+      'export:client',
+      'kpi:read_client',
+      'operations:read_summary_client',
+    ]);
   });
 
   it('no puede editar, cargar fuentes ni ver auditoría', () => {
@@ -131,15 +142,20 @@ describe('vista del cliente TCL (DEC-012 / ADR-004)', () => {
     expect(roleCan('cliente', 'comment:client_visible')).toBe(false);
   });
 
-  it('solo lee campaña, brief y las fuentes que SmartPR le expone, y exporta — nada más', () => {
-    // V2 · Fase 1A añadió `source:read_shared`: lectura de fuentes marcadas
-    // visibles para TCL. NO es `source:read` (todas las de la organización).
+  it('solo observa la proyección TCL (campaña, contenido aprobado, resumen operativo, KPI), sus fuentes compartidas y su exportación — nada más', () => {
+    // V2 · Fase 1A: `source:read_shared` (fuentes marcadas visibles para TCL; NO es `source:read`).
+    // V2 · Fase 9 (DEC-050): capacidades propias del cliente; se retiran `campaign:read`, `brief:read`, `brief:export`.
     expect([...actionsFor('cliente')].sort()).toEqual([
-      'brief:export',
-      'brief:read',
-      'campaign:read',
+      'campaign:read_client',
+      'content:read_approved_client',
+      'export:client',
+      'kpi:read_client',
+      'operations:read_summary_client',
       'source:read_shared',
     ]);
+    for (const retirada of ['campaign:read', 'brief:read', 'brief:export'] as const) {
+      expect(roleCan('cliente', retirada), `el cliente conserva ${retirada}`).toBe(false);
+    }
     expect(roleCan('cliente', 'source:read')).toBe(false);
     expect(roleCan('cliente', 'source:set_visibility')).toBe(false);
   });
@@ -295,7 +311,7 @@ describe('influencer y participación en campaña', () => {
     expect(roleCan('operativo', 'campaign_influencer:manage')).toBe(false);
   });
 
-  it('el cliente TCL no recibe ninguna capacidad nueva (su dashboard tendrá una proyección propia)', () => {
+  it('el cliente TCL no recibe ninguna capacidad interna de la Fase 3 (su dashboard usa la proyección propia de la Fase 9)', () => {
     for (const accion of ACCIONES) expect(roleCan('cliente', accion), accion).toBe(false);
   });
 
@@ -310,7 +326,8 @@ describe('influencer y participación en campaña', () => {
       const f = [...actionsFor(rol)].filter((a) =>
         /^(payment|invoice|agreement|finance|billing|shipment|pii|kpi|operations|ops_evidence)/.test(a),
       );
-      expect(f, rol).toEqual([]);
+      // Fase 9: el cliente solo recibe las capacidades de la PROYECCIÓN TCL (sin dinero ni PII).
+      expect(f, rol).toEqual(rol === 'cliente' ? ['operations:read_summary_client', 'kpi:read_client'] : []);
     }
   });
 });
@@ -386,12 +403,14 @@ describe('chat del agente de Cuenta (D4)', () => {
     if (!sin.ok) expect(sin.error.code).toBe('FORBIDDEN_ROLE');
   });
 
-  it('la matriz exacta de los demás roles no cambió (operativo: solo +deliverable:read de la Fase 7; el cliente conserva su lista)', () => {
+  it('la matriz exacta de los demás roles no cambió (operativo: solo +deliverable:read de la Fase 7; el cliente: matriz de la Fase 9)', () => {
     expect([...actionsFor('operativo')].sort()).toEqual(OPERATIVO_ESPERADO);
     expect([...actionsFor('cliente')].sort()).toEqual([
-      'brief:export',
-      'brief:read',
-      'campaign:read',
+      'campaign:read_client',
+      'content:read_approved_client',
+      'export:client',
+      'kpi:read_client',
+      'operations:read_summary_client',
       'source:read_shared',
     ]);
   });

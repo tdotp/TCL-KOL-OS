@@ -160,7 +160,7 @@ describe('cliente: búsqueda', () => {
 });
 
 describe('cliente: evidencia de un brief visible', () => {
-  it('no recibe la cita de una fuente interna', async () => {
+  it('no recibe ninguna cita (ni de una fuente interna ni de una compartida): no lee los campos de la versión', async () => {
     const creado = await crearBriefManual(admin, campaignId);
     if (!creado.ok) throw new Error(creado.error.message);
     const [campo] = await query<{ id: string }>(
@@ -178,10 +178,11 @@ describe('cliente: evidencia de un brief visible', () => {
       );
     }
 
+    // V2 · Fase 9 (DEC-050): sin `brief:read`, el cliente no lee los campos de una versión (ni sus citas, internas o
+    // no). Lo que TCL ve del Brief sale de la proyección TCL, que nunca incluye evidencia.
     const comoCliente = await verCamposDeVersion(cliente, creado.value.versionId);
-    if (!comoCliente.ok) throw new Error(comoCliente.error.message);
-    const citas = comoCliente.value.flatMap((c) => c.evidencias.map((e) => e.quote));
-    expect(citas).toEqual(['CITA-TCL']);
+    expect(comoCliente.ok).toBe(false);
+    if (!comoCliente.ok) expect(comoCliente.error.code).toBe('FORBIDDEN_ROLE');
 
     const comoStaff = await verCamposDeVersion(consultor, creado.value.versionId);
     if (!comoStaff.ok) throw new Error(comoStaff.error.message);

@@ -202,6 +202,58 @@ export async function obtenerKpiDeParticipacion(
   });
 }
 
+/**
+ * Bloque `public` de los KPI de TODAS las participaciones de una campaña, SIN actor (V2 · Fase 9): mapa
+ * campaignInfluencerId → `KpiPublico[]` en el mismo orden y con la MISMA comparación (`compararKpi` +
+ * `medicionVigenteDe`) que `obtenerKpiDeParticipacion().public` (una prueba comprueba la paridad). Tres
+ * consultas por lote, sin N+1, con las columnas de lista blanca de `SELECT_OBJETIVO` / `SELECT_MEDICION` (sin
+ * autor, sin motivo, sin procedencia). Solo participaciones con objetivos vigentes aparecen en el mapa.
+ *
+ * NO autoriza: quien la llama (la proyección TCL, tras su guard único) responde del acceso a la campaña.
+ */
+export async function kpisPublicosDeCampana(
+  db: Pick<ReturnType<typeof getPool>, 'query'>,
+  campaignId: string,
+): Promise<ReadonlyMap<string, readonly KpiPublico[]>> {
+  const [{ rows: objetivos }, { rows: mediciones }] = await Promise.all([
+    db.query<FilaDeObjetivo>(`${SELECT_OBJETIVO} WHERE t.campaign_id = $1 AND t.status = 'active'`, [
+      campaignId,
+    ]),
+    db.query<FilaDeMedicion>(
+      `${SELECT_MEDICION}
+        WHERE m.campaign_id = $1
+          AND EXISTS (SELECT 1 FROM kpi_targets t
+                       WHERE t.campaign_influencer_id = m.campaign_influencer_id
+                         AND t.status = 'active' AND t.metric = m.metric)`,
+      [campaignId],
+    ),
+  ]);
+  const objetivosPor = new Map<string, FilaDeObjetivo[]>();
+  for (const o of objetivos) {
+    const l = objetivosPor.get(o.campaign_influencer_id) ?? [];
+    l.push(o);
+    objetivosPor.set(o.campaign_influencer_id, l);
+  }
+  const medicionesPor = new Map<string, ReturnType<typeof comoMedicionDeDominio>[]>();
+  for (const m of mediciones) {
+    const l = medicionesPor.get(m.campaign_influencer_id) ?? [];
+    l.push(comoMedicionDeDominio(m));
+    medicionesPor.set(m.campaign_influencer_id, l);
+  }
+  const salida = new Map<string, readonly KpiPublico[]>();
+  for (const [ci, propios] of objetivosPor) {
+    const suyas = medicionesPor.get(ci) ?? [];
+    salida.set(
+      ci,
+      [...propios].sort(ordenDeAmbito).map((o) => {
+        const objetivo = comoObjetivoDeDominio(o);
+        return publico(compararKpi(objetivo, medicionVigenteDe(objetivo, suyas)));
+      }),
+    );
+  }
+  return salida;
+}
+
 // ─────────────────────────── Historial ─────────────────────────────────────────
 
 export interface ObjetivoHistorialPublico {

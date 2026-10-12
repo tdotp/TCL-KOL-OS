@@ -84,6 +84,15 @@ export type Action =
   | 'kpi:read'
   | 'kpi:target_manage'
   | 'kpi:measure'
+  // V2 · Fase 9 (DEC-050): dashboard TCL de solo lectura. Capacidades EXCLUSIVAS del
+  // cliente, espejo de `source:read_shared`: no reutilizan las internas (`campaign:read`,
+  // `brief:read`, `kpi:read`…) y solo dan acceso a la PROYECCIÓN TCL (allowlist del servidor).
+  // Ningún rol interno las recibe: personal de SmartPR no usa `/tcl`.
+  | 'campaign:read_client'
+  | 'content:read_approved_client'
+  | 'operations:read_summary_client'
+  | 'kpi:read_client'
+  | 'export:client'
   | 'glossary:propose'
   | 'glossary:approve'
   | 'comment:internal'
@@ -294,11 +303,21 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'kpi:read',
     'kpi:measure',
   ],
-  // El cliente TCL es de solo lectura: consulta lo que ya tiene visible y
-  // descarga el entregable (DEC-012 / ADR-004). No aprueba, no pide cambios y
+  // El cliente TCL es de solo lectura: observa la PROYECCIÓN TCL de sus campañas
+  // (Fase 9, DEC-050) y exporta esa misma proyección. No aprueba, no pide cambios y
   // no mueve ningún estado — esas decisiones son de SmartPR (corrección del
   // workflow cliente, `docs/product/CLIENT_WORKFLOW_CORRECTION.md`).
-  cliente: ['campaign:read', 'source:read_shared', 'brief:read', 'brief:export'],
+  // Fase 9: se RETIRAN `campaign:read`, `brief:read` y `brief:export` (cerraban
+  // lecturas legadas de borradores, de `modelo/costoUsd` y de entidades internas);
+  // se conserva `source:read_shared` (cada fuente se comparte a propósito).
+  cliente: [
+    'campaign:read_client',
+    'content:read_approved_client',
+    'operations:read_summary_client',
+    'kpi:read_client',
+    'export:client',
+    'source:read_shared',
+  ],
 };
 
 /** ¿El rol tiene la capacidad, con independencia del recurso concreto? */

@@ -347,14 +347,13 @@ describe('obtenerBriefWorkspace', () => {
     const aprobado = await aprobarBrief(director, creado.value.versionId);
     expect(aprobado.ok).toBe(true);
 
+    // V2 · Fase 9 (DEC-050): el cliente ya no tiene `campaign:read` ni `brief:read`: el workspace (y con él cualquier
+    // evento de comentario, interno o no) no existe para él. Lo que TCL ve del Brief sale de la proyección TCL.
     const resultado = await obtenerBriefWorkspace(cliente, campaignId);
-    expect(resultado.ok).toBe(true);
-    if (!resultado.ok) return;
-    expect(resultado.value.version?.status).toBe('approved');
-    expect(resultado.value.activity.some((a) => a.kind === 'comentario')).toBe(false);
-    // El cliente solo lee: nunca es "a quien le toca actuar".
-    expect(resultado.value.responsibility.nextRole).not.toBe('cliente');
-    expect(resultado.value.allowedActions).toEqual([]);
+    expect(resultado.ok).toBe(false);
+    if (resultado.ok) return;
+    expect(resultado.error.code).toBe('RESOURCE_NOT_FOUND');
+    expect(JSON.stringify(resultado)).not.toContain('Comentario interno');
   });
 
   it('aislamiento: un actor de otra organización recibe RESOURCE_NOT_FOUND (caso 13)', async () => {

@@ -431,3 +431,17 @@ export type {
   EstadoOperativoParaAgente,
   FiltrosParaAgente,
 } from './operativo-agent-view.ts';
+// Fase 9 (DEC-050): proyección TCL de solo lectura. ÚNICA superficie de datos que consume `app/(app)/tcl/**`.
+export {
+  listarCampanasParaTcl,
+  obtenerDetalleTclDeCampana,
+  obtenerInfluencersParaTcl,
+  obtenerContenidoParaTcl,
+  obtenerBriefParaTcl,
+  obtenerOperacionParaTcl,
+  obtenerKpisParaTcl,
+  obtenerDocumentosParaTcl,
+  obtenerProyeccionTclDeCampana,
+  exportarCampanaParaTcl,
+} from './tcl-projection.ts';
+export type { ExportDeCampanaTcl } from './tcl-projection.ts';
