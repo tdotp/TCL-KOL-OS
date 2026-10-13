@@ -61,3 +61,10 @@ Entidad Publication, escrituras de cliente, agente/tools/conversaciones TCL, PII
 - **UI:** server components sin formularios; sin `loading.tsx` (con streaming, `notFound()` respondía 200); los guards de las rutas legadas van en cada página (el layout y la página corren en paralelo).
 - **Pruebas:** `*tcl-projection*.test.ts` (domain y db), `qa-f9-*.test.ts` (QA adversarial), pruebas estáticas de aislamiento en web y E2E `tcl-dashboard.spec.ts` (TCL-01…07).
 - **Aceptado (P3):** `productoRecibido='parcial'` permite inferir que el compromiso de producto excede lo entregado (no revela fee/barter); la heurística de texto puede omitir texto legítimo (fail-closed); `next dev` serializa objetos de `pg` en el flight de RSC (no verificado en producción).
+
+## 10. Endurecimiento de la Fase 10 (DEC-051)
+
+- `HEAD` sobre `/api/tcl/campanas/[id]/export` responde **405** con `Allow: GET` sin leer sesión ni ejecutar la proyección.
+- Cabeceras de seguridad globales (también en `/tcl`): `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` y CSP mínima (`frame-ancestors 'none'`, `base-uri`, `object-src`, `form-action`). Sin `script-src` ni HSTS: deuda declarada.
+- El flight de RSC de `/tcl` se verificó con `next build` + `next start` (sin fechas ni objetos de `pg` sin serializar; 404 idéntico a internos y sin sesión).
+- Las citas de evidencia (`evidence.quote`) de fragmentos históricos del Sheet se sirven con un marcador (`CITA_HISTORICA_RESTRINGIDA`) en todo lector interno; en TCL el campo ya se excluía completo.

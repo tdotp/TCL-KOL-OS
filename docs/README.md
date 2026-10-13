@@ -6,8 +6,8 @@
 
 1. [Workflow funcional V2](product/TCL_KOL_OS_V2_WORKFLOW_FUNCIONAL.md) — qué hace cada usuario (Cuenta, Operativo, TCL), qué ve y qué no. Fuente funcional aprobada; no se reinterpreta.
 2. [Estado técnico actual](project/V2_CURRENT_STATE.md) — rama, tag, migraciones, decisiones, roadmap, baseline de pruebas, entorno, deudas y reglas.
-3. [Handoff de la Fase 10](handoffs/HANDOFF-Fase-10.md) — **punto de partida de la F10**: estado técnico y deudas al cierre certificado de la F9 (no diseña la F10). Los handoffs de las [Fase 9](handoffs/HANDOFF-Fase-9.md) y [Fase 8](handoffs/HANDOFF-Fase-8.md) quedan como históricos.
-4. [Registro de decisiones](decisions/decision-log.md) — DEC-042 a DEC-050 gobiernan V2 (cliente de solo lectura, bilingüe, Influencer/CampaignInfluencer, fuentes y Sheets, chat y agente, contenido, operación y KPIs).
+3. [Estado final de V2](project/V2_FINAL_STATE.md) — **cierre del roadmap (F0–F10)**: arquitectura final, actores, baseline de pruebas, prerrequisitos operativos, deuda y fuera de alcance. Tag `v2-f10-complete`.
+4. [Registro de decisiones](decisions/decision-log.md) — DEC-042 a DEC-051 gobiernan V2 (cliente de solo lectura, bilingüe, Influencer/CampaignInfluencer, fuentes y Sheets, chat y agente, contenido, operación y KPIs, dashboard TCL, limpieza final). Los handoffs de las fases ([10](handoffs/HANDOFF-Fase-10.md), [9](handoffs/HANDOFF-Fase-9.md), [8](handoffs/HANDOFF-Fase-8.md)) son históricos.
 5. [Política de ejecución con agentes](project/AGENT_EXECUTION_POLICY.md) — subagentes, modelo/esfuerzo, QA adversarial, Git y la regla anti-duplicación.
 
 ## Notas técnicas por área (V2)
@@ -24,11 +24,12 @@
 | Contenido: entregables, guiones, revisión, aprobación | [CONTENT_V2](product/CONTENT_V2.md) | DEC-048 |
 | Operación y KPIs: acuerdos, logística, facturación/pagos (seguimiento), PII, KPIs | [OPERATIONS_KPI_V2](product/OPERATIONS_KPI_V2.md) | DEC-049 |
 | Dashboard TCL de solo lectura: proyección positiva, aislamiento, export | [TCL_DASHBOARD_V2](product/TCL_DASHBOARD_V2.md) | DEC-050 |
+| Cierre de V2: limpieza, deprecación y endurecimiento | [V2_FINAL_STATE](project/V2_FINAL_STATE.md) | DEC-051 |
 
 ## Contexto y base (anteriores a V2; algunos describen el modelo previo)
 
 - [Documento maestro de ejecución](../TCL_KOL_OS_DOCUMENTO_MAESTRO_EJECUCION.md) y [README del proyecto](../README.md) — visión, requisitos y cómo levantar el sistema (el estado del README es de Sprint 5: ver `V2_CURRENT_STATE`).
-- Descubrimiento y diseño D0: [`product/D0-*`](product/), [arquitectura](architecture/D0-09-arquitectura.md), [modelo de datos](architecture/D0-08-modelo-datos.md), [seguridad y continuidad](security/D0-09-seguridad-continuidad.md). Los D0-03/07/08/12/18/19 describen el modelo **anterior** a V2 y quedan superados por las DEC-042 a 049.
+- Descubrimiento y diseño D0: [`product/D0-*`](product/), [arquitectura](architecture/D0-09-arquitectura.md), [modelo de datos](architecture/D0-08-modelo-datos.md), [seguridad y continuidad](security/D0-09-seguridad-continuidad.md). Los D0-03/07/08/12/18/19 describen el modelo **anterior** a V2 y quedan superados por las DEC-042 a 051.
 - [`HANDOFF.md`](../HANDOFF.md) (24-sep) está **desactualizado** respecto de V2: histórico.
 - Catálogo de campos del Brief: [`product/brief-schema/`](product/brief-schema/). Contrato del análisis de guiones (fixtures compartidos Node/Python): [`product/content-analysis/`](product/content-analysis/).
 - Rediseño de UI (frontend, en paralelo): [`UI_REDESIGN_V3_HANDOFF`](product/UI_REDESIGN_V3_HANDOFF.md).

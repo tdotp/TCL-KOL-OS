@@ -80,15 +80,12 @@ describe('QA F10 · actividadReciente(actor)', () => {
 
   // QA-F10-09 (CORREGIDO): `actividadReciente(actor, limite)` aceptaba cualquier límite (1e9 devuelve TODA la auditoría de la
   // organización). Hoy ningún llamador lo controla (las páginas pasan 6), pero el caso de uso nuevo no lo acota por sí mismo.
-  it(
-    'QA-F10-09 corregido · el límite de actividadReciente está acotado por el propio caso de uso',
-    async () => {
-      for (const l of [1e9, 1_000_000]) {
-        const r = await db.actividadReciente(op.admin, l);
-        expect(r.length, `límite ${l}`).toBeLessThanOrEqual(500);
-      }
-    },
-  );
+  it('QA-F10-09 corregido · el límite de actividadReciente está acotado por el propio caso de uso', async () => {
+    for (const l of [1e9, 1_000_000]) {
+      const r = await db.actividadReciente(op.admin, l);
+      expect(r.length, `límite ${l}`).toBeLessThanOrEqual(500);
+    }
+  });
 
   it('un límite no válido (0, negativo, NaN) no devuelve filas ni abre una consulta distinta', async () => {
     for (const l of [0, -1, Number.NaN]) {

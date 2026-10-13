@@ -4,6 +4,13 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [No publicado]
 
+### V2 (rama `v2`), fases 0 a 10 — 12 de octubre de 2026
+
+El roadmap V2 está completo y certificado en `v2-f10-complete` (sin merge a `main`). Este archivo no recoge el detalle de cada fase: ver [`docs/project/V2_FINAL_STATE.md`](docs/project/V2_FINAL_STATE.md) y las DEC-042 a DEC-051 en [`docs/decisions/decision-log.md`](docs/decisions/decision-log.md).
+
+- **F0–F9:** baseline limpio; contratos transversales (visibilidad, rol Operativo, auditoría con origen, HITL); modelo bilingüe; `Influencer`/`CampaignInfluencer`; ingestión ampliada y Google Sheets con snapshots; chat y agente de Cuenta (42 tools); contenido y guiones versionados; operación y KPIs; dashboard TCL de solo lectura.
+- **F10 (DEC-051):** retirados permisos y código sin enforcer (`source:read_shared`, `comment:client_visible`, `brief:export`, `VistaCliente`, lectores de snapshots históricos, tres server actions sin llamador); navegación única por capacidades; login de desarrollo cerrado por defecto en producción; cabeceras de seguridad globales; origen estricto en subidas; HEAD 405 en el export TCL; la cita de evidencia histórica ya no sale por lectores internos; `actividadReciente(actor)`; sin migraciones nuevas (última `033`).
+
 ### Sprint 6, Checkpoint 2 — Revisar brief, Actividad y Playwright · 24 de septiembre de 2026
 
 Los otros dos modos del workspace (documento de solo lectura y línea de actividad real), a quién le toca actuar explicado en vez de solo esconder un botón, y el primer harness de pruebas de navegador del repositorio (9 casos obligatorios). Exportación PDF/DOCX sigue sin empezar — Sprint 6 sigue `PARTIAL`. Detalle completo en [D0-19 §12](docs/product/D0-19-cierre-sprint6.md#12-checkpoint-2--revisar-brief-actividad-y-playwright).

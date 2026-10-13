@@ -1,3 +1,5 @@
+> **Documento histórico.** Fue el punto de partida de la F10 (estado al cierre de la F9). La F10 está cerrada: ver [`V2_FINAL_STATE`](../project/V2_FINAL_STATE.md), [`V2_CURRENT_STATE`](../project/V2_CURRENT_STATE.md) y DEC-051. Algunas deudas de este documento (cabeceras globales, `listOrganizations`, `source:read_shared`, «Editar» del Operativo, RSC con `next start`) se resolvieron en F10.
+
 # TCL KOL OS V2 — Handoff para la Fase 10 (estado técnico y deudas al cierre de la F9)
 
 Documento de estado. **No diseña la F10**: fija el punto de partida y las deudas. Reemplaza en vigencia al [handoff de la Fase 9](HANDOFF-Fase-9.md) (histórico). Orden de lectura: [`docs/README.md`](../README.md) → [workflow funcional V2](../product/TCL_KOL_OS_V2_WORKFLOW_FUNCIONAL.md) (no se reinterpreta) → [`V2_CURRENT_STATE`](../project/V2_CURRENT_STATE.md) → este documento → [`decision-log`](../decisions/decision-log.md) DEC-042…050 → [`TCL_DASHBOARD_V2`](../product/TCL_DASHBOARD_V2.md).
