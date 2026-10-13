@@ -34,22 +34,23 @@ export default async function CampanasPage({ searchParams }: { searchParams: Pro
   const campanas = resultado.ok ? resultado.value : [];
   // La actividad es auditoría: solo con `audit:read`; y sin `finance:read` no incluye pagos, PII ni acuerdos.
   const actividad = roleCan(user.role, 'audit:read')
-    ? await listAudit(getPool(), user.organizationId, 6, { incluirOperativas: roleCan(user.role, 'finance:read') })
+    ? await listAudit(getPool(), user.organizationId, 6, {
+        incluirOperativas: roleCan(user.role, 'finance:read'),
+      })
     : [];
 
   const activas = campanas.filter((c) => c.status === 'activa').slice(0, 6);
-  const proximasAcciones =
-    user.role === 'cliente'
-      ? []
-      : (
-          await Promise.all(
-            activas.map(async (c) => {
-              const preguntas = await listarPreguntas(user, c.id, { status: 'pendiente' });
-              const criticas = preguntas.ok ? preguntas.value.filter((p) => p.criticidad === 'critico') : [];
-              return criticas.length > 0 ? { campana: c, criticas: criticas.length } : undefined;
-            }),
-          )
-        ).filter((x): x is { campana: (typeof activas)[number]; criticas: number } => x !== undefined);
+  const proximasAcciones = !roleCan(user.role, 'brief:read')
+    ? []
+    : (
+        await Promise.all(
+          activas.map(async (c) => {
+            const preguntas = await listarPreguntas(user, c.id, { status: 'pendiente' });
+            const criticas = preguntas.ok ? preguntas.value.filter((p) => p.criticidad === 'critico') : [];
+            return criticas.length > 0 ? { campana: c, criticas: criticas.length } : undefined;
+          }),
+        )
+      ).filter((x): x is { campana: (typeof activas)[number]; criticas: number } => x !== undefined);
 
   return (
     <div className="content content-wide ui-enter">
@@ -59,7 +60,7 @@ export default async function CampanasPage({ searchParams }: { searchParams: Pro
           <h1>Campañas</h1>
           <p className="sub">Administra y sigue el avance de todas las campañas KOL visibles para tu rol.</p>
         </div>
-        {user.role !== 'cliente' && (
+        {roleCan(user.role, 'campaign:create') && (
           <a className="btn pri" href="/campanas/nueva">
             <span className="btn-plus">＋</span> Nueva campaña
           </a>
@@ -75,14 +76,16 @@ export default async function CampanasPage({ searchParams }: { searchParams: Pro
             </div>
           ) : campanas.length === 0 ? (
             <div className="empty-state">
-              <div className="empty-state-mark" aria-hidden="true">▤</div>
+              <div className="empty-state-mark" aria-hidden="true">
+                ▤
+              </div>
               <h2>No hay campañas todavía</h2>
               <p>
                 {user.role === 'cliente'
                   ? 'Verás las campañas cuando se compartan contigo.'
                   : 'Crea la primera campaña para empezar a organizar fuentes, preguntas y brief.'}
               </p>
-              {user.role !== 'cliente' && (
+              {roleCan(user.role, 'campaign:create') && (
                 <a className="btn pri" href="/campanas/nueva">
                   Crear campaña
                 </a>
@@ -94,7 +97,7 @@ export default async function CampanasPage({ searchParams }: { searchParams: Pro
         </section>
 
         <aside className="side-stack campaigns-side">
-          {user.role !== 'cliente' && (
+          {roleCan(user.role, 'brief:read') && (
             <section className="card side-card">
               <div className="side-card-head">
                 <div>

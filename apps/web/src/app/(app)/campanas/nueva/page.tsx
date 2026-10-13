@@ -1,4 +1,5 @@
-import { redirect } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
+import { roleCan } from '@tcl-kol-os/domain';
 import { listProducts } from '@tcl-kol-os/db';
 import { currentUser } from '@/lib/session';
 import { desviarClienteDeRutaLegada } from '@/lib/tcl-guard';
@@ -12,6 +13,8 @@ export default async function NuevaCampanaPage() {
   if (user === undefined) redirect('/login');
   // Cliente TCL: a su equivalente de `/tcl` (o 404) ANTES de cualquier cargador interno.
   desviarClienteDeRutaLegada(user, { tipo: 'oculta' });
+  // Sin `campaign:create` (p. ej. analista, legal, operativo) la pantalla no existe para ese rol.
+  if (!roleCan(user.role, 'campaign:create')) notFound();
 
   const productos = await listProducts();
 
@@ -19,18 +22,36 @@ export default async function NuevaCampanaPage() {
     <div className="content content-wide ui-enter">
       <div className="page-head page-head-spacious">
         <div>
-          <a className="back-link" href="/campanas">← Campañas</a>
-          <div className="eyebrow" style={{ marginTop: 18 }}>Setup</div>
+          <a className="back-link" href="/campanas">
+            ← Campañas
+          </a>
+          <div className="eyebrow" style={{ marginTop: 18 }}>
+            Setup
+          </div>
           <h1>Nueva campaña</h1>
-          <p className="sub">Define lo esencial. Fuentes, preguntas y brief se trabajan después dentro de la campaña.</p>
+          <p className="sub">
+            Define lo esencial. Fuentes, preguntas y brief se trabajan después dentro de la campaña.
+          </p>
         </div>
       </div>
 
       <div className="setup-stepper" aria-label="Flujo de creación">
-        <div className="setup-step active"><span>1</span><strong>Datos</strong></div>
-        <div className="setup-step"><span>2</span><strong>Fuentes</strong></div>
-        <div className="setup-step"><span>3</span><strong>Brief</strong></div>
-        <div className="setup-step"><span>4</span><strong>Revisión</strong></div>
+        <div className="setup-step active">
+          <span>1</span>
+          <strong>Datos</strong>
+        </div>
+        <div className="setup-step">
+          <span>2</span>
+          <strong>Fuentes</strong>
+        </div>
+        <div className="setup-step">
+          <span>3</span>
+          <strong>Brief</strong>
+        </div>
+        <div className="setup-step">
+          <span>4</span>
+          <strong>Revisión</strong>
+        </div>
       </div>
 
       <FormularioCampana productos={productos} />

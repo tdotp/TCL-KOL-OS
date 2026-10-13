@@ -2,7 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import { currentUser } from '@/lib/session';
 import { desviarClienteDeRutaLegada } from '@/lib/tcl-guard';
 import { cargarResumenOperacion, filtrosDeOperacionDesdeUrl } from '@/lib/operacion-server';
-import { NavCampana } from '../contenido/NavCampana';
+import { NavCampana } from '@/components/NavCampana';
 import { Insignia } from './Insignia';
 import {
   ESTADO_DE_ACUERDO,

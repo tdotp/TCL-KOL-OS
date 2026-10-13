@@ -6,7 +6,8 @@ import {
   verCamposDeVersion,
   versionesDelBrief,
 } from '@tcl-kol-os/db';
-import { allowedTransitions, roleCan, type BriefStatus } from '@tcl-kol-os/domain';
+import { allowedTransitions, roleCan, type BriefStatus, type Role } from '@tcl-kol-os/domain';
+import { NavCampana } from '@/components/NavCampana';
 import { currentUser } from '@/lib/session';
 import { desviarClienteDeRutaLegada } from '@/lib/tcl-guard';
 import { ESTADO_EN_ESPANOL, ETAPAS, TEXTO_DEL_BOTON, etapaDeStatus } from '@/lib/brief-ui';
@@ -30,18 +31,14 @@ function CabeceraBrief({
   market,
   category,
   status,
-  conContenido = false,
-  conOperacion = false,
+  role,
 }: {
   id: string;
   name: string;
   market: string;
   category: string | null;
   status: BriefStatus | undefined;
-  /** El rol puede ver el contenido de la campaña (V2 · Fase 7): se añade el enlace «Contenido». */
-  conContenido?: boolean;
-  /** El rol puede ver la operación de la campaña (V2 · Fase 8): se añade el enlace «Operación». */
-  conOperacion?: boolean;
+  role: Role;
 }) {
   const etapa = etapaDeStatus(status);
   const indice = ETAPAS.findIndex((e) => e.id === etapa);
@@ -68,29 +65,14 @@ function CabeceraBrief({
           <a className="btn" href={`/campanas/${id}/fuentes`}>
             Fuentes
           </a>
-          <a className="btn" href={`/campanas/${id}/brief/editar`}>
-            Editar brief
-          </a>
+          {roleCan(role, 'brief:edit') && (
+            <a className="btn" href={`/campanas/${id}/brief/editar`}>
+              Editar brief
+            </a>
+          )}
         </div>
       </header>
-      <nav className="campaign-context-nav" aria-label="Secciones de campaña">
-        <a href={`/campanas/${id}`}>Resumen</a>
-        <a href={`/campanas/${id}/fuentes`}>Fuentes</a>
-        <a className="active" href={`/campanas/${id}/brief`}>
-          Brief
-        </a>
-        <a href={`/campanas/${id}/brief/editar`}>Editar</a>
-        {conContenido && (
-          <a href={`/campanas/${id}/contenido`} data-testid="contenido-nav-link">
-            Contenido
-          </a>
-        )}
-        {conOperacion && (
-          <a href={`/campanas/${id}/operacion`} data-testid="operacion-nav-link">
-            Operación
-          </a>
-        )}
-      </nav>
+      <NavCampana campaignId={id} role={role} activa="brief" />
       <div className="stepper campaign-stepper">
         {ETAPAS.map((item, i) => (
           <div key={item.id} className={`step ${i < indice ? 'done' : i === indice ? 'current' : ''}`}>
@@ -174,8 +156,7 @@ export default async function BriefPage({
         market={campana.value.campaign.market}
         category={campana.value.campaign.category}
         status={ultima?.status as BriefStatus | undefined}
-        conContenido={roleCan(user.role, 'deliverable:read')}
-        conOperacion={roleCan(user.role, 'operations:read')}
+        role={user.role}
       />
       <div className="review-intro">
         <div className="eyebrow">Revisión estructurada</div>

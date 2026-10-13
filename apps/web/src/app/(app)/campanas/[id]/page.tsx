@@ -7,6 +7,7 @@ import {
   versionesDelBrief,
 } from '@tcl-kol-os/db';
 import { allowedTransitions, roleCan, type BriefStatus } from '@tcl-kol-os/domain';
+import { NavCampana } from '@/components/NavCampana';
 import { currentUser } from '@/lib/session';
 import { desviarClienteDeRutaLegada } from '@/lib/tcl-guard';
 import { archivarCampana, crearBriefManualDeCampana } from '@/lib/actions';
@@ -127,31 +128,12 @@ export default async function DetalleCampanaPage({
         </div>
       </header>
 
-      <nav className="campaign-context-nav" aria-label="Secciones de campaña">
-        <a className="active" href={`/campanas/${campaign.id}`}>
-          Resumen
-        </a>
-        <a href={`/campanas/${campaign.id}/fuentes`}>
-          Fuentes <span>{filasFuentes.length}</span>
-        </a>
-        <a href={`/campanas/${campaign.id}/brief`}>Brief</a>
-        <a href={`/campanas/${campaign.id}/brief/editar`}>Editar</a>
-        {roleCan(user.role, 'chat:write') && (
-          <a href={`/campanas/${campaign.id}/chat`} data-testid="chat-nav-link">
-            Asistente
-          </a>
-        )}
-        {roleCan(user.role, 'deliverable:read') && (
-          <a href={`/campanas/${campaign.id}/contenido`} data-testid="contenido-nav-link">
-            Contenido
-          </a>
-        )}
-        {roleCan(user.role, 'operations:read') && (
-          <a href={`/campanas/${campaign.id}/operacion`} data-testid="operacion-nav-link">
-            Operación
-          </a>
-        )}
-      </nav>
+      <NavCampana
+        campaignId={campaign.id}
+        role={user.role}
+        activa="resumen"
+        conteoFuentes={filasFuentes.length}
+      />
 
       <div className="stepper campaign-stepper">
         {ETAPAS.map((etapa, i) => (
@@ -206,12 +188,14 @@ export default async function DetalleCampanaPage({
                   <strong>Todavía no hay una versión del brief.</strong>
                   <p>Carga fuentes y extrae contenido, o empieza el brief manualmente.</p>
                 </div>
-                <form action={crearBriefManualDeCampana}>
-                  <input type="hidden" name="campaignId" value={campaign.id} />
-                  <button className="btn pri" type="submit">
-                    Empezar a mano
-                  </button>
-                </form>
+                {roleCan(user.role, 'brief:manual_create') && (
+                  <form action={crearBriefManualDeCampana}>
+                    <input type="hidden" name="campaignId" value={campaign.id} />
+                    <button className="btn pri" type="submit">
+                      Empezar a mano
+                    </button>
+                  </form>
+                )}
               </div>
             ) : (
               <div className="overview-progress-grid">
@@ -242,7 +226,7 @@ export default async function DetalleCampanaPage({
                     <strong>{preguntasCriticasPendientes}</strong>
                   </div>
                 </div>
-                {briefWorkspaceV2Activo() && (
+                {briefWorkspaceV2Activo() && roleCan(user.role, 'brief:edit') && (
                   <a
                     className="btn"
                     href={`/campanas/${campaign.id}/brief/workspace`}
@@ -379,7 +363,7 @@ export default async function DetalleCampanaPage({
             </section>
           )}
 
-          {campaign.status === 'activa' && (
+          {campaign.status === 'activa' && roleCan(user.role, 'campaign:archive') && (
             <section className="card side-card archive-card">
               <div className="eyebrow">Administración</div>
               <h3 className="section-title">Archivar campaña</h3>

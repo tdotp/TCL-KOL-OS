@@ -14,7 +14,7 @@ import { BloqueDeAprobacion } from '../../BloqueDeAprobacion';
 import { FormularioSubirVersion } from '../../FormularioSubirVersion';
 import { FormulariosDeComentario } from '../../FormulariosDeComentario';
 import { HistorialDeVersiones } from '../../HistorialDeVersiones';
-import { NavCampana } from '../../NavCampana';
+import { NavCampana } from '@/components/NavCampana';
 import { SeccionComentarios } from '../../SeccionComentarios';
 import { SeccionDeRevision } from '../../SeccionDeRevision';
 import { SeccionHallazgos } from '../../SeccionHallazgos';
@@ -86,7 +86,7 @@ export default async function ContenidoDeEntregablePage({
         ← {vista.participacion.influencerNombre}
       </a>
 
-      <NavCampana campaignId={campaign.id} role={user.role} />
+      <NavCampana campaignId={campaign.id} role={user.role} activa="contenido" />
 
       <div className={styles['pagina']}>
         <header className={styles['cabecera']}>

@@ -15,7 +15,7 @@ import {
   cargarSeguimientoDePago,
   type SujetoOperativo,
 } from '@/lib/operacion-server';
-import { NavCampana } from '../../contenido/NavCampana';
+import { NavCampana } from '@/components/NavCampana';
 import { SeccionAcuerdo } from '../SeccionAcuerdo';
 import { SeccionContenido } from '../SeccionContenido';
 import { SeccionFacturacion } from '../SeccionFacturacion';

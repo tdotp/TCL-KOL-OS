@@ -3,7 +3,7 @@ import { esUuid, getCampaign, listarContenidoDeCampana } from '@tcl-kol-os/db';
 import { roleCan } from '@tcl-kol-os/domain';
 import { currentUser } from '@/lib/session';
 import { desviarClienteDeRutaLegada } from '@/lib/tcl-guard';
-import { NavCampana } from '../NavCampana';
+import { NavCampana } from '@/components/NavCampana';
 import { TarjetaDeParticipacion } from '../TarjetaDeParticipacion';
 import styles from '../contenido.module.css';
 
@@ -46,7 +46,7 @@ export default async function ContenidoDeParticipacionPage({
         ← Contenido de {campaign.name}
       </a>
 
-      <NavCampana campaignId={campaign.id} role={user.role} />
+      <NavCampana campaignId={campaign.id} role={user.role} activa="contenido" />
 
       <div className={styles['pagina']}>
         <header className={styles['cabecera']}>

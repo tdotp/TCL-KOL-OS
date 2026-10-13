@@ -8,6 +8,7 @@ import {
   obtenerConversacionDeCampana,
 } from '@tcl-kol-os/db';
 import { roleCan } from '@tcl-kol-os/domain';
+import { NavCampana } from '@/components/NavCampana';
 import { currentUser } from '@/lib/session';
 import { desviarClienteDeRutaLegada } from '@/lib/tcl-guard';
 import { estadoDelAsistente, etiquetaDeTool, limiteDeAdjuntoBytes } from '@/lib/chat-server';
@@ -86,25 +87,7 @@ export default async function ChatDeCampanaPage({ params }: { params: Promise<{ 
         ← {campaign.name}
       </a>
 
-      <nav className="campaign-context-nav" aria-label="Secciones de campaña">
-        <a href={`/campanas/${campaign.id}`}>Resumen</a>
-        <a href={`/campanas/${campaign.id}/fuentes`}>Fuentes</a>
-        <a href={`/campanas/${campaign.id}/brief`}>Brief</a>
-        <a href={`/campanas/${campaign.id}/brief/editar`}>Editar</a>
-        <a className="active" href={`/campanas/${campaign.id}/chat`} aria-current="page">
-          Asistente
-        </a>
-        {roleCan(user.role, 'deliverable:read') && (
-          <a href={`/campanas/${campaign.id}/contenido`} data-testid="contenido-nav-link">
-            Contenido
-          </a>
-        )}
-        {roleCan(user.role, 'operations:read') && (
-          <a href={`/campanas/${campaign.id}/operacion`} data-testid="operacion-nav-link">
-            Operación
-          </a>
-        )}
-      </nav>
+      <NavCampana campaignId={campaign.id} role={user.role} activa="asistente" />
 
       <div className={styles['pagina']}>
         <header className={styles['cabecera']}>
