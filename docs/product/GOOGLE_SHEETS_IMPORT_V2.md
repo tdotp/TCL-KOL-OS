@@ -116,8 +116,9 @@ Drive con otro alcance): `external_revision` queda `NULL` y el hash decide la ig
 
 Todo lector del «contenido de la fuente» usa el snapshot **vigente** (`fragment-scope.ts`): búsqueda vectorial y
 textual, extracción, `getFragments`, `obtenerRepresentacionNormalizada` (que ahora devuelve también `snapshot`), el
-recuento de la lista de fuentes y el índice de embeddings del worker. Los snapshots históricos se leen explícitamente
-(`getSnapshotFragments`, `getSourceSnapshot`).
+recuento de la lista de fuentes y el índice de embeddings del worker. Los snapshots históricos ya NO tienen lector de
+producción (F10 retiró `getSnapshotFragments`, `getSourceSnapshot` y `listSourceSnapshots`): su texto sigue en la base
+(inmutable) pero ningún camino de la aplicación lo devuelve.
 
 ## 5. Plan de importación
 
@@ -226,8 +227,8 @@ credenciales, tokens ni URLs originales (solo `externalId` y rangos).
 
 ## 12. API reutilizable (sin HTTP ni UI)
 
-`syncGoogleSheetSource` · `getSyncRun` · `listSyncRuns` · `listSourceSnapshots` · `getSourceSnapshot` ·
-`getSnapshotFragments` · `validateInfluencerSheetSnapshot` · `prepareInfluencerImport` · `getImportPlan` ·
+`syncGoogleSheetSource` · `getSyncRun` · `listSyncRuns` ·
+`validateInfluencerSheetSnapshot` · `prepareInfluencerImport` · `getImportPlan` ·
 `listImportPlans` · `applyInfluencerImport` · `resolveImportRecord` · `compareSheetSnapshots` ·
 `getParticipationOrigin`. Ninguna depende de `FormData`: el chat de la Fase 6 las llamará tal cual.
 
