@@ -1,18 +1,17 @@
-'use client';
+import { authProvider } from '@/lib/session';
+import FormularioLogin from './FormularioLogin';
 
-import { useActionState } from 'react';
-import { iniciarSesion } from '@/lib/actions';
+// El proveedor se lee del entorno en cada petición (nunca se fija al compilar).
+export const dynamic = 'force-dynamic';
 
 /**
  * UI-01 · Acceso.
  *
- * En desarrollo se elige un usuario ya sembrado. Con `AUTH_PROVIDER=oidc` este
- * formulario se sustituye por el flujo de Google Workspace, sin que cambie nada
- * del resto del sistema.
+ * En desarrollo (`AUTH_PROVIDER=dev`) se elige un usuario ya sembrado. Con cualquier otro proveedor, o sin
+ * configurar en producción, NO se muestra el formulario (fail-closed): solo un aviso. Con OIDC este bloque se
+ * sustituirá por el flujo de Google Workspace, sin que cambie nada del resto del sistema.
  */
 export default function LoginPage() {
-  const [estado, accion, enviando] = useActionState(iniciarSesion, {});
-
   return (
     <main className="login-page">
       <div className="login-wrap card">
@@ -30,36 +29,18 @@ export default function LoginPage() {
 
           <div className="eyebrow">Acceso</div>
           <h1 style={{ fontSize: 34 }}>Bienvenido de nuevo</h1>
-          <p className="sub">Continúa a TCL KOL OS para gestionar campañas, fuentes y briefs en un solo lugar.</p>
-
-          <form action={accion} style={{ marginTop: 28 }}>
-            {estado.error !== undefined && (
-              <div className="aviso error">
-                <strong>No se pudo iniciar sesión</strong>
-                {estado.error}
-              </div>
-            )}
-
-            <div className="fld">
-              <label htmlFor="email">Correo corporativo</label>
-              <select id="email" name="email" defaultValue="gerardo@smartpr.co">
-                <option value="gerardo@smartpr.co">gerardo@smartpr.co — admin (SmartPR)</option>
-                <option value="director@smartpr.co">director@smartpr.co — director (SmartPR)</option>
-                <option value="consultor@smartpr.co">consultor@smartpr.co — consultor (SmartPR)</option>
-                <option value="marena@tcl.com">marena@tcl.com — cliente (TCL Colombia)</option>
-                <option value="ajeno@otraagencia.co">ajeno@otraagencia.co — admin (otra agencia)</option>
-              </select>
-            </div>
-
-            <button className="btn pri" type="submit" disabled={enviando} style={{ width: '100%' }}>
-              {enviando ? 'Entrando…' : 'Entrar →'}
-            </button>
-          </form>
-
-          <p className="sub" style={{ fontSize: 12.5, marginTop: 20 }}>
-            Proveedor de identidad en modo desarrollo. El usuario debe existir previamente en la base:
-            autenticarse verifica quién eres, no concede acceso por sí solo.
+          <p className="sub">
+            Continúa a TCL KOL OS para gestionar campañas, fuentes y briefs en un solo lugar.
           </p>
+
+          {authProvider() === 'dev' ? (
+            <FormularioLogin />
+          ) : (
+            <div className="aviso error" style={{ marginTop: 28 }}>
+              <strong>Acceso no disponible</strong>
+              Proveedor de identidad no configurado.
+            </div>
+          )}
         </div>
         <div className="login-right">
           <div className="login-ribbon" />
@@ -71,9 +52,7 @@ export default function LoginPage() {
               <br />
               <span>más claridad operativa</span>
             </h2>
-            <p className="sub">
-              Fuentes, preguntas, evidencia y revisión conectadas en un mismo flujo.
-            </p>
+            <p className="sub">Fuentes, preguntas, evidencia y revisión conectadas en un mismo flujo.</p>
           </div>
         </div>
       </div>

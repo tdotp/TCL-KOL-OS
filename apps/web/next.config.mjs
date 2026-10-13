@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CABECERAS_DE_SEGURIDAD } from './security-headers.mjs';
 
 /**
  * Carga el `.env` de la raíz del monorepo.
@@ -39,6 +40,10 @@ const nextConfig = {
   transpilePackages: ['@tcl-kol-os/domain', '@tcl-kol-os/db', '@tcl-kol-os/agent'],
   // No se exponen rutas internas ni trazas al cliente (§11.6).
   poweredByHeader: false,
+  // Cabeceras de seguridad en todas las respuestas.
+  async headers() {
+    return [{ source: '/(.*)', headers: CABECERAS_DE_SEGURIDAD }];
+  },
 };
 
 export default nextConfig;

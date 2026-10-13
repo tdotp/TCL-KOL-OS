@@ -97,4 +97,16 @@ describe('GET /api/tcl/campanas/[id]/export', () => {
     expect(r.headers.get('cache-control')).toBe('private, no-store');
     espiar.mockRestore();
   });
+
+  it('HEAD da 405 con Allow: GET sin leer sesión ni ejecutar la proyección', async () => {
+    const { HEAD } = await import('../app/api/tcl/campanas/[id]/export/route.ts');
+    const r = HEAD();
+    expect(r.status).toBe(405);
+    expect(r.headers.get('allow')).toBe('GET');
+    expect(r.headers.get('cache-control')).toBe('private, no-store');
+    expect(r.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(await r.text()).toBe('');
+    expect(mocks.currentUser).not.toHaveBeenCalled();
+    expect(mocks.exportarCampanaParaTcl).not.toHaveBeenCalled();
+  });
 });

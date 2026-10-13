@@ -476,24 +476,6 @@ export function leerReporteDePagoDe(fd: FormData): ReporteDePagoLeido {
 export const leerReporteDePago = (entrada: unknown): Lectura<ReporteDePagoLeido> =>
   leer(entrada, leerReporteDePagoDe);
 
-export interface CancelacionDeObligacionLeida {
-  readonly paymentObligationId: string;
-  readonly expectedSeq: number;
-  readonly idempotencyKey: string;
-  readonly note?: string;
-}
-
-export const leerCancelacionDeObligacion = (entrada: unknown): Lectura<CancelacionDeObligacionLeida> =>
-  leer(entrada, (fd) => {
-    const note = leerNota(fd);
-    return {
-      paymentObligationId: leerUuid(fd, 'paymentObligationId', 'la obligación de pago'),
-      expectedSeq: leerSecuencia(fd, 'expectedSeq'),
-      idempotencyKey: leerClave(fd),
-      ...(note !== undefined ? { note } : {}),
-    };
-  });
-
 export interface NotaDeCorreccionLeida {
   readonly paymentObligationId: string;
   readonly expectedSeq: number;
@@ -585,9 +567,6 @@ export const leerObjetivoDeKpi = (entrada: unknown): Lectura<ObjetivoDeKpiLeido>
       ...(usarSugerenciaDelSheet && sheetTextHash !== undefined ? { sheetTextHash } : {}),
     };
   });
-
-export const leerRetiroDeObjetivo = (entrada: unknown): Lectura<{ readonly targetId: string }> =>
-  leer(entrada, (fd) => ({ targetId: leerUuid(fd, 'targetId', 'el objetivo') }));
 
 export interface MedicionDeKpiLeida {
   readonly campaignInfluencerId: string;
@@ -846,24 +825,5 @@ export const leerEntradaDeEvidencia = (entrada: unknown): Lectura<EntradaDeEvide
 
 // ─────────────────────────── Origen de la petición (CSRF) ──────────────────────
 
-/**
- * CSRF para los route handlers de escritura de Operación: comprobación ESTRICTA. `Sec-Fetch-Site` solo
- * puede ser `same-origin`/`none`; si hay `Origin`, su host debe ser EXACTAMENTE el de la cabecera `Host`.
- * A diferencia del route handler de guiones (UI-09), NO se confía en `x-forwarded-host`: es una cabecera que
- * pone cualquiera que llegue sin proxy. Sin `Origin` ni `Sec-Fetch-Site` no es un navegador (curl, pruebas)
- * y el CSRF exige el navegador de la víctima.
- */
-export function origenPermitidoEstricto(request: Request): boolean {
-  const sitio = request.headers.get('sec-fetch-site');
-  if (sitio !== null && sitio !== 'same-origin' && sitio !== 'none') return false;
-  const origen = request.headers.get('origin');
-  if (origen === null) return true;
-  let host: string;
-  try {
-    host = new URL(origen).host;
-  } catch {
-    return false;
-  }
-  const propio = request.headers.get('host');
-  return propio !== null && propio !== '' && propio === host;
-}
+// La comprobación vive en un módulo compartido (también la usan los route handlers de chat y guiones).
+export { origenPermitidoEstricto } from './origen.ts';

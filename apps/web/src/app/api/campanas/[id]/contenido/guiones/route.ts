@@ -20,7 +20,8 @@
  *  · sesión (`currentUser`, releída de la base) y rol con `script:manage` (admin, director, consultor);
  *    cliente, operativo, analista, legal y otra organización reciben el MISMO 404 que una campaña
  *    inexistente;
- *  · comprobación de origen (CSRF): `Sec-Fetch-Site` y `Origin` deben ser del propio sitio;
+ *  · comprobación de origen (CSRF) estricta (`lib/origen.ts`): `Sec-Fetch-Site` y `Origin` deben ser del
+ *    propio sitio y NO se confía en `x-forwarded-host`;
  *  · el cliente no elige organización, visibilidad (siempre `interna`), tipo ni origen (`ui`);
  *  · el DTO no incluye rutas de almacenamiento, hashes ni URL;
  *  · los errores son mensajes de dominio en español, sin trazas.
@@ -35,9 +36,10 @@ import {
   registrarVersionDeGuion,
 } from '@tcl-kol-os/db';
 import { quitarInvisiblesOBidi, roleCan } from '@tcl-kol-os/domain';
-import { limiteDeAdjuntoBytes } from '@/lib/chat-server';
-import { MENSAJE_GENERICO, mensajeDeContenido } from '@/lib/contenido-mensajes';
-import { currentUser } from '@/lib/session';
+import { limiteDeAdjuntoBytes } from '../../../../../../lib/chat-server.ts';
+import { MENSAJE_GENERICO, mensajeDeContenido } from '../../../../../../lib/contenido-mensajes.ts';
+import { origenPermitidoEstricto } from '../../../../../../lib/origen.ts';
+import { currentUser } from '../../../../../../lib/session.ts';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,29 +56,6 @@ const fallo = (codigo: string, mensaje: string, status: number, extra: Record<st
   json({ ok: false, codigo, mensaje, ...extra }, status);
 
 const NO_ENCONTRADO = (): Response => fallo('RESOURCE_NOT_FOUND', 'No encontramos ese elemento.', 404);
-
-/**
- * CSRF: una petición de otro sitio no debe poder escribir con las cookies de la persona. Los
- * navegadores modernos mandan `Sec-Fetch-Site` y, en un POST, `Origin`. Sin ninguno de los dos
- * no es un navegador (curl, pruebas): no hay riesgo de CSRF, que exige un navegador de la víctima.
- */
-function origenPermitido(request: Request): boolean {
-  const sitio = request.headers.get('sec-fetch-site');
-  if (sitio !== null && sitio !== 'same-origin' && sitio !== 'none') return false;
-  const origen = request.headers.get('origin');
-  if (origen === null) return true;
-  let host: string;
-  try {
-    host = new URL(origen).host;
-  } catch {
-    return false;
-  }
-  const propios = [
-    request.headers.get('host'),
-    request.headers.get('x-forwarded-host')?.split(',')[0]?.trim(),
-  ];
-  return propios.some((p) => p !== null && p !== undefined && p !== '' && p === host);
-}
 
 /** Nombre de archivo sin ruta, controles, invisibles ni bidi (RLO, ZWSP…: criterio único del dominio). */
 function nombreSeguro(nombre: string): string {
@@ -127,7 +106,7 @@ export async function POST(
   contexto: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   try {
-    if (!origenPermitido(request)) return fallo('FORBIDDEN', 'Petición no permitida.', 403);
+    if (!origenPermitidoEstricto(request)) return fallo('FORBIDDEN', 'Petición no permitida.', 403);
     const { id } = await contexto.params;
 
     const user = await currentUser();

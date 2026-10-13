@@ -13,7 +13,6 @@ import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import {
   archiveCampaign,
-  aprobarBrief,
   confirmarCampo,
   corregirCampo,
   crearComentario,
@@ -540,23 +539,6 @@ export async function solicitarCambiosInternosDeCampana(
 
   if (campaignId !== '') revalidatePath(`/campanas/${campaignId}/brief`);
   return { ok: true };
-}
-
-/** Aprobación del brief por Dirección de SmartPR (admin/director). */
-export async function aprobarBriefDeCampana(formData: FormData): Promise<void> {
-  const user = await currentUser();
-  if (user === undefined) redirect('/login');
-
-  const versionId = String(formData.get('versionId') ?? '');
-  const campaignId = String(formData.get('campaignId') ?? '');
-
-  const resultado = await aprobarBrief(user, versionId);
-  if (!resultado.ok) {
-    redirect(`/campanas/${campaignId}/brief?error=${encodeURIComponent(resultado.error.message)}`);
-  }
-
-  revalidatePath(`/campanas/${campaignId}/brief`);
-  redirect(`/campanas/${campaignId}/brief`);
 }
 
 // ─────────────────────────── Fase E · Versionado posterior a aprobación ───────

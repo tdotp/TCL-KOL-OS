@@ -30,7 +30,6 @@ import {
   type SugerenciaDeSheet,
   anularDocumento,
   cancelarAcuerdo,
-  cancelarObligacionDePago,
   corregirMedicionKpi,
   crearAcuerdo,
   crearEnvio,
@@ -43,7 +42,6 @@ import {
   registrarNotaDeCorreccionDePago,
   registrarVersionDeAcuerdo,
   reportarPago,
-  retirarKpiObjetivo,
   revelarPii,
   transicionarEnvio,
   validarDocumento,
@@ -72,7 +70,6 @@ import {
   type Lectura,
   esUuidDeFormulario,
   leerCancelacionDeAcuerdo,
-  leerCancelacionDeObligacion,
   leerCorreccionDeMedicion,
   leerCrearAcuerdo,
   leerCrearEnvio,
@@ -82,7 +79,6 @@ import {
   leerObjetivoDeKpi,
   leerPiiAGuardar,
   leerReporteDePago,
-  leerRetiroDeObjetivo,
   leerTransicionDeDocumento,
   leerTransicionDeEnvio,
 } from './operacion-formulario.ts';
@@ -362,24 +358,6 @@ export async function reportarPagoAction(
   });
 }
 
-/** Cancela la obligación de pago (`pending|not_applicable → cancelled`; sin documentos vivos). Campos: `paymentObligationId`, `expectedSeq`, `idempotencyKey`, `note`. */
-export async function cancelarObligacionDePagoAction(
-  _previo: EstadoDeAccion,
-  formData: FormData,
-): Promise<EstadoDeAccion> {
-  return correr(formData, {
-    nombre: 'cancelarObligacionDePagoAction',
-    capacidad: 'billing:manage',
-    leer: leerCancelacionDeObligacion,
-    ejecutar: (user, entrada) => cancelarObligacionDePago(user, entrada, CONTEXTO_UI),
-    exito: (v) => ({
-      message: v.repetido ? 'Esa obligación ya estaba cancelada.' : 'Obligación de pago cancelada.',
-      campaignId: v.obligacion.campaignId,
-      repeated: v.repetido,
-    }),
-  });
-}
-
 /**
  * Anota una corrección sobre un pago YA reportado (el sello original es inmutable). Solo `payment:report`.
  * Campos: `paymentObligationId`, `expectedSeq`, `idempotencyKey`, `note` (obligatoria: qué se corrige y por
@@ -463,24 +441,6 @@ export async function registrarKpiObjetivoAction(
         : v.objetivo.supersedesId !== null
           ? 'Objetivo de KPI reemplazado.'
           : 'Objetivo de KPI registrado.',
-      campaignId: v.objetivo.campaignId,
-      repeated: v.repetido,
-    }),
-  });
-}
-
-/** Retira un objetivo vigente (marca, no borra). Campo: `targetId`. */
-export async function retirarKpiObjetivoAction(
-  _previo: EstadoDeAccion,
-  formData: FormData,
-): Promise<EstadoDeAccion> {
-  return correr(formData, {
-    nombre: 'retirarKpiObjetivoAction',
-    capacidad: 'kpi:target_manage',
-    leer: leerRetiroDeObjetivo,
-    ejecutar: (user, e) => retirarKpiObjetivo(user, e.targetId, CONTEXTO_UI),
-    exito: (v) => ({
-      message: v.repetido ? 'Ese objetivo ya estaba retirado.' : 'Objetivo de KPI retirado.',
       campaignId: v.objetivo.campaignId,
       repeated: v.repetido,
     }),

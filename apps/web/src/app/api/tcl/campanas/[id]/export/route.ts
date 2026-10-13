@@ -8,7 +8,8 @@
  *  · sesión (`currentUser`, releída de la base); sin sesión, rol distinto de `cliente`, campaña ajena, no visible,
  *    inexistente, id mal formado o formato desconocido ⇒ el MISMO 404 (no se revela qué existe);
  *  · cabeceras: tipo y nombre de archivo de la proyección (saneado), `attachment`, `nosniff`, `private, no-store`;
- *  · cualquier error inesperado ⇒ 500 genérico, sin trazas ni detalles.
+ *  · cualquier error inesperado ⇒ 500 genérico, sin trazas ni detalles;
+ *  · HEAD ⇒ 405 `Allow: GET` sin leer sesión ni ejecutar la proyección (Next lo sintetizaría desde GET).
  */
 
 import { exportarCampanaParaTcl } from '@tcl-kol-os/db';
@@ -28,6 +29,11 @@ function noEncontrado(): Response {
     { ok: false, codigo: 'RESOURCE_NOT_FOUND', mensaje: 'No encontramos ese elemento.' },
     { status: 404, headers: CABECERAS_BASE },
   );
+}
+
+/** Next sintetiza HEAD ejecutando GET (la proyección entera): se rechaza antes de hacer nada. */
+export function HEAD(): Response {
+  return new Response(null, { status: 405, headers: { ...CABECERAS_BASE, Allow: 'GET' } });
 }
 
 export async function GET(

@@ -14,18 +14,27 @@ export { ESTADO_EN_ESPANOL, TEXTO_DEL_BOTON } from '@tcl-kol-os/domain';
  * una máquina de estados paralela. La única fuente de verdad de qué
  * transición es válida sigue siendo `allowedTransitions` del dominio.
  */
-export type EtapaCampana = 'fuentes' | 'brief' | 'revision_cliente' | 'aprobado';
+export type EtapaCampana = 'fuentes' | 'brief' | 'revision_interna' | 'aprobado';
 
 export const ETAPAS: readonly { id: EtapaCampana; nombre: string }[] = [
   { id: 'fuentes', nombre: 'Fuentes' },
   { id: 'brief', nombre: 'Brief' },
-  { id: 'revision_cliente', nombre: 'Revisión cliente' },
+  { id: 'revision_interna', nombre: 'Revisión interna' },
   { id: 'aprobado', nombre: 'Aprobado' },
 ];
 
 export function etapaDeStatus(status: BriefStatus | undefined): EtapaCampana {
   if (status === undefined) return 'fuentes';
   if (status === 'approved' || status === 'superseded') return 'aprobado';
-  if (status === 'client_review' || status === 'client_changes_requested') return 'revision_cliente';
+  // El cliente no revisa el brief en V2 (DEC-042): la revisión es interna. Los estados `client_*` solo
+  // existen como legado y se muestran en la misma etapa.
+  if (
+    status === 'internal_review' ||
+    status === 'internal_changes_requested' ||
+    status === 'client_review' ||
+    status === 'client_changes_requested'
+  ) {
+    return 'revision_interna';
+  }
   return 'brief';
 }

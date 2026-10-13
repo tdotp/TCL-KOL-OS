@@ -3,8 +3,10 @@
  *
  * Épica E2. El proveedor de identidad es conmutable:
  *
- *   AUTH_PROVIDER=dev   → selección de usuario sembrado, solo para desarrollo
- *   AUTH_PROVIDER=oidc  → Google Workspace (requiere credenciales reales)
+ *   AUTH_PROVIDER=dev   → selección de usuario sembrado, solo para desarrollo (opt-in explícito)
+ *   AUTH_PROVIDER=oidc  → Google Workspace (requiere credenciales reales; aún no implementado)
+ *   sin definir         → `dev` fuera de producción; en producción `oidc` (el acceso dev NUNCA se
+ *                         activa por omisión: fail-closed)
  *
  * En ambos casos la sesión resultante es la misma: una cookie firmada con el ID
  * del usuario. El resto del sistema no sabe —ni le importa— cómo se autenticó.
@@ -25,7 +27,11 @@ const MAX_AGE_SECONDS = 60 * 60 * 8;
 export type AuthProvider = 'dev' | 'oidc';
 
 export function authProvider(): AuthProvider {
-  return process.env['AUTH_PROVIDER'] === 'oidc' ? 'oidc' : 'dev';
+  const configurado = process.env['AUTH_PROVIDER'];
+  if (configurado === 'dev' || configurado === 'oidc') return configurado;
+  // Sin configurar (o con un valor desconocido): el acceso por selección de usuario solo existe fuera de
+  // producción. En producción se cae a `oidc`, que no está implementado ⇒ nadie inicia sesión.
+  return process.env['NODE_ENV'] === 'production' ? 'oidc' : 'dev';
 }
 
 function secret(): string {

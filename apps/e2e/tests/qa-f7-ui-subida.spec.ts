@@ -108,15 +108,15 @@ test('U3b — RESISTE: del mismo sitio (Origin propio, Sec-Fetch-Site same-origi
   }
 });
 
-test.fail(
-  'QA-F7-UI-09 abierto (P3, informativo): el origen NO se valida con `x-forwarded-host` enviado por el cliente (un Origin ajeno + X-Forwarded-Host ajeno pasa)',
-  async () => {
-    const r = await subir(partes({}), {
-      cabeceras: { origin: 'https://evil.example', 'x-forwarded-host': 'evil.example' },
-    });
-    expect(r.http).toBe(403);
-  },
-);
+test('QA-F7-UI-09 cerrado: el origen NO se valida con `x-forwarded-host` enviado por el cliente (un Origin ajeno + X-Forwarded-Host ajeno se rechaza)', async () => {
+  const antes = await contarVersiones();
+  const r = await subir(partes({}), {
+    cabeceras: { origin: 'https://evil.example', 'x-forwarded-host': 'evil.example' },
+  });
+  expect(r.http).toBe(403);
+  expect(r.json?.['codigo']).toBe('FORBIDDEN');
+  expect(await contarVersiones()).toBe(antes);
+});
 
 // ─────────────────────────── U3 · tamaño y Content-Length ──────────────────────
 
