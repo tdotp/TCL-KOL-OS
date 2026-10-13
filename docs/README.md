@@ -7,8 +7,9 @@
 1. [Workflow funcional V2](product/TCL_KOL_OS_V2_WORKFLOW_FUNCIONAL.md) — qué hace cada usuario (Cuenta, Operativo, TCL), qué ve y qué no. Fuente funcional aprobada; no se reinterpreta.
 2. [Estado técnico actual](project/V2_CURRENT_STATE.md) — rama, tag, migraciones, decisiones, roadmap, baseline de pruebas, entorno, deudas y reglas.
 3. [Estado final de V2](project/V2_FINAL_STATE.md) — **cierre del roadmap (F0–F10)**: arquitectura final, actores, baseline de pruebas, prerrequisitos operativos, deuda y fuera de alcance. Tag `v2-f10-complete`.
-4. [Registro de decisiones](decisions/decision-log.md) — DEC-042 a DEC-051 gobiernan V2 (cliente de solo lectura, bilingüe, Influencer/CampaignInfluencer, fuentes y Sheets, chat y agente, contenido, operación y KPIs, dashboard TCL, limpieza final). Los handoffs de las fases ([10](handoffs/HANDOFF-Fase-10.md), [9](handoffs/HANDOFF-Fase-9.md), [8](handoffs/HANDOFF-Fase-8.md)) son históricos.
-5. [Política de ejecución con agentes](project/AGENT_EXECUTION_POLICY.md) — subagentes, modelo/esfuerzo, QA adversarial, Git y la regla anti-duplicación.
+4. [Handoff post-V2: Release Readiness](handoffs/HANDOFF-Post-V2-Release-Readiness.md) — **punto de partida del trabajo posterior a V2**: qué leer, deuda abierta (blockers de release, deuda técnica, backlog de producto) y orden recomendado.
+5. [Registro de decisiones](decisions/decision-log.md) — DEC-042 a DEC-051 gobiernan V2 (cliente de solo lectura, bilingüe, Influencer/CampaignInfluencer, fuentes y Sheets, chat y agente, contenido, operación y KPIs, dashboard TCL, limpieza final). Los handoffs de las fases ([10](handoffs/HANDOFF-Fase-10.md), [9](handoffs/HANDOFF-Fase-9.md), [8](handoffs/HANDOFF-Fase-8.md)) son históricos.
+6. [Política de ejecución con agentes](project/AGENT_EXECUTION_POLICY.md) — subagentes, modelo/esfuerzo, QA adversarial, Git y la regla anti-duplicación.
 
 ## Notas técnicas por área (V2)
 

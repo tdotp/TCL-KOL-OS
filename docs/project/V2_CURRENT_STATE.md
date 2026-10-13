@@ -13,7 +13,7 @@
 | **`origin/main`** | `2452283` («Rediseño v3»): lo que estaba publicado antes de V2. **No se toca** |
 | **Última migración** | `033_endurecimiento_operacion.sql` (siguiente: **034**; **F9 y F10 no introdujeron migración**) |
 | **Última decisión** | **DEC-051** (siguiente: **DEC-052**) |
-| **Siguiente fase** | **Ninguna del roadmap V2.** Resumen de cierre: [`V2_FINAL_STATE`](V2_FINAL_STATE.md). Merge a `main` y despliegue son una decisión posterior |
+| **Siguiente fase** | **Ninguna del roadmap V2** (F0–F10 cerradas; no hay F11). Siguiente trabajo: **Release Readiness / deuda post-V2**, en una rama nueva desde `v2-f10-complete`: ver [`HANDOFF-Post-V2-Release-Readiness`](../handoffs/HANDOFF-Post-V2-Release-Readiness.md). Resumen de cierre: [`V2_FINAL_STATE`](V2_FINAL_STATE.md). **Sin merge a `main` ni deploy** hasta GO/NO-GO |
 
 ## 1. Roadmap
 

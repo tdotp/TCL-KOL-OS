@@ -10,6 +10,8 @@
 | **Última migración** | `033_endurecimiento_operacion.sql` (F10: **no introdujo migración**) |
 | **Última decisión** | **DEC-051** — V2 Finalization / Cleanup Policy |
 
+> **Qué sigue:** [`HANDOFF-Post-V2-Release-Readiness`](../handoffs/HANDOFF-Post-V2-Release-Readiness.md) (Release Readiness; sin merge ni deploy todavía).
+
 ## 1. Arquitectura final
 
 Monorepo: `apps/web` (Next.js 15 + React 19), `apps/e2e` (Playwright), `packages/domain` (reglas puras), `packages/db` (Postgres: repositorios y casos de uso), `packages/agent` (registro de 42 tools y runtime del agente de Cuenta), `services/ai-worker` (Python/FastAPI: parsing, Google Sheets, extracción y llamadas de modelo sin estado ni BD).
