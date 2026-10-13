@@ -7,8 +7,10 @@
  */
 
 import type pg from 'pg';
+import { getPool } from './client.ts';
 import {
   AUDIT_ORIGINS,
+  roleCan,
   type AuditCorrelation,
   type AuditOrigin,
   type User,
@@ -281,6 +283,18 @@ export async function listAudit(
     [organizationId, limit, excluir, [...PREFIJOS_OPERATIVOS]],
   );
   return rows;
+}
+
+/**
+ * Actividad reciente de la organización del actor para el Inicio y la lista de campañas. Caso de uso CON actor:
+ * sin `audit:read` devuelve vacío (el cliente TCL nunca la ve) y las acciones operativas/PII solo se incluyen con
+ * `finance:read`. Sustituye a las compuertas que antes vivían copiadas en las páginas.
+ */
+export async function actividadReciente(actor: User, limite = 6): Promise<AuditEventRow[]> {
+  if (!roleCan(actor.role, 'audit:read')) return [];
+  return listAudit(getPool(), actor.organizationId, limite, {
+    incluirOperativas: roleCan(actor.role, 'finance:read'),
+  });
 }
 
 /**

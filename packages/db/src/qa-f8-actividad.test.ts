@@ -15,9 +15,10 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { roleCan } from '@tcl-kol-os/domain';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { reportarPago } from './billing-payment.ts';
-import { PREFIJOS_OPERATIVOS, listAudit } from './audit.ts';
+import { PREFIJOS_OPERATIVOS, actividadReciente, listAudit } from './audit.ts';
 import { closePool, getPool, query } from './client.ts';
 import { guardarPii, revelarPii } from './pii.ts';
 import {
@@ -113,14 +114,36 @@ describe('listAudit excluye por defecto las acciones operativas y de PII (sin `f
   });
 });
 
-describe('CORREGIDO P2 · el Inicio y el listado de campañas muestran la actividad solo con audit:read', () => {
-  it('Inicio: listAudit solo se llama para roles con audit:read (no consultor/operativo, y sin eventos F8 para analista/legal)', () => {
-    const fuente = pagina('page.tsx');
-    expect(fuente).toMatch(/roleCan\([^)]*['"]audit:read['"]/);
+describe('actividadReciente(actor): la compuerta vive en el caso de uso, no en las páginas', () => {
+  it('sin `audit:read` (cliente, consultor, operativo) devuelve vacío; con él, solo la organización del actor', async () => {
+    const e = op.e;
+    for (const u of [e.cliente, e.consultor, e.operativo]) {
+      expect(roleCan(u.role, 'audit:read')).toBe(false);
+      expect(await actividadReciente(u)).toEqual([]);
+    }
+    const propios = await actividadReciente(e.admin, 50);
+    expect(propios.length).toBeGreaterThan(0);
+    const ajenos = await query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM audit_events WHERE organization_id <> $1 AND id = ANY($2::uuid[])`,
+      [e.admin.organizationId, propios.map((x) => x.id)],
+    );
+    expect(ajenos[0]?.n).toBe('0');
   });
 
-  it('Campañas: listAudit solo se llama para roles con audit:read', () => {
-    const fuente = pagina('campanas/page.tsx');
-    expect(fuente).toMatch(/roleCan\([^)]*['"]audit:read['"]/);
+  it('las acciones operativas/PII solo salen para quien tiene `finance:read`', async () => {
+    const e = op.e;
+    for (const u of [e.admin, e.director]) {
+      const eventos = await actividadReciente(u, 500);
+      const operativas = eventos.filter((x) => PREFIJOS_OPERATIVOS.some((p) => x.action.startsWith(p)));
+      if (!roleCan(u.role, 'finance:read')) expect(operativas).toEqual([]);
+    }
+  });
+
+  it('las páginas ya no copian la compuerta: llaman al caso de uso', () => {
+    for (const ruta of ['page.tsx', 'campanas/page.tsx']) {
+      const fuente = pagina(ruta);
+      expect(fuente).toMatch(/actividadReciente\(/);
+      expect(fuente).not.toMatch(/listAudit\(/);
+    }
   });
 });

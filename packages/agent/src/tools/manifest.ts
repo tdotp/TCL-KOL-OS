@@ -64,6 +64,7 @@ export const MANIFIESTO_DE_DB: Readonly<Record<string, ClasificacionDeExport>> =
   sanitizeMetadata: UI,
   recordAudit: X,
   listAudit: X,
+  actividadReciente: X,
   listBriefActivity: X,
 
   // ── campaigns.ts ──
