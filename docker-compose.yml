@@ -79,7 +79,13 @@ services:
       # Solo lectura: el worker consulta el esquema, nunca lo edita.
       - ./docs/product/brief-schema:/esquema:ro
     healthcheck:
-      test: ['CMD', 'python', '-c', "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test:
+        [
+          'CMD',
+          'python',
+          '-c',
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5

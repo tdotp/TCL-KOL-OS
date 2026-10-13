@@ -23,7 +23,9 @@ export function NavegacionSecciones({
           </span>
           <span>
             <b>{s.titulo}</b>
-            <span className="detalle">{s.pendientes > 0 ? `${s.pendientes} pendiente${s.pendientes > 1 ? 's' : ''}` : 'completa'}</span>
+            <span className="detalle">
+              {s.pendientes > 0 ? `${s.pendientes} pendiente${s.pendientes > 1 ? 's' : ''}` : 'completa'}
+            </span>
           </span>
         </button>
       ))}

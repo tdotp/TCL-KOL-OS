@@ -20,7 +20,13 @@ function fechaCorta(valor: string | Date | null): string {
 }
 
 /** Filtros exclusivamente client-side sobre las campañas que el servidor ya autorizó. */
-export function TablaCampanas({ campanas, initialSearch = '' }: { campanas: Campana[]; initialSearch?: string }) {
+export function TablaCampanas({
+  campanas,
+  initialSearch = '',
+}: {
+  campanas: Campana[];
+  initialSearch?: string;
+}) {
   const [busqueda, setBusqueda] = useState(initialSearch);
   const [estado, setEstado] = useState('todos');
 
@@ -56,7 +62,9 @@ export function TablaCampanas({ campanas, initialSearch = '' }: { campanas: Camp
           <option value="archivada">Archivadas</option>
           <option value="cancelada">Canceladas</option>
         </select>
-        <span className="table-count">{visibles.length} de {campanas.length}</span>
+        <span className="table-count">
+          {visibles.length} de {campanas.length}
+        </span>
       </div>
 
       {visibles.length === 0 ? (

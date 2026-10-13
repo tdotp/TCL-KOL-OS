@@ -74,7 +74,9 @@ export function EditorBrief({
             const tieneExcepcion = seccion.campos.some(
               (x) => x.key === c.key && x.campaignProductId === productoSeleccionado,
             );
-            return tieneExcepcion ? c.campaignProductId === productoSeleccionado : c.campaignProductId === null;
+            return tieneExcepcion
+              ? c.campaignProductId === productoSeleccionado
+              : c.campaignProductId === null;
           }
           return true;
         });
@@ -96,7 +98,8 @@ export function EditorBrief({
   }, [camposVisibles, enPreguntas]);
 
   const camposCompletos = camposVisibles.filter((c) => c.status === 'found').length;
-  const progresoSeccion = camposVisibles.length === 0 ? 0 : Math.round((camposCompletos / camposVisibles.length) * 100);
+  const progresoSeccion =
+    camposVisibles.length === 0 ? 0 : Math.round((camposCompletos / camposVisibles.length) * 100);
 
   return (
     <div className="workspace brief-workspace">
@@ -119,7 +122,9 @@ export function EditorBrief({
           <span className="section-number">?</span>
           <span>
             <b>Preguntas</b>
-            <small>{preguntasPendientesTotal > 0 ? `${preguntasPendientesTotal} pendientes` : 'sin pendientes'}</small>
+            <small>
+              {preguntasPendientesTotal > 0 ? `${preguntasPendientesTotal} pendientes` : 'sin pendientes'}
+            </small>
           </span>
         </button>
       </aside>
@@ -138,7 +143,9 @@ export function EditorBrief({
               <form action={generarPreguntasDeBrief}>
                 <input type="hidden" name="campaignId" value={campaignId} />
                 <input type="hidden" name="versionId" value={versionId} />
-                <button className="btn" type="submit">Regenerar pendientes</button>
+                <button className="btn" type="submit">
+                  Regenerar pendientes
+                </button>
               </form>
             </div>
             <TablaPreguntas
@@ -156,19 +163,27 @@ export function EditorBrief({
               <div>
                 <div className="eyebrow">Sección del brief</div>
                 <h2>{seccion?.titulo}</h2>
-                <p>{camposCompletos} de {camposVisibles.length} campos con dato.</p>
+                <p>
+                  {camposCompletos} de {camposVisibles.length} campos con dato.
+                </p>
               </div>
               <div className="section-progress">
                 <strong>{progresoSeccion}%</strong>
                 <span>completo</span>
-                <div className="progreso"><span style={{ width: `${progresoSeccion}%` }} /></div>
+                <div className="progreso">
+                  <span style={{ width: `${progresoSeccion}%` }} />
+                </div>
               </div>
             </div>
 
             {tieneCamposDeProducto && (
               <div className="product-context-bar">
                 <span>Producto</span>
-                <SelectorProducto productos={productos} seleccionado={productoSeleccionado} onSeleccionar={setProductoSeleccionado} />
+                <SelectorProducto
+                  productos={productos}
+                  seleccionado={productoSeleccionado}
+                  onSeleccionar={setProductoSeleccionado}
+                />
               </div>
             )}
 
@@ -181,7 +196,9 @@ export function EditorBrief({
                     key={c.id}
                     campo={c}
                     versionId={versionId}
-                    productoSeleccionado={c.nivel === 'compartido_con_excepcion' ? productoSeleccionado : undefined}
+                    productoSeleccionado={
+                      c.nivel === 'compartido_con_excepcion' ? productoSeleccionado : undefined
+                    }
                     conteoComentariosAbiertos={conteosComentarios[c.key] ?? 0}
                   />
                 ))
@@ -193,7 +210,10 @@ export function EditorBrief({
         <div className="workspace-dock">
           <div className="workspace-dock-copy">
             <span className="status-mark status-mark-ok" />
-            <div><strong>Autoguardado activo</strong><small>Los campos se guardan al salir de cada input.</small></div>
+            <div>
+              <strong>Autoguardado activo</strong>
+              <small>Los campos se guardan al salir de cada input.</small>
+            </div>
           </div>
           <form action={transicionarBriefDeCampana}>
             <input type="hidden" name="campaignId" value={campaignId} />
@@ -208,21 +228,50 @@ export function EditorBrief({
 
       <aside className="card workspace-side">
         <div className="context-tabs" role="tablist" aria-label="Contexto del brief">
-          <button type="button" className={contextoActivo === 'comentarios' ? 'active' : ''} onClick={() => setContextoActivo('comentarios')}>Comentarios</button>
-          <button type="button" className={contextoActivo === 'evidencia' ? 'active' : ''} onClick={() => setContextoActivo('evidencia')}>Evidencia</button>
+          <button
+            type="button"
+            className={contextoActivo === 'comentarios' ? 'active' : ''}
+            onClick={() => setContextoActivo('comentarios')}
+          >
+            Comentarios
+          </button>
+          <button
+            type="button"
+            className={contextoActivo === 'evidencia' ? 'active' : ''}
+            onClick={() => setContextoActivo('evidencia')}
+          >
+            Evidencia
+          </button>
         </div>
 
         {contextoActivo === 'comentarios' ? (
           <div className="context-panel">
-            <div className="context-panel-head"><div><div className="eyebrow">Conversaciones</div><h3>Comentarios abiertos</h3></div><span>{comentariosAbiertos.length}</span></div>
+            <div className="context-panel-head">
+              <div>
+                <div className="eyebrow">Conversaciones</div>
+                <h3>Comentarios abiertos</h3>
+              </div>
+              <span>{comentariosAbiertos.length}</span>
+            </div>
             {comentariosAbiertos.length === 0 ? (
-              <div className="quiet-state compact"><span className="status-mark status-mark-ok" /><div><strong>Sin conversaciones abiertas</strong><p>Los comentarios de cada campo se abren en contexto.</p></div></div>
+              <div className="quiet-state compact">
+                <span className="status-mark status-mark-ok" />
+                <div>
+                  <strong>Sin conversaciones abiertas</strong>
+                  <p>Los comentarios de cada campo se abren en contexto.</p>
+                </div>
+              </div>
             ) : (
               <div className="context-list">
                 {comentariosAbiertos.map((c) => (
                   <a href={`#campo-${c.key}`} key={c.key}>
                     <span className="context-list-icon">◌</span>
-                    <span><strong>{c.label}</strong><small>{c.cantidad} comentario{c.cantidad > 1 ? 's' : ''}</small></span>
+                    <span>
+                      <strong>{c.label}</strong>
+                      <small>
+                        {c.cantidad} comentario{c.cantidad > 1 ? 's' : ''}
+                      </small>
+                    </span>
                     <b>→</b>
                   </a>
                 ))}
@@ -231,15 +280,34 @@ export function EditorBrief({
           </div>
         ) : (
           <div className="context-panel">
-            <div className="context-panel-head"><div><div className="eyebrow">Sección activa</div><h3>Evidencia</h3></div><span>{evidencias.length}</span></div>
+            <div className="context-panel-head">
+              <div>
+                <div className="eyebrow">Sección activa</div>
+                <h3>Evidencia</h3>
+              </div>
+              <span>{evidencias.length}</span>
+            </div>
             {evidencias.length === 0 ? (
-              <div className="quiet-state compact"><span className="status-mark status-mark-neutral" /><div><strong>Sin evidencia en esta vista</strong><p>Cuando un campo tenga soporte documental aparecerá aquí.</p></div></div>
+              <div className="quiet-state compact">
+                <span className="status-mark status-mark-neutral" />
+                <div>
+                  <strong>Sin evidencia en esta vista</strong>
+                  <p>Cuando un campo tenga soporte documental aparecerá aquí.</p>
+                </div>
+              </div>
             ) : (
               <div className="evidence-list">
                 {evidencias.slice(0, 8).map((e, i) => (
-                  <a href={`/campanas/${campaignId}/fuentes/${e.sourceId}`} key={`${e.sourceId}-${e.fieldKey}-${i}`}>
+                  <a
+                    href={`/campanas/${campaignId}/fuentes/${e.sourceId}`}
+                    key={`${e.sourceId}-${e.fieldKey}-${i}`}
+                  >
                     <span className="evidence-file-icon">▤</span>
-                    <span><strong>{e.filename}</strong><small>{e.fieldLabel}</small><em>“{e.quote}”</em></span>
+                    <span>
+                      <strong>{e.filename}</strong>
+                      <small>{e.fieldLabel}</small>
+                      <em>“{e.quote}”</em>
+                    </span>
                   </a>
                 ))}
               </div>

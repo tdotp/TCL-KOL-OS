@@ -44,7 +44,11 @@ export function TablaFuentes({ campaignId, fuentes }: { campaignId: string; fuen
   const visibles = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     if (q === '') return fuentes;
-    return fuentes.filter((f) => f.filename.toLowerCase().includes(q) || (ETIQUETA_TIPO[f.mime_type ?? ''] ?? f.mime_type ?? 'enlace').toLowerCase().includes(q));
+    return fuentes.filter(
+      (f) =>
+        f.filename.toLowerCase().includes(q) ||
+        (ETIQUETA_TIPO[f.mime_type ?? ''] ?? f.mime_type ?? 'enlace').toLowerCase().includes(q),
+    );
   }, [fuentes, busqueda]);
 
   useEffect(() => {
@@ -58,22 +62,49 @@ export function TablaFuentes({ campaignId, fuentes }: { campaignId: string; fuen
       <div className="sources-table-head">
         <div>
           <div className="eyebrow">Biblioteca</div>
-          <h2 className="plain-heading">Archivos <span className="heading-count">{fuentes.length}</span></h2>
+          <h2 className="plain-heading">
+            Archivos <span className="heading-count">{fuentes.length}</span>
+          </h2>
         </div>
         <div className="sources-table-tools">
-          <label className="table-search compact-search"><span>⌕</span><input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar archivo…" /></label>
-          {hayTrabajo && <span className="processing-note"><i />actualizando</span>}
+          <label className="table-search compact-search">
+            <span>⌕</span>
+            <input
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar archivo…"
+            />
+          </label>
+          {hayTrabajo && (
+            <span className="processing-note">
+              <i />
+              actualizando
+            </span>
+          )}
         </div>
       </div>
 
       {fuentes.length === 0 ? (
-        <div className="empty-state compact-empty"><div className="empty-file-icon">▤</div><h3>No hay fuentes todavía</h3><p>Los archivos que cargues aparecerán aquí con su estado de procesamiento.</p></div>
+        <div className="empty-state compact-empty">
+          <div className="empty-file-icon">▤</div>
+          <h3>No hay fuentes todavía</h3>
+          <p>Los archivos que cargues aparecerán aquí con su estado de procesamiento.</p>
+        </div>
       ) : visibles.length === 0 ? (
         <p className="vacio">No hay archivos que coincidan con “{busqueda}”.</p>
       ) : (
         <div className="table-shell source-table-shell">
           <table className="sources-table">
-            <thead><tr><th>Archivo</th><th>Tipo</th><th>Tamaño</th><th>Estado</th><th>Fragmentos</th><th /></tr></thead>
+            <thead>
+              <tr>
+                <th>Archivo</th>
+                <th>Tipo</th>
+                <th>Tamaño</th>
+                <th>Estado</th>
+                <th>Fragmentos</th>
+                <th />
+              </tr>
+            </thead>
             <tbody>
               {visibles.map((f) => {
                 const estado = ESTADO[f.status] ?? { texto: f.status, clase: '' };
@@ -84,25 +115,41 @@ export function TablaFuentes({ campaignId, fuentes }: { campaignId: string; fuen
                       <div className="file-name-cell">
                         <span className="file-neutral-icon">▤</span>
                         <div>
-                          {f.status === 'procesado' && f.fragmentos > 0 ? <a href={`/campanas/${campaignId}/fuentes/${f.id}`}>{f.filename}</a> : <strong>{f.filename}</strong>}
+                          {f.status === 'procesado' && f.fragmentos > 0 ? (
+                            <a href={`/campanas/${campaignId}/fuentes/${f.id}`}>{f.filename}</a>
+                          ) : (
+                            <strong>{f.filename}</strong>
+                          )}
                           {f.job_error !== null && (
                             <span className={`file-error ${f.status === 'fallido' ? 'fatal' : ''}`}>
-                              {f.status === 'pendiente' ? `Reintentando · intento ${f.job_intentos ?? 0}: ` : ''}{f.job_error}
+                              {f.status === 'pendiente'
+                                ? `Reintentando · intento ${f.job_intentos ?? 0}: `
+                                : ''}
+                              {f.job_error}
                             </span>
                           )}
                         </div>
                       </div>
                     </td>
-                    <td className="table-secondary">{ETIQUETA_TIPO[f.mime_type ?? ''] ?? f.mime_type ?? 'enlace'}</td>
+                    <td className="table-secondary">
+                      {ETIQUETA_TIPO[f.mime_type ?? ''] ?? f.mime_type ?? 'enlace'}
+                    </td>
                     <td className="table-secondary">{f.size_bytes === null ? '—' : `${mb} MB`}</td>
-                    <td><span className={`source-status ${estado.clase}`}><i />{estado.texto}</span></td>
+                    <td>
+                      <span className={`source-status ${estado.clase}`}>
+                        <i />
+                        {estado.texto}
+                      </span>
+                    </td>
                     <td className="table-secondary">{f.fragmentos > 0 ? f.fragmentos : '—'}</td>
                     <td>
                       {f.status === 'fallido' && (
                         <form action={reintentarFuente}>
                           <input type="hidden" name="sourceId" value={f.id} />
                           <input type="hidden" name="campaignId" value={campaignId} />
-                          <button className="btn mini" type="submit">Reintentar</button>
+                          <button className="btn mini" type="submit">
+                            Reintentar
+                          </button>
                         </form>
                       )}
                     </td>

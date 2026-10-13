@@ -22,17 +22,32 @@ export function FormularioFuente({ campaignId }: { campaignId: string }) {
       className="card source-upload-card"
     >
       {estado.error !== undefined && (
-        <div className="aviso error"><strong>No se pudo cargar el archivo</strong>{estado.error}</div>
+        <div className="aviso error">
+          <strong>No se pudo cargar el archivo</strong>
+          {estado.error}
+        </div>
       )}
       {estado.ok === true && (
-        <div className="aviso success"><strong>Archivo cargado</strong>{estado.aviso ?? 'El procesamiento continúa en segundo plano.'}</div>
+        <div className="aviso success">
+          <strong>Archivo cargado</strong>
+          {estado.aviso ?? 'El procesamiento continúa en segundo plano.'}
+        </div>
       )}
 
       <div className="upload-zone" onClick={() => inputRef.current?.click()} role="button" tabIndex={0}>
-        <div className="upload-float" aria-hidden="true"><span>↥</span></div>
+        <div className="upload-float" aria-hidden="true">
+          <span>↥</span>
+        </div>
         <h2>Subir fuentes</h2>
         <p>PPT, fichas técnicas, briefs, documentos e imágenes de referencia.</p>
-        <button className="btn pri" type="button" onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}>
+        <button
+          className="btn pri"
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            inputRef.current?.click();
+          }}
+        >
           Elegir archivo
         </button>
         <small>PDF, PPTX, DOCX, MD, PNG o JPG · hasta 50 MB</small>
@@ -68,7 +83,10 @@ export function FormularioFuente({ campaignId }: { campaignId: string }) {
           {nombre === '' ? (
             <span>Ningún archivo seleccionado</span>
           ) : (
-            <><strong>{nombre}</strong><span>{pesoMb !== undefined ? `${pesoMb} MB` : ''}</span></>
+            <>
+              <strong>{nombre}</strong>
+              <span>{pesoMb !== undefined ? `${pesoMb} MB` : ''}</span>
+            </>
           )}
         </div>
         <button className="btn pri" type="submit" disabled={enviando || nombre === ''}>

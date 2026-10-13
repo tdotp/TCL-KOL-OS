@@ -119,11 +119,15 @@ export function AppShell({ user, children }: { user: User; children: React.React
       <aside className="shell-sidebar">
         <nav className="shell-nav" aria-label="Navegación principal">
           <a href="/" className={enInicio ? 'active' : undefined}>
-            <span className="shell-nav-ico"><IconoInicio /></span>
+            <span className="shell-nav-ico">
+              <IconoInicio />
+            </span>
             <span>Inicio</span>
           </a>
           <a href={rutaDeCampanas} className={enCampanas ? 'active' : undefined}>
-            <span className="shell-nav-ico"><IconoCampanas /></span>
+            <span className="shell-nav-ico">
+              <IconoCampanas />
+            </span>
             <span>Campañas</span>
           </a>
         </nav>

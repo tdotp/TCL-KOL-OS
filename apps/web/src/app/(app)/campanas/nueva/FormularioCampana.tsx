@@ -24,7 +24,8 @@ export function FormularioCampana({ productos }: { productos: readonly Producto[
   };
 
   const productosElegidos = useMemo(
-    () => elegidos.map((id) => productos.find((p) => p.id === id)).filter((p): p is Producto => p !== undefined),
+    () =>
+      elegidos.map((id) => productos.find((p) => p.id === id)).filter((p): p is Producto => p !== undefined),
     [elegidos, productos],
   );
 
@@ -75,11 +76,23 @@ export function FormularioCampana({ productos }: { productos: readonly Producto[
             </div>
             <div className="fld">
               <label htmlFor="startDate">Fecha de inicio</label>
-              <input id="startDate" name="startDate" type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} />
+              <input
+                id="startDate"
+                name="startDate"
+                type="date"
+                value={inicio}
+                onChange={(e) => setInicio(e.target.value)}
+              />
             </div>
             <div className="fld">
               <label htmlFor="endDate">Fecha de fin</label>
-              <input id="endDate" name="endDate" type="date" value={fin} onChange={(e) => setFin(e.target.value)} />
+              <input
+                id="endDate"
+                name="endDate"
+                type="date"
+                value={fin}
+                onChange={(e) => setFin(e.target.value)}
+              />
             </div>
           </div>
         </section>
@@ -89,7 +102,10 @@ export function FormularioCampana({ productos }: { productos: readonly Producto[
             <div>
               <div className="eyebrow">02</div>
               <h2>Productos</h2>
-              <p>El primero que selecciones queda como flagship. No usamos fotos: el producto se identifica por modelo y categoría.</p>
+              <p>
+                El primero que selecciones queda como flagship. No usamos fotos: el producto se identifica por
+                modelo y categoría.
+              </p>
             </div>
             <span className="selection-counter">{elegidos.length} seleccionados</span>
           </div>
@@ -108,10 +124,14 @@ export function FormularioCampana({ productos }: { productos: readonly Producto[
                     onChange={() => alternar(p.id)}
                     aria-label={`Incluir ${p.brand} ${p.model}`}
                   />
-                  <span className="product-glyph" aria-hidden="true">▭</span>
+                  <span className="product-glyph" aria-hidden="true">
+                    ▭
+                  </span>
                   <span className="product-option-copy">
                     <strong>{p.model}</strong>
-                    <span>{p.brand} · {p.category}</span>
+                    <span>
+                      {p.brand} · {p.category}
+                    </span>
                   </span>
                   {activo && (
                     <span className="product-role">
@@ -125,7 +145,9 @@ export function FormularioCampana({ productos }: { productos: readonly Producto[
         </section>
 
         <div className="form-actions-dock">
-          <a className="btn" href="/campanas">Cancelar</a>
+          <a className="btn" href="/campanas">
+            Cancelar
+          </a>
           <button className="btn pri" type="submit" disabled={enviando || elegidos.length === 0}>
             {enviando ? 'Creando…' : 'Crear campaña →'}
           </button>
@@ -137,16 +159,36 @@ export function FormularioCampana({ productos }: { productos: readonly Producto[
           <div className="eyebrow">Resumen</div>
           <h3>Campaña</h3>
           <dl className="summary-list">
-            <div><dt>Nombre</dt><dd>{nombre.trim() || '—'}</dd></div>
-            <div><dt>Categoría</dt><dd>{categoria.trim() || '—'}</dd></div>
-            <div><dt>Mercado</dt><dd>{mercado.trim() || '—'}</dd></div>
-            <div><dt>Fechas</dt><dd>{inicio || fin ? `${inicio || '…'} → ${fin || '…'}` : '—'}</dd></div>
-            <div><dt>Productos</dt><dd>{productosElegidos.length === 0 ? 'Ninguno' : `${productosElegidos.length} seleccionados`}</dd></div>
+            <div>
+              <dt>Nombre</dt>
+              <dd>{nombre.trim() || '—'}</dd>
+            </div>
+            <div>
+              <dt>Categoría</dt>
+              <dd>{categoria.trim() || '—'}</dd>
+            </div>
+            <div>
+              <dt>Mercado</dt>
+              <dd>{mercado.trim() || '—'}</dd>
+            </div>
+            <div>
+              <dt>Fechas</dt>
+              <dd>{inicio || fin ? `${inicio || '…'} → ${fin || '…'}` : '—'}</dd>
+            </div>
+            <div>
+              <dt>Productos</dt>
+              <dd>
+                {productosElegidos.length === 0 ? 'Ninguno' : `${productosElegidos.length} seleccionados`}
+              </dd>
+            </div>
           </dl>
           {productosElegidos.length > 0 && (
             <div className="summary-products">
               {productosElegidos.map((p, i) => (
-                <div key={p.id}><span>{p.model}</span><small>{i === 0 && productosElegidos.length > 1 ? 'flagship' : p.category}</small></div>
+                <div key={p.id}>
+                  <span>{p.model}</span>
+                  <small>{i === 0 && productosElegidos.length > 1 ? 'flagship' : p.category}</small>
+                </div>
               ))}
             </div>
           )}
@@ -156,7 +198,10 @@ export function FormularioCampana({ productos }: { productos: readonly Producto[
           <div className="tip-mark">i</div>
           <div>
             <strong>Menos datos, mejor.</strong>
-            <p>Presupuesto, objetivos y mensajes llegan desde el brief cuando existan. No los inventamos al crear la campaña.</p>
+            <p>
+              Presupuesto, objetivos y mensajes llegan desde el brief cuando existan. No los inventamos al
+              crear la campaña.
+            </p>
           </div>
         </section>
       </aside>

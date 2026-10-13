@@ -78,7 +78,12 @@ export function PanelComentarios({
         <div className="chat-hilo" style={{ maxHeight: 320 }}>
           {raices.map((c) => (
             <div key={c.id}>
-              <FilaComentario comentario={c} versionId={versionId} onResolver={resolver} onReabrir={reabrir} />
+              <FilaComentario
+                comentario={c}
+                versionId={versionId}
+                onResolver={resolver}
+                onReabrir={reabrir}
+              />
               {respuestasDe(c.id).map((r) => (
                 <div key={r.id} style={{ marginLeft: 30 }}>
                   <FilaComentario
@@ -100,7 +105,11 @@ export function PanelComentarios({
                   <input type="hidden" name="campaignProductId" value={campaignProductId} />
                 )}
                 <input type="hidden" name="parentCommentId" value={c.id} />
-                <input name="content" placeholder="Responder…" style={{ fontSize: 12.5, padding: '6px 10px' }} />
+                <input
+                  name="content"
+                  placeholder="Responder…"
+                  style={{ fontSize: 12.5, padding: '6px 10px' }}
+                />
                 <button className="btn" type="submit" style={{ fontSize: 11.5, padding: '5px 12px' }}>
                   Responder
                 </button>
