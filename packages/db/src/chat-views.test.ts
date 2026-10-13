@@ -14,7 +14,8 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Result, User } from '@tcl-kol-os/domain';
-import { closePool, query, transaction } from './client.ts';
+import { closePool, query } from './client.ts';
+import { adminTransaction } from './test-admin.ts';
 import { crearConversacion } from './chat-conversations.ts';
 import { publicarMensaje } from './chat-messages.ts';
 import { cancelarRun, completarRun, fallarRun, iniciarRun, listarRunsDeConversacion } from './agent-runs.ts';
@@ -235,7 +236,7 @@ describe('runs', () => {
     });
 
     // Envejece el run (la identidad del run es inmutable: se desactiva el trigger solo en esta transacción).
-    await transaction(async (client) => {
+    await adminTransaction(async (client) => {
       await client.query(`ALTER TABLE agent_runs DISABLE TRIGGER agent_runs_integridad`);
       await client.query(`UPDATE agent_runs SET queued_at = now() - interval '30 minutes' WHERE id = $1`, [
         p.run.id,

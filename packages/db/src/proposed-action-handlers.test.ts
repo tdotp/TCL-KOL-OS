@@ -27,6 +27,7 @@ import type { PoolClient } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PROPOSED_ACTION_SPECS, type ProposedActionType, type Result, type User } from '@tcl-kol-os/domain';
 import { closePool, getPool, query } from './client.ts';
+import { adminPool } from './test-admin.ts';
 import {
   asegurarUsuarioDePrueba,
   eliminarCampanaDePrueba,
@@ -247,7 +248,7 @@ const proponerDecision = (recordId: string, decision: ImportDecision, extra = {}
  * indicada (las demás pruebas comparten la base y no se ven afectadas).
  */
 async function conFalloAlMarcarExecuted(accionId: string, fn: () => Promise<void>): Promise<void> {
-  const pool = getPool();
+  const pool = adminPool();
   await pool.query(`
     CREATE OR REPLACE FUNCTION test_fallo_w1c_hitl() RETURNS trigger AS $$
     BEGIN

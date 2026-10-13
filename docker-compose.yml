@@ -14,14 +14,23 @@ services:
     image: pgvector/pgvector:pg16
     container_name: tclkolos-db
     environment:
+      # Administrador de ARRANQUE (superusuario del contenedor): solo crea roles, bases y extensiones. Ninguna
+      # aplicación se conecta con él (ver infra/db/roles y `.env.example`).
       POSTGRES_USER: ${POSTGRES_USER:-tclkolos}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword}
       POSTGRES_DB: ${POSTGRES_DB:-tclkolos}
+      # Roles que crea `infra/db/init/02-roles.sh`: migrador (dueño del esquema, ejecuta `npm run migrate`) y
+      # aplicación (solo DML). Contraseñas de DESARROLLO; en cualquier otro entorno vienen del gestor de secretos.
+      DB_MIGRATOR_USER: ${DB_MIGRATOR_USER:-tclkolos_migrator}
+      DB_MIGRATOR_PASSWORD: ${DB_MIGRATOR_PASSWORD:-devmigrator}
+      DB_APP_USER: ${DB_APP_USER:-tclkolos_app}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD:-devapp}
     ports:
       - '${POSTGRES_PORT:-5432}:5432'
     volumes:
       - db-data:/var/lib/postgresql/data
       - ./infra/db/init:/docker-entrypoint-initdb.d:ro
+      - ./infra/db/roles:/db-roles:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-tclkolos} -d ${POSTGRES_DB:-tclkolos}']
       interval: 5s
@@ -47,7 +56,7 @@ services:
       dockerfile: Dockerfile
     container_name: tclkolos-worker
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-tclkolos}:${POSTGRES_PASSWORD:-devpassword}@db:5432/${POSTGRES_DB:-tclkolos}
+      DATABASE_URL: postgresql://${DB_APP_USER:-tclkolos_app}:${DB_APP_PASSWORD:-devapp}@db:5432/${POSTGRES_DB:-tclkolos}
       REDIS_URL: redis://redis:6379/0
       ENVIRONMENT: ${ENVIRONMENT:-development}
       AI_ENABLED: ${AI_ENABLED:-false}
@@ -107,7 +116,7 @@ services:
     container_name: tclkolos-consumidor
     command: ['python', 'worker.py', '--intervalo', '2']
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-tclkolos}:${POSTGRES_PASSWORD:-devpassword}@db:5432/${POSTGRES_DB:-tclkolos}
+      DATABASE_URL: postgresql://${DB_APP_USER:-tclkolos_app}:${DB_APP_PASSWORD:-devapp}@db:5432/${POSTGRES_DB:-tclkolos}
       REDIS_URL: redis://redis:6379/0
       ENVIRONMENT: ${ENVIRONMENT:-development}
       AI_ENABLED: ${AI_ENABLED:-false}
@@ -138,7 +147,7 @@ services:
       dockerfile: apps/web/Dockerfile
     container_name: tclkolos-web
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-tclkolos}:${POSTGRES_PASSWORD:-devpassword}@db:5432/${POSTGRES_DB:-tclkolos}
+      DATABASE_URL: postgresql://${DB_APP_USER:-tclkolos_app}:${DB_APP_PASSWORD:-devapp}@db:5432/${POSTGRES_DB:-tclkolos}
       REDIS_URL: redis://redis:6379/0
       WORKER_URL: http://worker:8000
       NODE_ENV: ${NODE_ENV:-development}

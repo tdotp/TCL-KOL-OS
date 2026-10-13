@@ -14,7 +14,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { ProposedAction } from '@tcl-kol-os/domain';
 import { archiveCampaign } from './campaigns.ts';
 import { retirarInfluencerDeCampana } from './campaign-influencers.ts';
-import { closePool, getPool, query, transaction } from './client.ts';
+import { closePool, query, transaction } from './client.ts';
+import { adminPool } from './test-admin.ts';
 import { listarAccionesPendientesDeCampana } from './chat-views.ts';
 import { archivarEntregable } from './deliverables.ts';
 import { cancelarAccion, confirmarAccion, ejecutarAccion, proponerAccion } from './proposed-actions.ts';
@@ -611,7 +612,7 @@ describe('cada causa de PROPOSAL_STALE, al confirmar y al ejecutar', () => {
             );
             // El trigger de 023 impide cambiar el original de una fuente de guion: para simular que el
             // original cambió se suspende SOLO ese trigger durante la escritura y se restaura.
-            const pool = getPool();
+            const pool = adminPool();
             await pool.query(`ALTER TABLE source_documents DISABLE TRIGGER source_documents_guion_guarda`);
             try {
               await pool.query(`UPDATE source_documents SET hash = $2 WHERE id = $1`, [

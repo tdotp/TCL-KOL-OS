@@ -14,6 +14,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { User } from '@tcl-kol-os/domain';
 import { closePool, getPool, query } from './client.ts';
+import { adminPool } from './test-admin.ts';
 import { asegurarUsuarioDePrueba, eliminarCampanaDePrueba } from './test-utils.ts';
 import { findUserByEmail } from './users.ts';
 import { crearBriefManual } from './manual.ts';
@@ -524,7 +525,7 @@ describe('atomicidad: o se aplica todo o no se aplica nada', () => {
     id: string,
     fn: () => Promise<void>,
   ): Promise<void> {
-    const pool = getPool();
+    const pool = adminPool();
     await pool.query(`
       CREATE OR REPLACE FUNCTION ${FUNCION}() RETURNS trigger AS $$
       BEGIN

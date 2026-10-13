@@ -13,7 +13,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { User } from '@tcl-kol-os/domain';
 import { archiveCampaign } from './campaigns.ts';
 import { retirarInfluencerDeCampana } from './campaign-influencers.ts';
-import { closePool, getPool, query } from './client.ts';
+import { closePool, query } from './client.ts';
+import { adminPool } from './test-admin.ts';
 import { ClienteDeAnalisisGuionado, falloGuionado } from './content-analysis-client.ts';
 import { ENV_CON_IA, claveNueva } from './content-analysis-test-support.ts';
 import { solicitarAnalisisDeGuion } from './content-analysis.ts';
@@ -475,7 +476,7 @@ async function dormirEn(
   segundos: number,
   fn: () => Promise<void>,
 ): Promise<void> {
-  const pool = getPool();
+  const pool = adminPool();
   const nombre = `aa_qaf7_${tabla}_${Math.random().toString(36).slice(2, 8)}`;
   await pool.query(`CREATE OR REPLACE FUNCTION ${nombre}() RETURNS trigger AS $$
     BEGIN PERFORM pg_sleep(${segundos}); RETURN NEW; END; $$ LANGUAGE plpgsql`);

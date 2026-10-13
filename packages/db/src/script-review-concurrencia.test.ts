@@ -11,6 +11,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Result, ScriptVersionStatus, User } from '@tcl-kol-os/domain';
 import { closePool, getPool, query } from './client.ts';
+import { adminPool } from './test-admin.ts';
 import { crearEntregable } from './deliverables.ts';
 import {
   crearComentarioDeRevision,
@@ -343,7 +344,7 @@ describe('atomicidad: un fallo inyectado no deja comentarios ni estado a medias'
 
   /** Un trigger de prueba, SOLO para el recurso indicado, que lanza una excepción real de base. */
   async function conFalloEn(punto: Punto, fn: () => Promise<void>): Promise<void> {
-    const pool = getPool();
+    const pool = adminPool();
     await pool.query(`
       CREATE OR REPLACE FUNCTION ${FUNCION}() RETURNS trigger AS $$
       BEGIN
@@ -451,7 +452,7 @@ describe('atomicidad: un fallo inyectado no deja comentarios ni estado a medias'
     // La auditoría del comentario se identifica por su acción y la versión en la metadata: el
     // trigger de prueba filtra por acción y entidad, así que se inyecta sobre TODA la acción
     // para esta versión recién creada usando el id de la versión como filtro de metadata.
-    const pool = getPool();
+    const pool = adminPool();
     const funcion = 'test_fallo_inyectado_w2b_meta';
     await pool.query(`
       CREATE OR REPLACE FUNCTION ${funcion}() RETURNS trigger AS $$

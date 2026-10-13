@@ -6,6 +6,8 @@
  * una migración a medias no existe.
  *
  *   npm run migrate --workspace @tcl-kol-os/db
+ *
+ * Rol: `MIGRATION_DATABASE_URL` (migrador) si está definida; si no, `DATABASE_URL`.
  */
 
 import { readFileSync, readdirSync } from 'node:fs';
@@ -69,6 +71,10 @@ export async function migrate(): Promise<{ applied: string[]; skipped: string[] 
 
 const isMain = process.argv[1] !== undefined && process.argv[1].endsWith('migrate.ts');
 if (isMain) {
+  // Release Readiness · Bloque 1: las migraciones las ejecuta el rol MIGRADOR (dueño del esquema, sin SUPERUSER), no el
+  // rol de la aplicación (solo DML). `MIGRATION_DATABASE_URL` lo señala; sin ella se usa `DATABASE_URL` (compatibilidad).
+  const urlDelMigrador = process.env['MIGRATION_DATABASE_URL']?.trim();
+  if (urlDelMigrador) process.env['DATABASE_URL'] = urlDelMigrador;
   try {
     const { applied, skipped } = await migrate();
     for (const v of skipped) console.log(`  = ${v} (ya aplicada)`);

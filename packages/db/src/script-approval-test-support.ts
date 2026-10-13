@@ -11,6 +11,7 @@
 
 import type { ProposedAction, Result, User } from '@tcl-kol-os/domain';
 import { getPool, query } from './client.ts';
+import { adminPool } from './test-admin.ts';
 import {
   ENV_CON_IA,
   type HallazgoDePrueba,
@@ -260,7 +261,7 @@ export type PuntoDeFallo =
  * aprobar_update), del entregable (auditoria_current_changed, supersede) o de la fuente (bajada_visibilidad).
  */
 export async function conFalloEn(punto: PuntoDeFallo, clave: string, fn: () => Promise<void>): Promise<void> {
-  const pool = getPool();
+  const pool = adminPool();
   await pool.query(`
     CREATE OR REPLACE FUNCTION ${FUNCION}() RETURNS trigger AS $$
     BEGIN
@@ -341,7 +342,7 @@ export async function conDemora(
   segundos: number,
   fn: () => Promise<void>,
 ): Promise<void> {
-  const pool = getPool();
+  const pool = adminPool();
   await pool.query(`
     CREATE OR REPLACE FUNCTION ${FUNCION_DEMORA}() RETURNS trigger AS $$
     BEGIN

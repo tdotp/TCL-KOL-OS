@@ -8,7 +8,8 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { AgentRun, ChatMessage, Result, User } from '@tcl-kol-os/domain';
-import { closePool, query, transaction } from './client.ts';
+import { closePool, query } from './client.ts';
+import { adminPool, adminTransaction } from './test-admin.ts';
 import { archivarConversacion, crearConversacion } from './chat-conversations.ts';
 import { listarMensajes, publicarMensaje } from './chat-messages.ts';
 import {
@@ -514,7 +515,7 @@ describe('barrido de runs abandonados (patrón SYNC_ABANDONED)', () => {
     const conv = await conversacion();
     const viejo = valor(await publicar(conv, e.consultor, 'Se quedó colgado'));
     // Envejece el run (la identidad del run es inmutable: se desactiva el trigger solo en esta transacción).
-    await transaction(async (client) => {
+    await adminTransaction(async (client) => {
       await client.query(`ALTER TABLE agent_runs DISABLE TRIGGER agent_runs_integridad`);
       await client.query(`UPDATE agent_runs SET queued_at = now() - interval '2 hours' WHERE id = $1`, [
         viejo.run.id,
@@ -895,7 +896,7 @@ describe('costo por run (ai_runs)', () => {
   it('un fallo de la inserción vuelve como error con motivo, nunca como excepción', async () => {
     const { run } = await turnoEnEjecucion();
     // Fallo real de base de datos, solo para este modelo (las demás pruebas comparten la base).
-    await query(`
+    await adminPool().query(`
       CREATE OR REPLACE FUNCTION test_fallo_ledger_qa06() RETURNS trigger AS $$
       BEGIN
         IF NEW.model = 'modelo-falla-ledger-qa06' THEN
@@ -904,7 +905,7 @@ describe('costo por run (ai_runs)', () => {
         RETURN NEW;
       END;
       $$ LANGUAGE plpgsql`);
-    await query(
+    await adminPool().query(
       `CREATE TRIGGER test_fallo_ledger_qa06 BEFORE INSERT ON ai_runs
          FOR EACH ROW EXECUTE FUNCTION test_fallo_ledger_qa06()`,
     );
@@ -921,7 +922,7 @@ describe('costo por run (ai_runs)', () => {
       expect(codigo(r)).toBe('VALIDATION_FAILED');
       expect(razon(r)).toBe('ledger_insert_failed');
     } finally {
-      await query(`DROP TRIGGER IF EXISTS test_fallo_ledger_qa06 ON ai_runs`);
+      await adminPool().query(`DROP TRIGGER IF EXISTS test_fallo_ledger_qa06 ON ai_runs`);
     }
   });
 

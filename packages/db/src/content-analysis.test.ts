@@ -16,6 +16,7 @@ import {
   verificarSobres,
 } from '@tcl-kol-os/domain';
 import { closePool, query, transaction } from './client.ts';
+import { adminPool } from './test-admin.ts';
 import {
   ClienteDeAnalisisGuionado,
   falloGuionado,
@@ -938,10 +939,10 @@ describe('fallos de transporte y reintento', () => {
 describe('atomicidad: la persistencia es todo-o-nada', () => {
   it('un fallo a mitad de la transacción de persistencia deja CERO hallazgos y el costo registrado', async () => {
     const versionId = await versionNueva();
-    await query(`
+    await adminPool().query(`
       CREATE OR REPLACE FUNCTION zz_falla_refs_de_guion() RETURNS trigger AS $$
       BEGIN RAISE EXCEPTION 'fallo inyectado en la prueba'; END; $$ LANGUAGE plpgsql`);
-    await query(`CREATE TRIGGER zz_falla BEFORE INSERT ON content_finding_script_refs
+    await adminPool().query(`CREATE TRIGGER zz_falla BEFORE INSERT ON content_finding_script_refs
                  FOR EACH ROW EXECUTE FUNCTION zz_falla_refs_de_guion()`);
     try {
       const cliente = clienteQueResponde([
@@ -958,8 +959,8 @@ describe('atomicidad: la persistencia es todo-o-nada', () => {
       expect(codigo(r)).toBe('AI_ANALYSIS_FAILED');
       expect(detalle(r, 'failureCode')).toBe('ANALYSIS_INTERNAL_ERROR');
     } finally {
-      await query(`DROP TRIGGER IF EXISTS zz_falla ON content_finding_script_refs`);
-      await query(`DROP FUNCTION IF EXISTS zz_falla_refs_de_guion()`);
+      await adminPool().query(`DROP TRIGGER IF EXISTS zz_falla ON content_finding_script_refs`);
+      await adminPool().query(`DROP FUNCTION IF EXISTS zz_falla_refs_de_guion()`);
     }
     expect(await hallazgosDe(versionId)).toBe(0);
     const [run] = await query<{ status: string; failure_code: string; finding_count: number }>(

@@ -17,6 +17,7 @@ import {
 } from '@tcl-kol-os/domain';
 import { asociarInfluencerACampana, retirarInfluencerDeCampana } from './campaign-influencers.ts';
 import { closePool, getPool, query, transaction } from './client.ts';
+import { adminPool } from './test-admin.ts';
 import { CON_REVISION_DE_LA_VERSION, prepararRevisionPorSql } from './aprobacion-sql-test-support.ts';
 import { archivarEntregable, crearEntregable } from './deliverables.ts';
 import { crearInfluencer } from './influencers.ts';
@@ -1045,7 +1046,7 @@ describe('aprobar: quién, con qué fuente y por qué acción propuesta (la base
 
   it('si el original de la fuente cambió (hash), no se aprueba', async () => {
     const v = await enRevision();
-    const c = await getPool().connect();
+    const c = await adminPool().connect();
     try {
       await c.query('BEGIN');
       // defensa en profundidad: aunque el trigger de la fuente estuviera apagado, la versión lo detecta

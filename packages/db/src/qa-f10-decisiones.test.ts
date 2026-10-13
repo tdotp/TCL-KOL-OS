@@ -14,6 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { LEGACY_CLIENT_STATES, TRANSITIONS, type User } from '@tcl-kol-os/domain';
 import * as db from './index.ts';
 import { closePool, getPool, query } from './client.ts';
+import { adminPool } from './test-admin.ts';
 import { archivoDePrueba, dia, unico } from './ops-test-support.ts';
 import {
   aprobarDirecto,
@@ -64,6 +65,21 @@ async function intentaYRevierte(sql: string, params: unknown[] = []): Promise<st
   try {
     await c.query('BEGIN');
     await c.query(sql, params);
+    return 'PERMITIDO';
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  } finally {
+    await c.query('ROLLBACK').catch(() => undefined);
+    c.release();
+  }
+}
+
+/** Igual que `intentaYRevierte` pero con el rol PRIVILEGIADO de pruebas: prueba la capa de triggers por debajo de los privilegios. */
+async function intentaComoAdmin(sql: string): Promise<string> {
+  const c = await adminPool().connect();
+  try {
+    await c.query('BEGIN');
+    await c.query(sql);
     return 'PERMITIDO';
   } catch (e) {
     return e instanceof Error ? e.message : String(e);
@@ -717,8 +733,10 @@ describe('QA F10 · (16) ScriptVersion y su archivo no se sobrescriben', () => {
     for (const [nombre, sql] of intentos) {
       expect(await intentaYRevierte(sql, [aprobada]), nombre).not.toBe('PERMITIDO');
     }
-    // TRUNCATE sin CASCADE lo frena una FK; con CASCADE se cubre en QA-F10-07 (abierto).
-    expect(await intentaYRevierte(`TRUNCATE script_versions`)).toMatch(/foreign key/u);
+    // TRUNCATE sin CASCADE lo frena una FK (rol privilegiado); el rol de ejecución ni siquiera tiene el privilegio:
+    // ver `qa-rr-privilegios.test.ts` (QA-F10-07, cerrado).
+    expect(await intentaComoAdmin(`TRUNCATE script_versions`)).toMatch(/foreign key/u);
+    expect(await intentaYRevierte(`TRUNCATE script_versions`)).toMatch(/permission denied/u);
     expect(await estadoDeVersion(aprobada)).toBe('approved');
   });
 
@@ -760,44 +778,42 @@ describe('QA F10 · (16) ScriptVersion y su archivo no se sobrescriben', () => {
   });
 });
 
-// QA-F10-07 (ABIERTO, P2): la «historia no destructiva» descansa en triggers de UPDATE/DELETE; `TRUNCATE` solo está
-// cerrado en kpi_*. Con el rol de la aplicación `TRUNCATE audit_events` (y `... CASCADE` sobre script_versions,
-// proposed_actions, payment_obligations…) tiene éxito. Se revierte siempre. Solo es explotable con SQL arbitrario.
+// QA-F10-07 y QA-F10-08 (CERRADOS en Release Readiness · Bloque 1, sin migración): el rol de ejecución de la aplicación ya no
+// es superusuario ni dueño de las tablas y no tiene `TRUNCATE`. La batería completa de privilegios vive en
+// `qa-rr-privilegios.test.ts`; aquí se conservan los dos casos originales de F10 como pruebas ordinarias.
 describe('QA F10 · (16b) TRUNCATE y rol de la aplicación', () => {
-  it.fails(
-    'QA-F10-07 abierto · TRUNCATE de las tablas de historia (auditoría, versiones, propuestas, pagos) está bloqueado',
-    async () => {
-      const tablas = [
-        'audit_events',
-        'script_versions',
-        'proposed_actions',
-        'payment_obligations',
-        'operational_events',
-        'brief_field_revisions',
-      ];
-      const resultados: Record<string, string> = {};
-      for (const t of tablas) resultados[t] = await intentaYRevierte(`TRUNCATE ${t} CASCADE`);
-      expect(Object.values(resultados)).not.toContain('PERMITIDO');
-    },
-  );
+  it('QA-F10-07 cerrado · TRUNCATE de las tablas de historia (auditoría, versiones, propuestas, pagos) está bloqueado', async () => {
+    const tablas = [
+      'audit_events',
+      'script_versions',
+      'proposed_actions',
+      'payment_obligations',
+      'operational_events',
+      'brief_field_revisions',
+    ];
+    const resultados: Record<string, string> = {};
+    for (const t of tablas) resultados[t] = await intentaYRevierte(`TRUNCATE ${t} CASCADE`);
+    expect(Object.values(resultados)).not.toContain('PERMITIDO');
+    for (const [tabla, mensaje] of Object.entries(resultados))
+      expect(mensaje, tabla).toMatch(/permission denied/u);
+  });
 
-  it('CONTROL: sí están cerrados kpi_measurements y kpi_targets (TRUNCATE con trigger)', async () => {
+  it('CONTROL: bajo los privilegios sigue la capa de triggers: kpi_measurements y kpi_targets rechazan TRUNCATE (rol privilegiado)', async () => {
     for (const t of ['kpi_measurements', 'kpi_targets']) {
-      expect(await intentaYRevierte(`TRUNCATE ${t} CASCADE`), t).toMatch(/no admite TRUNCATE/u);
+      expect(await intentaComoAdmin(`TRUNCATE ${t} CASCADE`), t).toMatch(/no admite TRUNCATE/u);
     }
   });
 
-  // QA-F10-08 (ABIERTO, P2 de despliegue): el rol de la aplicación (`DATABASE_URL`) es superusuario y dueño de las tablas;
-  // con él los triggers de inmutabilidad se desactivan (`ALTER TABLE … DISABLE TRIGGER`, `session_replication_role`).
-  it.fails(
-    'QA-F10-08 abierto · el rol de la aplicación no es superusuario ni puede desactivar triggers',
-    async () => {
-      const [r] = await query<{ rolsuper: boolean }>(
-        `SELECT rolsuper FROM pg_roles WHERE rolname = current_user`,
-      );
-      expect(r!.rolsuper).toBe(false);
-    },
-  );
+  it('QA-F10-08 cerrado · el rol de la aplicación no es superusuario ni puede desactivar triggers', async () => {
+    const [r] = await query<{ rolsuper: boolean }>(
+      `SELECT rolsuper FROM pg_roles WHERE rolname = current_user`,
+    );
+    expect(r!.rolsuper).toBe(false);
+    expect(await intentaYRevierte(`ALTER TABLE audit_events DISABLE TRIGGER ALL`)).toMatch(/must be owner/u);
+    expect(await intentaYRevierte(`SET LOCAL session_replication_role = replica`)).toMatch(
+      /permission denied/u,
+    );
+  });
 });
 
 // ─────────────────────────── (18b) estados heredados del cliente ───────────────

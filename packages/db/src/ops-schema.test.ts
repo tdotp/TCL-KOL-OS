@@ -25,6 +25,7 @@ import {
   type User,
 } from '@tcl-kol-os/domain';
 import { closePool, getPool, query, transaction } from './client.ts';
+import { adminPool } from './test-admin.ts';
 import {
   type EscenarioDeContenido,
   crearEscenarioDeContenido,
@@ -2828,7 +2829,8 @@ describe('historia: sin DELETE ni TRUNCATE en ninguna tabla F8', () => {
 
   it('TRUNCATE rechazado en todas (en una transacción que siempre se revierte)', async () => {
     for (const tabla of TABLAS_F8) {
-      const c = await pool().connect();
+      // Capa de triggers: se prueba con el rol privilegiado (el rol de ejecución no tiene TRUNCATE; ver qa-rr-privilegios).
+      const c = await adminPool().connect();
       try {
         await c.query('BEGIN');
         const msg = await rechazo(() => c.query(`TRUNCATE ${tabla} CASCADE`));

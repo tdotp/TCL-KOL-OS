@@ -5,6 +5,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { KPI_METRICS, roleCan, unidadDeMetrica } from '@tcl-kol-os/domain';
 import { closePool, query, transaction } from './client.ts';
+import { adminPool } from './test-admin.ts';
 import { retirarInfluencerDeCampana } from './campaign-influencers.ts';
 import { campanaConParticipacionDePrueba, exito, nuevaParticipacionDePrueba } from './kpi-test-support.ts';
 import {
@@ -266,7 +267,8 @@ describe('objetivos: vigente único, reemplazo, sin DELETE', () => {
       /histórico/,
     );
     await expect(query(`DELETE FROM kpi_targets WHERE id = $1`, [b])).rejects.toThrow(/no admite DELETE/);
-    await expect(query(`TRUNCATE kpi_targets`)).rejects.toThrow(/TRUNCATE/);
+    // La capa de triggers se prueba con el rol privilegiado: el rol de ejecución ni siquiera tiene el privilegio.
+    await expect(adminPool().query(`TRUNCATE kpi_targets`)).rejects.toThrow(/TRUNCATE/);
   });
 
   it('marcar «reemplazado» sin sucesor, o retirar sin rol, se rechaza (invariante diferida)', async () => {
@@ -313,7 +315,7 @@ describe('mediciones: inmutables y correcciones', () => {
     await expect(query(`DELETE FROM kpi_measurements WHERE id = $1`, [m])).rejects.toThrow(
       /no admite DELETE/,
     );
-    await expect(query(`TRUNCATE kpi_measurements`)).rejects.toThrow(/TRUNCATE/);
+    await expect(adminPool().query(`TRUNCATE kpi_measurements`)).rejects.toThrow(/TRUNCATE/);
     // El bypass de bases _test (solo limpieza de pruebas) sí borra.
     await transaction(async (c) => {
       await c.query(`SET LOCAL tclkolos.permitir_borrado_historico = 'on'`);

@@ -10,7 +10,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { PeticionDeAnalisis } from '@tcl-kol-os/domain';
 import { asociarProductoAInfluencer } from './campaign-influencers.ts';
-import { closePool, getPool, query } from './client.ts';
+import { closePool, query } from './client.ts';
+import { adminPool } from './test-admin.ts';
 import {
   ClienteDeAnalisisGuionado,
   type ResultadoDeLlamada,
@@ -498,7 +499,7 @@ describe('QA-F7-15 · análisis duplicado concurrente y atomicidad', () => {
 
   it('RESISTE: un fallo de la base a mitad de la persistencia revierte TODO (0 hallazgos) y el run queda failed/ANALYSIS_INTERNAL_ERROR', async () => {
     const versionId = await versionFresca();
-    const pool = getPool();
+    const pool = adminPool();
     const nombre = `qaf7_fallo_${Math.random().toString(36).slice(2, 8)}`;
     await pool.query(
       `CREATE OR REPLACE FUNCTION ${nombre}() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'fallo inyectado a mitad'; END; $$ LANGUAGE plpgsql`,

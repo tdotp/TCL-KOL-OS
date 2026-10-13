@@ -22,6 +22,7 @@ import {
   validarDocumento,
 } from './billing-payment.ts';
 import { closePool, getPool, query, transaction } from './client.ts';
+import { adminPool } from './test-admin.ts';
 import { corregirMedicionKpi, registrarMedicionKpi } from './kpi-measurements.ts';
 import { aplicarEventoOperativo } from './operational-events.ts';
 import { registrarKpiObjetivo, retirarKpiObjetivo } from './kpi-targets.ts';
@@ -754,7 +755,7 @@ describe('SEGURO · historia: TRUNCATE ... CASCADE desde las tablas PADRE tampoc
       'campaign_influencers',
       'source_documents',
     ]) {
-      const c = await getPool().connect();
+      const c = await adminPool().connect(); // capa de triggers: rol privilegiado (el de ejecución no tiene TRUNCATE)
       try {
         await c.query('BEGIN');
         let mensaje = '';

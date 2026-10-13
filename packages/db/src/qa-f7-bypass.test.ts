@@ -24,18 +24,21 @@ import { limpiarEscenarioDeContenido } from './test-utils.ts';
 const URL_DE_PRUEBAS = process.env['TEST_DATABASE_URL']!;
 const NOMBRE_ORIGEN = new URL(URL_DE_PRUEBAS).pathname.replace(/^\//, '');
 const NOMBRE_CLON = `${NOMBRE_ORIGEN.replace(/_test$/, '')}_clon_prod`;
-const urlDe = (base: string): string => {
-  const u = new URL(URL_DE_PRUEBAS);
+const urlDe = (base: string, origen: string = URL_DE_PRUEBAS): string => {
+  const u = new URL(origen);
   u.pathname = `/${base}`;
   return u.toString();
 };
+// Crear/borrar la base clon exige el administrador de pruebas (el rol de ejecución no tiene CREATEDB); las consultas
+// sobre el clon siguen yendo con el rol de ejecución, que es lo que se prueba.
+const URL_ADMIN = process.env['TEST_ADMIN_DATABASE_URL'] ?? URL_DE_PRUEBAS;
 
 let a: EscenarioDeAprobacion;
 let ids: { aprobada: string; entregable: string; comentario: string; revision: string; hallazgo: string };
 let clon: Client | undefined;
 
 async function conAdmin<T>(fn: (c: Client) => Promise<T>): Promise<T> {
-  const c = new Client({ connectionString: urlDe('postgres') });
+  const c = new Client({ connectionString: urlDe('postgres', URL_ADMIN) });
   await c.connect();
   try {
     return await fn(c);
