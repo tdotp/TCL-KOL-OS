@@ -21,10 +21,6 @@ export type Action =
   | 'source:upload'
   | 'source:read'
   | 'source:process'
-  // V2 · Fase 1A: lectura de las fuentes que SmartPR marcó como visibles para
-  // TCL. Es distinta de `source:read` (todo lo de la organización): el cliente
-  // nunca recibe `source:read`.
-  | 'source:read_shared'
   // Decidir qué fuentes ve TCL. Es una decisión de SmartPR, no del cliente.
   | 'source:set_visibility'
   | 'brief:read'
@@ -94,12 +90,11 @@ export type Action =
   | 'kpi:read_client'
   | 'export:client'
   // Documentos que SmartPR marcó a propósito como visibles para TCL (lista de la proyección TCL: título, tipo,
-  // idioma y fecha; nunca hash, URL ni fragmentos). Reemplaza a `source:read_shared` en el cliente (Fase 9).
+  // idioma y fecha; nunca hash, URL ni fragmentos).
   | 'document:read_client'
   | 'glossary:propose'
   | 'glossary:approve'
   | 'comment:internal'
-  | 'comment:client_visible'
   | 'audit:read'
   | 'airun:read'
   // V2 · Fase 6 (D4): el chat del agente es de Cuenta. `chat:read` lista y lee las
@@ -148,7 +143,6 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'glossary:propose',
     'glossary:approve',
     'comment:internal',
-    'comment:client_visible',
     'audit:read',
     'airun:read',
     'chat:read',
@@ -206,7 +200,6 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'glossary:propose',
     'glossary:approve',
     'comment:internal',
-    'comment:client_visible',
     'audit:read',
     'airun:read',
     'chat:read',
@@ -256,7 +249,6 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'script:manage',
     'glossary:propose',
     'comment:internal',
-    'comment:client_visible',
     'chat:read',
     'chat:write',
     'operations:read',
@@ -312,9 +304,8 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
   // workflow cliente, `docs/product/CLIENT_WORKFLOW_CORRECTION.md`).
   // Fase 9: se RETIRAN `campaign:read`, `brief:read` y `brief:export` (cerraban
   // lecturas legadas de borradores, de `modelo/costoUsd` y de entidades internas);
-  // también `source:read_shared` (sus lectores legados devolvían hash, URL externa y fragmentos de fuentes
-  // compartidas, incluso de una hoja marcada por error). Los documentos compartidos a propósito los lee la
-  // proyección TCL con `document:read_client`, sin esos campos.
+  // tampoco tiene `source:read` (los lectores legados devolvían hash, URL externa y fragmentos de fuentes
+  // compartidas). Los documentos compartidos a propósito los lee la proyección TCL con `document:read_client`.
   cliente: [
     'campaign:read_client',
     'content:read_approved_client',

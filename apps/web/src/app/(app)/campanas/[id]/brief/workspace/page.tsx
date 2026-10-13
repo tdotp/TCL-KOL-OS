@@ -53,13 +53,8 @@ export default async function BriefWorkspaceGuiadoPage({
   const { id } = await params;
 
   if (!briefWorkspaceV2Activo()) redirect(`/campanas/${id}/brief/editar`);
-  // El workspace interno resuelve preguntas locales, comentarios y el
-  // historial de campo — artefactos internos de construcción del brief. El
-  // cliente sigue teniendo su propia pantalla de solo lectura y decisión
-  // (`VistaCliente`, Fase D de Sprint 5), sin cambios: nunca accede aquí,
-  // ni siquiera para ver el estado (evita cualquier respuesta que pudiera
-  // llevar comentarios internos o metadata de IA).
-  if (user.role === 'cliente') redirect(`/campanas/${id}/brief`);
+  // El workspace interno resuelve preguntas locales, comentarios y el historial de campo (artefactos internos).
+  // El cliente nunca llega aquí: `desviarClienteDeRutaLegada` lo redirige antes de cualquier cargador.
 
   const { modo: modoCrudo, producto } = await searchParams;
   // Un modo inválido vuelve a "completar" — nunca un error ni una pantalla en blanco.

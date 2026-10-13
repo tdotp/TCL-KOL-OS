@@ -96,12 +96,3 @@ export function catalogoDelBrief(): readonly CampoDelCatalogo[] {
 export function campoDelCatalogo(key: string): CampoDelCatalogo | undefined {
   return catalogoDelBrief().find((c) => c.key === key);
 }
-
-export function clavesValidas(): ReadonlySet<string> {
-  return new Set(catalogoDelBrief().map((c) => c.key));
-}
-
-/** Campos de nivel `producto`: se repiten uno por cada producto de la campaña (DEC-016). */
-export function camposDeNivel(nivel: CampoNivel): readonly CampoDelCatalogo[] {
-  return catalogoDelBrief().filter((c) => c.nivel === nivel);
-}

@@ -1,3 +1,5 @@
+> **Documento histórico** (anterior a V2): no describe el modelo vigente; ver docs/project/V2_CURRENT_STATE.md y DEC-042 a DEC-050.
+
 # D0-18 — Cierre de Sprint 5: ciclo completo del brief, de `internal_review` a `approved`
 
 **Fecha:** 15–16 de septiembre de 2026, con corrección de cierre el 16 de septiembre de 2026. **Commit base:** `106f622cf6e168e99e24d82cb9bff04ce604cc55` (estado aprobado del cierre de Sprint 4, ver [D0-17](D0-17-cierre-sprint4.md)). **Commit de la entrega inicial de Sprint 5:** `03688f18b70e65968420c547d7ef4e79816516de`. **Commit correctivo** (esta versión del documento): ver §10 — corrige dos defectos de cierre encontrados en auditoría independiente del ZIP de la entrega inicial, sin ampliar alcance.

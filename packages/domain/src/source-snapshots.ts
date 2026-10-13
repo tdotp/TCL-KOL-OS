@@ -27,19 +27,6 @@ export function isSyncableProvider(value: unknown): value is SyncableProvider {
  */
 export type SyncRunStatus = 'queued' | 'running' | 'completed' | 'unchanged' | 'failed';
 
-export const SYNC_RUN_STATUSES: readonly SyncRunStatus[] = [
-  'queued',
-  'running',
-  'completed',
-  'unchanged',
-  'failed',
-] as const;
-
-/** Un estado terminal no vuelve a cambiar. */
-export function isSyncRunFinished(status: SyncRunStatus): boolean {
-  return status === 'completed' || status === 'unchanged' || status === 'failed';
-}
-
 /** Una celda de la rejilla de un snapshot (las columnas son 1-based). */
 export interface SnapshotCell {
   readonly col: number;

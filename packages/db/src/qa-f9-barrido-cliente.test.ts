@@ -7,8 +7,7 @@
  * participación, entregable, versión de guion, usuario…), en varias formas de argumentos. Todo resultado `ok: true`
  * (o dato crudo) que NO sea de la proyección TCL se reporta.
  *
- * Esperado SEGURO: el cliente solo obtiene `ok:true` de `source:read_shared` (lecturas de fuentes compartidas, ya
- * acotadas) y de la proyección TCL. Cualquier otra cosa = hallazgo.
+ * Esperado SEGURO: el cliente solo obtiene `ok:true` de la proyección TCL. Cualquier otra cosa = hallazgo.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as db from './index.ts';
@@ -44,15 +43,14 @@ const PERMITIDAS = new Set([
   'obtenerProyeccionTclDeCampana',
   'exportarCampanaParaTcl',
   'autorizarCampanaParaTcl',
-  // Lecturas legadas de fuentes COMPARTIDAS (`source:read_shared`, capacidad que el cliente conserva). Hallazgo QA-F9-P2
-  // (ver `qa-f9-fuentes-legadas.test.ts`): devuelven hash/external_url y no excluyen el Sheet de influencers.
+  // Lecturas legadas de fuentes (el cliente no tiene `source:read`: se deniegan por capacidad). Hallazgo QA-F9-P2
+  // (ver `qa-f9-fuentes-legadas.test.ts`).
   'listSources',
   'getSource',
   'getFragments',
   'obtenerRepresentacionNormalizada',
   'resolverAlcanceDeFuentes',
-  // Directorios SIN actor (no autorizan): `listOrganizations` enumera TODAS las organizaciones activas; `listProducts` el catálogo.
-  'listOrganizations',
+  // Directorios SIN actor (no autorizan): `listProducts` el catálogo.
   'listProducts',
   // Helpers puros / de infraestructura sin actor que solo «reflejan» el primer argumento (no devuelven datos de negocio).
   'abandonarRunsCaducados',
@@ -158,7 +156,7 @@ async function conTope<T>(p: Promise<T> | T, ms = 4000): Promise<T | 'TIMEOUT'> 
 }
 
 describe('QA F9 · barrido de exports de db con el actor cliente', () => {
-  it('ninguna función exportada entrega datos/efectos al cliente fuera de la proyección TCL y source:read_shared', async () => {
+  it('ninguna función exportada entrega datos/efectos al cliente fuera de la proyección TCL', async () => {
     const cliente = op.cliente;
     const sinMeta = { ...ids };
     const kitchen = (): Record<string, unknown> => ({

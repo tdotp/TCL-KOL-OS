@@ -20,8 +20,6 @@ import { type Result, err, ok } from './errors';
 
 export type DeliverableStatus = 'active' | 'archived';
 
-export const DELIVERABLE_STATUSES: readonly DeliverableStatus[] = ['active', 'archived'] as const;
-
 /**
  * Estado de revisión de una versión de guion.
  *
@@ -59,10 +57,6 @@ export const SCRIPT_VERSION_TRANSITIONS: Readonly<
   approved: ['superseded'],
   superseded: [],
 };
-
-export function isScriptVersionStatus(value: unknown): value is ScriptVersionStatus {
-  return typeof value === 'string' && (SCRIPT_VERSION_STATUSES as readonly string[]).includes(value);
-}
 
 /** ¿Es válida la transición `from → to`? */
 export function canTransitionScriptVersion(from: ScriptVersionStatus, to: ScriptVersionStatus): boolean {

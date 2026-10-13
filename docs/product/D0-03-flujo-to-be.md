@@ -1,3 +1,5 @@
+> **Documento histórico** (anterior a V2): no describe el modelo vigente; ver docs/project/V2_CURRENT_STATE.md y DEC-042 a DEC-050.
+
 # D0-03 — Flujo TO-BE
 
 **Versión:** 1 · **Fecha:** 11 de agosto de 2026 · **Estado:** propuesta para validación

@@ -78,7 +78,6 @@ export const MANIFIESTO_DE_DB: Readonly<Record<string, ClasificacionDeExport>> =
   // ── users.ts ──
   findUserByEmail: X, // login
   findUserById: RT, // el executor relee al actor antes de cada tool
-  listOrganizations: UI,
   listProducts: UI,
 
   // ── storage.ts ── sistema de archivos: nunca desde una tool.

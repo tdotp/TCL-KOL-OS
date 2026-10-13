@@ -1,3 +1,5 @@
+> **Documento histórico** (anterior a V2): no describe el modelo vigente; ver docs/project/V2_CURRENT_STATE.md y DEC-042 a DEC-050.
+
 # Handoff — TCL KOL OS
 
 Estado a **16 de septiembre de 2026**. Base de este cierre: `106f622` (Sprint

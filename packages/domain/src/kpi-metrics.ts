@@ -52,10 +52,6 @@ export function isKpiMetric(value: unknown): value is KpiMetric {
   return typeof value === 'string' && (KPI_METRICS as readonly string[]).includes(value);
 }
 
-export function isKpiUnit(value: unknown): value is KpiUnit {
-  return typeof value === 'string' && (KPI_UNITS as readonly string[]).includes(value);
-}
-
 export function isKpiComparator(value: unknown): value is KpiComparator {
   return typeof value === 'string' && (KPI_COMPARATORS as readonly string[]).includes(value);
 }

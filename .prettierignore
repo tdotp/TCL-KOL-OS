@@ -8,3 +8,4 @@ package-lock.json
 docs/product/D0-10-prototipo
 *.md
 docs/product/brief-schema
+docs/product/content-analysis/*.json

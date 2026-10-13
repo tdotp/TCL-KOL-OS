@@ -69,20 +69,18 @@ export default async function DetalleCampanaPage({
   const proximaTransicion = transicionesPosibles.find((t) => t in TEXTO_DEL_BOTON);
 
   const siguienteAccion =
-    user.role !== 'cliente' && preguntasCriticasPendientes > 0
+    preguntasCriticasPendientes > 0
       ? {
           label: `Responder ${preguntasCriticasPendientes} pregunta${preguntasCriticasPendientes > 1 ? 's' : ''} crítica${preguntasCriticasPendientes > 1 ? 's' : ''}`,
           detalle: 'Bloquean el avance del brief',
           href: `/campanas/${campaign.id}/brief/editar?panel=preguntas`,
         }
       : versionActual === undefined
-        ? user.role === 'cliente'
-          ? undefined
-          : {
-              label: 'Preparar el brief',
-              detalle: 'Carga fuentes o inicia una versión manual',
-              href: `/campanas/${campaign.id}/fuentes`,
-            }
+        ? {
+            label: 'Preparar el brief',
+            detalle: 'Carga fuentes o inicia una versión manual',
+            href: `/campanas/${campaign.id}/fuentes`,
+          }
         : proximaTransicion !== undefined
           ? {
               label: TEXTO_DEL_BOTON[proximaTransicion]!,
@@ -137,7 +135,7 @@ export default async function DetalleCampanaPage({
           Fuentes <span>{filasFuentes.length}</span>
         </a>
         <a href={`/campanas/${campaign.id}/brief`}>Brief</a>
-        {user.role !== 'cliente' && <a href={`/campanas/${campaign.id}/brief/editar`}>Editar</a>}
+        <a href={`/campanas/${campaign.id}/brief/editar`}>Editar</a>
         {roleCan(user.role, 'chat:write') && (
           <a href={`/campanas/${campaign.id}/chat`} data-testid="chat-nav-link">
             Asistente
@@ -208,14 +206,12 @@ export default async function DetalleCampanaPage({
                   <strong>Todavía no hay una versión del brief.</strong>
                   <p>Carga fuentes y extrae contenido, o empieza el brief manualmente.</p>
                 </div>
-                {user.role !== 'cliente' && (
-                  <form action={crearBriefManualDeCampana}>
-                    <input type="hidden" name="campaignId" value={campaign.id} />
-                    <button className="btn pri" type="submit">
-                      Empezar a mano
-                    </button>
-                  </form>
-                )}
+                <form action={crearBriefManualDeCampana}>
+                  <input type="hidden" name="campaignId" value={campaign.id} />
+                  <button className="btn pri" type="submit">
+                    Empezar a mano
+                  </button>
+                </form>
               </div>
             ) : (
               <div className="overview-progress-grid">
@@ -246,7 +242,7 @@ export default async function DetalleCampanaPage({
                     <strong>{preguntasCriticasPendientes}</strong>
                   </div>
                 </div>
-                {briefWorkspaceV2Activo() && user.role !== 'cliente' && (
+                {briefWorkspaceV2Activo() && (
                   <a
                     className="btn"
                     href={`/campanas/${campaign.id}/brief/workspace`}
@@ -383,7 +379,7 @@ export default async function DetalleCampanaPage({
             </section>
           )}
 
-          {campaign.status === 'activa' && user.role !== 'cliente' && (
+          {campaign.status === 'activa' && (
             <section className="card side-card archive-card">
               <div className="eyebrow">Administración</div>
               <h3 className="section-title">Archivar campaña</h3>

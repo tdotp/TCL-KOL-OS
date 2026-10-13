@@ -6,10 +6,9 @@ import {
   verCamposDeVersion,
   versionesDelBrief,
 } from '@tcl-kol-os/db';
-import { allowedTransitions, campoDelCatalogo, roleCan, type BriefStatus } from '@tcl-kol-os/domain';
+import { allowedTransitions, roleCan, type BriefStatus } from '@tcl-kol-os/domain';
 import { currentUser } from '@/lib/session';
 import { desviarClienteDeRutaLegada } from '@/lib/tcl-guard';
-import { ORDEN_DE_SECCIONES, TITULO_SECCION } from '@/lib/brief-sections';
 import { ESTADO_EN_ESPANOL, ETAPAS, TEXTO_DEL_BOTON, etapaDeStatus } from '@/lib/brief-ui';
 import { monogramaColor, monogramaIniciales } from '@/lib/monograma';
 import {
@@ -22,7 +21,6 @@ import { ConfirmarAccion } from '@/components/ConfirmarAccion';
 import { BotonExtraer } from './BotonExtraer';
 import { TablaCampos } from './TablaCampos';
 import { FormularioSolicitarCambiosInternos } from './FormularioSolicitarCambiosInternos';
-import { VistaCliente, type CampoParaCliente } from './VistaCliente';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,7 +30,6 @@ function CabeceraBrief({
   market,
   category,
   status,
-  cliente = false,
   conContenido = false,
   conOperacion = false,
 }: {
@@ -41,7 +38,6 @@ function CabeceraBrief({
   market: string;
   category: string | null;
   status: BriefStatus | undefined;
-  cliente?: boolean;
   /** El rol puede ver el contenido de la campaña (V2 · Fase 7): se añade el enlace «Contenido». */
   conContenido?: boolean;
   /** El rol puede ver la operación de la campaña (V2 · Fase 8): se añade el enlace «Operación». */
@@ -58,7 +54,7 @@ function CabeceraBrief({
         <span className={`monogram lg ${monogramaColor(id)}`}>{monogramaIniciales(name)}</span>
         <div className="campaign-heading-copy">
           <div className="campaign-kickers">
-            <span className="pill neutro">{cliente ? 'Vista cliente' : 'Review workspace'}</span>
+            <span className="pill neutro">Review workspace</span>
             {status !== undefined && (
               <span className="status-dot">{ESTADO_EN_ESPANOL[status] ?? status}</span>
             )}
@@ -68,16 +64,14 @@ function CabeceraBrief({
             {market} · {category ?? 'Sin categoría'}
           </p>
         </div>
-        {!cliente && (
-          <div className="campaign-header-actions">
-            <a className="btn" href={`/campanas/${id}/fuentes`}>
-              Fuentes
-            </a>
-            <a className="btn" href={`/campanas/${id}/brief/editar`}>
-              Editar brief
-            </a>
-          </div>
-        )}
+        <div className="campaign-header-actions">
+          <a className="btn" href={`/campanas/${id}/fuentes`}>
+            Fuentes
+          </a>
+          <a className="btn" href={`/campanas/${id}/brief/editar`}>
+            Editar brief
+          </a>
+        </div>
       </header>
       <nav className="campaign-context-nav" aria-label="Secciones de campaña">
         <a href={`/campanas/${id}`}>Resumen</a>
@@ -85,7 +79,7 @@ function CabeceraBrief({
         <a className="active" href={`/campanas/${id}/brief`}>
           Brief
         </a>
-        {!cliente && <a href={`/campanas/${id}/brief/editar`}>Editar</a>}
+        <a href={`/campanas/${id}/brief/editar`}>Editar</a>
         {conContenido && (
           <a href={`/campanas/${id}/contenido`} data-testid="contenido-nav-link">
             Contenido
@@ -148,77 +142,6 @@ export default async function BriefPage({
 
   const campos = ultima === undefined ? null : await verCamposDeVersion(user, ultima.id);
   const listaCampos = campos !== null && campos.ok ? campos.value : [];
-
-  // Fase D: el cliente nunca ve la pantalla interna (modelo, costo, revisión
-  // técnica, clave del catálogo) — un componente aparte que solo recibe
-  // label/valor/evidencia, para que una filtración no dependa de acordarse
-  // de ocultar un campo más en esta misma pantalla.
-  if (user.role === 'cliente') {
-    const ESTADOS_VISIBLES_PARA_CLIENTE = [
-      'client_review',
-      'client_changes_requested',
-      'approved',
-      'superseded',
-    ];
-    const visible = ultima !== undefined && ESTADOS_VISIBLES_PARA_CLIENTE.includes(ultima.status);
-
-    const camposParaCliente: CampoParaCliente[] = !visible
-      ? []
-      : listaCampos
-          .filter((c) => c.status === 'found')
-          .map((c) => {
-            const catalogo = campoDelCatalogo(c.key);
-            return {
-              key: c.key,
-              label: catalogo?.label ?? c.key,
-              section: catalogo?.section ?? 'practico',
-              value: c.value,
-              campaignProductId: c.campaignProductId,
-              evidencias: c.evidencias,
-            };
-          });
-
-    const seccionesParaCliente = ORDEN_DE_SECCIONES.filter((s) =>
-      camposParaCliente.some((c) => c.section === s),
-    ).map((s) => ({
-      id: s,
-      titulo: TITULO_SECCION[s] ?? s,
-      campos: camposParaCliente.filter((c) => c.section === s),
-    }));
-
-    return (
-      <div className="content content-wide ui-enter">
-        <CabeceraBrief
-          id={id}
-          name={campana.value.campaign.name}
-          market={campana.value.campaign.market}
-          category={campana.value.campaign.category}
-          status={ultima?.status as BriefStatus | undefined}
-          cliente
-        />
-
-        {error !== undefined && (
-          <div className="aviso error">
-            <strong>No se pudo completar la acción</strong>
-            {decodeURIComponent(error)}
-          </div>
-        )}
-
-        {ultima === undefined || !visible ? (
-          <div className="card">
-            <p className="vacio">Todavía no hay nada para revisar en esta campaña.</p>
-          </div>
-        ) : (
-          <VistaCliente
-            version={ultima.version}
-            estadoVersion={ultima.status}
-            secciones={seccionesParaCliente}
-            productos={campana.value.productos.map((p) => ({ id: p.id, model: p.model }))}
-          />
-        )}
-      </div>
-    );
-  }
 
   const criticosFaltantes = listaCampos.filter((c) => c.criticidad === 'critico' && c.status !== 'found');
   const conflictos = listaCampos.filter((c) => c.status === 'conflict');

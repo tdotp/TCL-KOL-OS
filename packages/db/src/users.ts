@@ -48,19 +48,6 @@ export async function findUserById(id: string): Promise<User | undefined> {
   return row === undefined ? undefined : toUser(row);
 }
 
-export interface OrganizationRow {
-  readonly id: string;
-  readonly name: string;
-  readonly type: 'agencia' | 'cliente';
-}
-
-export async function listOrganizations(): Promise<OrganizationRow[]> {
-  const { rows } = await getPool().query<OrganizationRow>(
-    `SELECT id, name, type FROM organizations WHERE status = 'activa' ORDER BY name`,
-  );
-  return rows;
-}
-
 export interface ProductRow {
   readonly id: string;
   readonly brand: string;

@@ -1,3 +1,5 @@
+> **Documento histórico** (anterior a V2): no describe el modelo vigente; ver docs/project/V2_CURRENT_STATE.md y DEC-042 a DEC-050.
+
 # D0-19 · Cierre de Sprint 6 (Fase B + C) — Brief Workspace: contrato consolidado y completado guiado
 
 ## 1. Alcance de esta entrega

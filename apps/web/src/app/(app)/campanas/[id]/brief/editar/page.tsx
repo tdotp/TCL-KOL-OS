@@ -27,7 +27,6 @@ export default async function EditorBriefPage({
   if (user === undefined) redirect('/login');
   // Cliente TCL: a su equivalente de `/tcl` (o 404) ANTES de cualquier cargador interno.
   desviarClienteDeRutaLegada(user, { tipo: 'brief', id: (await params).id });
-  if (user.role === 'cliente') redirect(`/campanas/${(await params).id}/brief`);
 
   const { id } = await params;
   const { panel, status, producto, error } = await searchParams;

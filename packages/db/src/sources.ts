@@ -8,7 +8,6 @@
 import {
   FORMATOS_CON_EXTRACCION,
   analizarEnlaceDeFuente,
-  canAccessResource,
   esHojaDeCalculo,
   etiquetaDeProveedor,
   isTclVisible,
@@ -116,9 +115,7 @@ const NO_ENCONTRADO = {
  *
  *  · Personal de SmartPR con `source:read`: todas las fuentes de su
  *    organización.
- *  · Cliente con `source:read_shared`: solo si la campaña ya es visible para
- *    TCL **y**, además, únicamente las fuentes marcadas como visibles para TCL.
- *    Que la campaña sea visible NO expone sus fuentes.
+ *  · Cliente: sin alcance (no tiene `source:read`; lo suyo va por la proyección TCL).
  */
 export interface AlcanceDeFuentes {
   /** Organización dueña de las fuentes (la de la campaña, no la del actor). */
@@ -150,35 +147,6 @@ export async function resolverAlcanceDeFuentes(
       organizationId: actor.organizationId,
       soloVisibleParaTcl: false,
       excluirGuionesNoAprobados: !roleCan(actor.role, 'script:read'),
-      excluirEvidenciaOperativa: true,
-    });
-  }
-
-  if (roleCan(actor.role, 'source:read_shared')) {
-    const { rows } = await getPool().query<{
-      organization_id: string;
-      confidentiality_level: string;
-      visibility: Visibility;
-    }>(`SELECT organization_id, confidentiality_level, visibility FROM campaigns WHERE id = $1`, [
-      campaignId,
-    ]);
-    const campana = rows[0];
-    if (
-      !campana ||
-      !canAccessResource(actor, {
-        organizationId: campana.organization_id,
-        confidentialityLevel: campana.confidentiality_level as
-          'publica' | 'interna' | 'confidencial' | 'sensible',
-        visibility: campana.visibility,
-        createdBy: '',
-      })
-    ) {
-      return err(NO_ENCONTRADO);
-    }
-    return ok({
-      organizationId: campana.organization_id,
-      soloVisibleParaTcl: true,
-      excluirGuionesNoAprobados: true,
       excluirEvidenciaOperativa: true,
     });
   }
@@ -271,7 +239,7 @@ async function autorizarLecturaDeFuente(
 
   // Sin la capacidad, el error es de rol aunque la fuente no exista (no hay
   // nada que proteger todavía); con la capacidad, todo lo demás es «no existe».
-  if (!roleCan(actor.role, 'source:read') && !roleCan(actor.role, 'source:read_shared')) {
+  if (!roleCan(actor.role, 'source:read')) {
     return err({
       code: 'FORBIDDEN_ROLE',
       message: `El rol ${actor.role} no puede ejecutar la acción source:read.`,

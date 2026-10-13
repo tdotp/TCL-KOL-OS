@@ -14,7 +14,6 @@
 import { envolverNoConfiable, recortarCampo } from '@tcl-kol-os/domain';
 
 export const MAX_OUTPUT_BYTES = 16_384;
-export const MAX_OUTPUT_ROWS = 50;
 /** Margen bajo el tope duro: el executor añade `ok` y el envoltorio de errores. */
 export const PRESUPUESTO_DE_SALIDA_BYTES = 15_000;
 

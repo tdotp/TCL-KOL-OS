@@ -34,8 +34,6 @@ import type { ModelTier } from './ai-tasks';
 
 export type ChatConversationStatus = 'active' | 'archived';
 
-export const CHAT_CONVERSATION_STATUSES: readonly ChatConversationStatus[] = ['active', 'archived'] as const;
-
 /** Solo `user` y `assistant`: `system` (prompt) y `tool` (resultados) no son mensajes. */
 export type ChatMessageRole = 'user' | 'assistant';
 
@@ -73,10 +71,6 @@ const TRANSICIONES_DE_RUN: Readonly<Record<AgentRunStatus, readonly AgentRunStat
   failed: [],
   cancelled: [],
 };
-
-export function isAgentRunStatus(value: unknown): value is AgentRunStatus {
-  return typeof value === 'string' && (AGENT_RUN_STATUSES as readonly string[]).includes(value);
-}
 
 export function isRunActive(status: AgentRunStatus): boolean {
   return (AGENT_RUN_ACTIVE_STATUSES as readonly AgentRunStatus[]).includes(status);

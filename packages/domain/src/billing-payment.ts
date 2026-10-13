@@ -39,10 +39,6 @@ export const BILLING_DOCUMENT_TRANSITIONS: Readonly<
   voided: [],
 };
 
-export function isBillingDocumentStatus(value: unknown): value is BillingDocumentStatus {
-  return typeof value === 'string' && (BILLING_DOCUMENT_STATUSES as readonly string[]).includes(value);
-}
-
 export function puedeTransicionarDocumento(from: BillingDocumentStatus, to: BillingDocumentStatus): boolean {
   return BILLING_DOCUMENT_TRANSITIONS[from].includes(to);
 }
@@ -150,10 +146,6 @@ export const PAYMENT_OBLIGATION_TRANSITIONS: Readonly<
   reported_paid: [],
   cancelled: [],
 };
-
-export function isPaymentObligationStatus(value: unknown): value is PaymentObligationStatus {
-  return typeof value === 'string' && (PAYMENT_OBLIGATION_STATUSES as readonly string[]).includes(value);
-}
 
 export function puedeTransicionarObligacion(
   from: PaymentObligationStatus,
@@ -275,14 +267,6 @@ export function billingValidadoAlReportar(documentStatuses: readonly BillingDocu
  */
 export type PaymentTracking =
   'not_applicable' | 'pending_document' | 'document_received' | 'pending_payment' | 'reported_paid';
-
-export const PAYMENT_TRACKING_VALUES: readonly PaymentTracking[] = [
-  'not_applicable',
-  'pending_document',
-  'document_received',
-  'pending_payment',
-  'reported_paid',
-] as const;
 
 export function derivarSeguimientoDePago(
   obligationStatus: PaymentObligationStatus,

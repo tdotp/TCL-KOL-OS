@@ -50,10 +50,6 @@ export const CAPACIDAD_POR_SECCION: Readonly<Record<SeccionOperativa, Action>> =
   kpi: 'kpi:read',
 };
 
-export function isSeccionOperativa(value: unknown): value is SeccionOperativa {
-  return typeof value === 'string' && (SECCIONES_OPERATIVAS as readonly string[]).includes(value);
-}
-
 /** ¿El rol puede abrir el resumen operativo (`operations:read`)? */
 export function puedeVerResumenOperativo(role: Role): boolean {
   return roleCan(role, CAPACIDAD_DEL_RESUMEN_OPERATIVO);
@@ -91,16 +87,6 @@ export function resumirAcuerdo(
 
 export type EstadoLogisticoDerivado =
   'sin_envio' | 'pendiente' | 'en_transito' | 'entregado' | 'devuelto' | 'fallido' | 'cancelado';
-
-export const ESTADOS_LOGISTICOS_DERIVADOS: readonly EstadoLogisticoDerivado[] = [
-  'sin_envio',
-  'pendiente',
-  'en_transito',
-  'entregado',
-  'devuelto',
-  'fallido',
-  'cancelado',
-] as const;
 
 export interface LogisticaDerivada {
   readonly estado: EstadoLogisticoDerivado;

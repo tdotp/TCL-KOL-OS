@@ -11,7 +11,6 @@ export const COD_IA_APAGADA: DomainErrorCode = 'AI_DISABLED';
 export const COD_MODELO_NO_DISPONIBLE: DomainErrorCode = 'AGENT_MODEL_UNAVAILABLE';
 export const COD_CONTEXTO_FALLIDO: DomainErrorCode = 'AGENT_CONTEXT_FAILED';
 export const COD_RUN_TIMEOUT: DomainErrorCode = 'AGENT_RUN_TIMEOUT';
-export const COD_LIMITE_DE_PASOS: DomainErrorCode = 'AGENT_STEP_LIMIT';
 export const COD_PERSONA_SIN_ACCESO: DomainErrorCode = 'FORBIDDEN_ROLE';
 /** Excepción inesperada del runtime (no es un código de dominio: solo del run). */
 export const COD_ERROR_DEL_RUNTIME = 'AGENT_RUNTIME_ERROR';

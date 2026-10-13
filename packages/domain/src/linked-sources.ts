@@ -31,10 +31,6 @@ export const EXTERNAL_PROVIDERS: readonly ExternalProvider[] = [
   'google_drive_folder',
 ] as const;
 
-export function isExternalProvider(value: unknown): value is ExternalProvider {
-  return typeof value === 'string' && (EXTERNAL_PROVIDERS as readonly string[]).includes(value);
-}
-
 export interface EnlaceDeFuente {
   readonly provider: ExternalProvider;
   /** Identificador estable del recurso en el proveedor (p. ej. ID del archivo de Google). */

@@ -30,10 +30,6 @@ export const AGREEMENT_TRANSITIONS: Readonly<Record<AgreementStatus, readonly Ag
   cancelled: [],
 };
 
-export function isAgreementStatus(value: unknown): value is AgreementStatus {
-  return typeof value === 'string' && (AGREEMENT_STATUSES as readonly string[]).includes(value);
-}
-
 export function puedeTransicionarAcuerdo(from: AgreementStatus, to: AgreementStatus): boolean {
   return AGREEMENT_TRANSITIONS[from].includes(to);
 }
@@ -82,8 +78,6 @@ export function obligacionCoherenteConModo(
 // ─────────────────────────── Dinero ────────────────────────────────────────────
 
 const MONTO_CANONICO = /^\d{1,12}(?:\.\d{1,2})?$/u;
-
-export const MAX_MONTO = '999999999999.99';
 
 /**
  * Monedas aceptadas (ISO 4217), lista CERRADA y razonable para campañas KOL en la región y sus mercados: una

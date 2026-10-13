@@ -140,12 +140,11 @@ describe('vista del cliente TCL (DEC-012 / ADR-004)', () => {
 
   it('nunca ve comentarios internos, abiertos o resueltos (Sprint 5, Fase B — decisión explícita del product owner)', () => {
     expect(roleCan('cliente', 'comment:internal')).toBe(false);
-    expect(roleCan('cliente', 'comment:client_visible')).toBe(false);
   });
 
   it('solo observa la proyección TCL (campaña, contenido aprobado, resumen operativo, KPI), sus fuentes compartidas y su exportación — nada más', () => {
     // V2 · Fase 9 (DEC-050): capacidades propias del cliente; se retiran `campaign:read`, `brief:read`, `brief:export`
-    // y (ciclo de corrección QA) `source:read_shared`: sus lectores legados devolvían hash, URL externa y fragmentos.
+    // y no tiene `source:read`: los lectores legados de fuentes se deniegan por capacidad.
     expect([...actionsFor('cliente')].sort()).toEqual([
       'campaign:read_client',
       'content:read_approved_client',
@@ -154,7 +153,7 @@ describe('vista del cliente TCL (DEC-012 / ADR-004)', () => {
       'kpi:read_client',
       'operations:read_summary_client',
     ]);
-    for (const retirada of ['campaign:read', 'brief:read', 'brief:export', 'source:read_shared'] as const) {
+    for (const retirada of ['campaign:read', 'brief:read', 'brief:export', 'source:read'] as const) {
       expect(roleCan('cliente', retirada), `el cliente conserva ${retirada}`).toBe(false);
     }
     expect(roleCan('cliente', 'source:read')).toBe(false);
