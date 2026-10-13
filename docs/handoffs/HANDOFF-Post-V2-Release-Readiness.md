@@ -1,5 +1,7 @@
 # TCL KOL OS — Handoff post-V2: Release Readiness
 
+> **Actualización — Release Readiness · Bloque 1 (rama `release-readiness`, partida de `ae72f14`):** resueltos **Prettier legacy**, **CSP completa + HSTS** y **rol de BD con mínimo privilegio** (sin migración; `v2`, `main` y los tags no se tocaron). Detalle y deuda detectada en [`RELEASE_HARDENING`](../project/RELEASE_HARDENING.md). Siguiente trabajo: §4 (empieza en «Worker gateway auth»). Donde este documento aún describa esos tres ítems como pendientes, está desactualizado: prevalece esta nota.
+
 Documento canónico para continuar **después** de V2. No describe el producto (eso es el [workflow funcional](../product/TCL_KOL_OS_V2_WORKFLOW_FUNCIONAL.md)) ni repite el estado final ([`V2_FINAL_STATE`](../project/V2_FINAL_STATE.md)): fija qué leer, qué sigue y qué deuda está abierta. Un chat nuevo debe poder empezar solo con este archivo y lo que enlaza.
 
 ## 1. Estado oficial
@@ -33,9 +35,9 @@ Documento canónico para continuar **después** de V2. No describe el producto (
 
 - **Autenticación productiva / OIDC** sin implementar (en producción nadie inicia sesión salvo `AUTH_PROVIDER=dev`, que **no** debe usarse).
 - **Gateway del worker sin autenticación** (`/extraccion`, `/modelo/*`).
-- **Rol de BD de producción con mínimo privilegio:** retirar `SUPERUSER`, la propiedad de las tablas y la capacidad `TRUNCATE` sobre las tablas de historia (QA-F10-07/08; las garantías de inmutabilidad son triggers que un superusuario puede anular).
-- **CSP completa** (`script-src` con nonces/hashes) pendiente (QA-F10-04).
-- **HSTS** pendiente (y TLS en el proxy; el proxy debe conservar `Host`).
+- ~~**Rol de BD de producción con mínimo privilegio**~~ ✅ **Resuelto (Bloque 1):** roles administrador / migrador / ejecución; el de ejecución es solo-DML, sin propiedad ni `TRUNCATE` (QA-F10-07/08 cerrados, `qa-rr-privilegios.test.ts`).
+- ~~**CSP completa**~~ ✅ **Resuelto (Bloque 1):** `script-src` con nonce por respuesta, lista blanca explícita (QA-F10-04 cerrado).
+- ~~**HSTS**~~ ✅ **Resuelto en la aplicación (Bloque 1):** configurable, solo producción/HTTPS/no localhost. **Sigue pendiente** el TLS en el proxy (debe conservar `Host` y poner `X-Forwarded-Proto`) y verificar las cabeceras contra staging.
 - **Secretos productivos** (`SESSION_SECRET` ≥ 16, `PII_ENCRYPTION_KEYS`, `PII_INDEX_KEY`, `AGENT_NONCE_SECRET`, claves de modelo y Google): gestión y rotación.
 - **Smoke real del proveedor de modelo** (tool calling del chat y JSON mode del análisis; todo lo certificado usa proveedor falso).
 - **Smoke real de Google** (Sheets/Drive con credenciales reales).
@@ -49,7 +51,7 @@ Documento canónico para continuar **después** de V2. No describe el producto (
 - Deuda bilingüe F2 (EN no obligatorio, `conflict/orphan` sin resolución, columnas legadas, `registrarTraduccion` sin llamador).
 - `BRIEF_WORKSPACE_V2` pendiente de decisión (conservada como rollback).
 - Análisis de contenido síncrono (~100 s) sin sondeo; más de 200 comentarios/versiones se truncan.
-- Prettier legacy en archivos de `apps/web` anteriores a V2.
+- ~~Prettier legacy~~ ✅ resuelto (Bloque 1): 0 deuda conocida; `npm run format:check` verde sin exclusiones.
 - `documentosDe` / `setSourceVisibility` sin filtro `confidentiality_level='sensible'` (QA-F10-01, teórico).
 - Defensa SQL de `proposed_actions`: el trigger valida la transición pending→confirmed pero no quién la hace (QA-F10-06; ninguna tool tiene SQL).
 - `source:read` general del Operativo (y de `analista`/`legal`, sin usuarios) sobre fuentes subidas como archivo.
@@ -61,23 +63,23 @@ Multi-cliente (`campaigns` sin organización cliente) · entidad `Publication` �
 
 ## 4. Orden recomendado post-V2
 
-1. Security headers / release config (CSP completa, HSTS, configuración de producción).
-2. DB least privilege (rol sin superuser ni `TRUNCATE`; propiedad de tablas).
-3. Worker gateway auth (secreto compartido y red privada).
-4. Google OAuth / OIDC.
-5. Production smoke harness (`next build` + `next start`, E2E de seguridad contra producción).
-6. Provider smokes reales (modelo y Google).
-7. Staging.
-8. UAT.
-9. GO / NO-GO.
-10. Merge controlado a `main`.
-11. Producción.
+~~1. Security headers / release config~~ ✅ Bloque 1.
+~~2. DB least privilege~~ ✅ Bloque 1.
 
-Nada de esto está implementado; son decisiones y trabajo de un bloque nuevo.
+**Siguiente (no implementado):**
+
+1. Worker gateway authentication (secreto compartido y red privada).
+2. Google OAuth / OIDC.
+3. Production smoke harness (`next build` + `next start`, E2E de seguridad contra producción; el Bloque 1 dejó `scripts/csp-smoke.mjs` y `scripts/release-readiness-verificacion.sh` como base).
+4. Provider smokes reales (modelo y Google).
+5. Staging / UAT.
+6. GO / NO-GO → merge controlado a `main` → producción.
+
+Secretos productivos, backups/rollback y la deuda técnica de §3.2 siguen abiertos dentro de esos bloques.
 
 ## 5. Primer bloque recomendado
 
-Trabajar en una **rama nueva a partir de `v2-f10-complete`** (p. ej. `release-readiness` o `hardening/post-v2`), **no** sobre `v2` ni sobre `main`. No existe todavía: créala al empezar. Empieza por el punto 1 y 2 del orden anterior; cada punto con su propia prueba y, si toca esquema, una migración `034` aditiva probada desde cero y como upgrade con datos.
+El Bloque 1 vive en la rama **`release-readiness`** (creada desde el HEAD de `v2` con este handoff, **no** desde el tag). Los bloques siguientes continúan ahí o en una rama hija; **no** sobre `v2` ni `main`. Empieza por el primer punto pendiente de §4; cada punto con su propia prueba y, si toca esquema, una migración `034` aditiva probada desde cero y como upgrade con datos.
 
 ## 6. NO PROD hasta completar como mínimo
 

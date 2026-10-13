@@ -116,6 +116,8 @@ Gate canónico [`scripts/f10-verificacion.sh`](../../scripts/f10-verificacion.sh
 
 ## 5. Cómo ejecutar en local (lecciones del entorno)
 
+> **Release Readiness · Bloque 1 (rama `release-readiness`) cambia los pasos de base de datos de abajo:** la aplicación y las pruebas usan el rol de ejecución `tclkolos_app` (solo DML), no el administrador. Una base nueva se prepara con `scripts/db-bootstrap.sh <base> --crear`, se migra con `MIGRATION_DATABASE_URL` (rol migrador) y se siembra con el rol de ejecución; `TEST_DATABASE_URL` es el rol de ejecución y `TEST_ADMIN_DATABASE_URL` la conexión privilegiada solo de pruebas. Un volumen de desarrollo anterior se adopta con `scripts/db-bootstrap.sh tclkolos`. Detalle: [`RELEASE_HARDENING`](RELEASE_HARDENING.md) §3 y `.env.example`. Gate: `scripts/release-readiness-verificacion.sh`.
+
 ```bash
 # 1) Docker Desktop encendido. Postgres de TCL en el puerto 5434 (el 5432/5433 pueden ser de OTRO proyecto):
 POSTGRES_PORT=5434 docker compose up -d db
