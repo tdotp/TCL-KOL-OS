@@ -285,6 +285,8 @@ export async function listAudit(
   return rows;
 }
 
+const LIMITE_MAXIMO_DE_ACTIVIDAD = 50;
+
 /**
  * Actividad reciente de la organización del actor para el Inicio y la lista de campañas. Caso de uso CON actor:
  * sin `audit:read` devuelve vacío (el cliente TCL nunca la ve) y las acciones operativas/PII solo se incluyen con
@@ -292,7 +294,12 @@ export async function listAudit(
  */
 export async function actividadReciente(actor: User, limite = 6): Promise<AuditEventRow[]> {
   if (!roleCan(actor.role, 'audit:read')) return [];
-  return listAudit(getPool(), actor.organizationId, limite, {
+  // El caso de uso acota el límite por sí mismo (0 o no numérico ⇒ vacío; máximo 50): no depende del llamador.
+  const n = Number.isFinite(limite)
+    ? Math.min(Math.max(Math.trunc(limite), 0), LIMITE_MAXIMO_DE_ACTIVIDAD)
+    : 0;
+  if (n === 0) return [];
+  return listAudit(getPool(), actor.organizationId, n, {
     incluirOperativas: roleCan(actor.role, 'finance:read'),
   });
 }

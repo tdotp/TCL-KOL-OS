@@ -223,7 +223,10 @@ describe('QA F9 · barrido de exports de db con el actor cliente', () => {
         }
       }
     }
-    const fuera = hallazgos.filter((h) => !PERMITIDAS.has(h.fn));
+    // F10: `actividadReciente(actor)` devuelve VACÍO al cliente (sin `audit:read`): se acepta solo con resultado `[]`.
+    const fuera = hallazgos.filter(
+      (h) => !PERMITIDAS.has(h.fn) && !(h.fn === 'actividadReciente' && h.resultado === '[]'),
+    );
     // eslint-disable-next-line no-console
     console.log(
       `BARRIDO-QA-F9\n${fuera.map((h) => `${h.fn}  args=${h.args}\n    → ${h.resultado}`).join('\n')}`,

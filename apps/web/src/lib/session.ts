@@ -42,6 +42,9 @@ function secret(): string {
     }
     return 'desarrollo-inseguro-no-usar-en-produccion';
   }
+  if (process.env['NODE_ENV'] === 'production' && value.trim().length < 16) {
+    throw new Error('SESSION_SECRET debe tener al menos 16 caracteres en producción.');
+  }
   return value;
 }
 

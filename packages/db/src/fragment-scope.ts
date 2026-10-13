@@ -42,6 +42,21 @@ export function sqlFragmentoSinTextoHistorico(alias: string): string {
            jsonb_build_object('n', hr.sheet))))`;
 }
 
+/** Texto que sustituye a una cita de evidencia cuyo fragmento es ilegible por ser histórico (F10, QA-F10-05). */
+export const CITA_HISTORICA_RESTRINGIDA =
+  'Cita no disponible: proviene de una versión histórica restringida de la fuente.';
+
+/**
+ * `evidence.quote` guarda una COPIA literal del fragmento citado, fuera de `source_fragments`: una cita de un
+ * snapshot histórico del Sheet de influencers (anterior a la lista blanca de columnas) conservaría `fee`/`canje`/
+ * `condiciones`. Todo lector que devuelva la cita la pasa por esta expresión: `e` = alias de `evidence`, `f` = alias
+ * de `source_fragments` unido por `e.fragment_id` (LEFT JOIN). Sin fragmento (evidencia manual) la cita se sirve.
+ */
+export function sqlCitaDeEvidenciaServible(e: string, f: string): string {
+  return `(CASE WHEN ${f}.id IS NULL OR ${sqlFragmentoSinTextoHistorico(f)} THEN ${e}.quote
+            ELSE '${CITA_HISTORICA_RESTRINGIDA}' END)`;
+}
+
 /** Con alias `f` (source_fragments) y `s` (source_documents) en la consulta. */
 export const SQL_FRAGMENTO_VIGENTE = `((f.snapshot_id IS NULL OR f.snapshot_id = s.current_snapshot_id)
   AND ${sqlFragmentoSinTextoHistorico('f')})`;

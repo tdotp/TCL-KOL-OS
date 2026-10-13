@@ -40,7 +40,11 @@ import { assertCapability } from './authz.ts';
 import { type ContextoDeAuditoria, exigirPersona } from './audit-context.ts';
 import { query, transaction } from './client.ts';
 import { obtenerOCrearVersionDeTrabajo } from './brief-version.ts';
-import { SQL_FRAGMENTO_VIGENTE, sqlFragmentoSinTextoHistorico } from './fragment-scope.ts';
+import {
+  SQL_FRAGMENTO_VIGENTE,
+  sqlCitaDeEvidenciaServible,
+  sqlFragmentoSinTextoHistorico,
+} from './fragment-scope.ts';
 import { SQL_LOCALIZADOR_DE_EVIDENCIA } from './locators.ts';
 import { SQL_FUENTE_SIN_EVIDENCIA_OPERATIVA } from './ops-source-scope.ts';
 import { SQL_FUENTE_SIN_GUION } from './script-scope.ts';
@@ -389,7 +393,7 @@ export async function camposDeVersion(versionId: string): Promise<
             COALESCE(
               json_agg(
                 json_build_object(
-                  'quote', e.quote, 'relation', e.relation::text,
+                  'quote', ${sqlCitaDeEvidenciaServible('e', 'ef')}, 'relation', e.relation::text,
                   'filename', s.filename, 'sourceId', s.id, 'sourceVisibility', s.visibility::text,
                   'page', e.page, 'slide', e.slide, 'section', e.section, 'linea', e.linea,
                   'locator', ${SQL_LOCALIZADOR_DE_EVIDENCIA}
@@ -400,6 +404,7 @@ export async function camposDeVersion(versionId: string): Promise<
        FROM brief_fields bf
        LEFT JOIN evidence e ON e.brief_field_id = bf.id
        LEFT JOIN source_documents s ON s.id = e.source_id
+       LEFT JOIN source_fragments ef ON ef.id = e.fragment_id
       WHERE bf.brief_version_id = $1
       GROUP BY bf.id
       ORDER BY bf.key`,
