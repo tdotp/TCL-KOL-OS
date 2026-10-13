@@ -124,7 +124,8 @@ export function createToolRegistry(opciones: OpcionesDelRegistro): ToolRegistryC
           onUnexpectedError:
             opciones.onUnexpectedError ??
             ((tool, error) => {
-              console.error(`[agent-tool] ${tool}`, error);
+              // Solo el tipo del error: un error de pg puede traer valores en `detail`.
+              console.error(`[agent-tool] ${tool}`, error instanceof Error ? error.name : typeof error);
             }),
         },
         call.context,

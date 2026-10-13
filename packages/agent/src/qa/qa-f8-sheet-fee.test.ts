@@ -16,7 +16,7 @@
  * dejó de volcarse al texto de los fragmentos. El fragmento sembrado es la salida REAL del worker.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { closePool, getFragments, getSnapshotFragments, query, setSourceVisibility } from '@tcl-kol-os/db';
+import { closePool, getFragments, query, setSourceVisibility } from '@tcl-kol-os/db';
 import { abrirTurno, llamar, registro } from '../tools/test-support.ts';
 import {
   type MundoDeOperacion,
@@ -127,13 +127,11 @@ describe('CONTROL: el fee SÍ está en la rejilla del snapshot pero NO en los fr
   });
 });
 
-describe('P0 corregido · el fee del Sheet sale por getFragments / getSnapshotFragments (sin finance:read)', () => {
+describe('P0 corregido · el fee del Sheet sale por getFragments (sin finance:read)', () => {
   for (const rol of ['consultor', 'analista', 'legal'] as const) {
     it(`${rol} (sin finance:read) no debe leer el monto del fee en los fragmentos del Sheet`, async () => {
       const a = await getFragments(m.op[rol], sourceId);
-      const b = await getSnapshotFragments(m.op[rol], snapshotId);
       expect(JSON.stringify(a)).not.toContain(FEE_DEL_SHEET);
-      expect(JSON.stringify(b)).not.toContain(FEE_DEL_SHEET);
     });
   }
 });

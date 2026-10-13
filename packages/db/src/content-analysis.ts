@@ -58,6 +58,7 @@ import {
   normalizarCifrasDeLlamada,
   ok,
   sanitizarMensajeDeError,
+  secretoDelNonce,
   sha256Hex,
   validarSalidaDeAnalisis,
   vigenciaDelAnalisis,
@@ -99,8 +100,6 @@ const MENSAJE_DE_FALLO =
 const ESTADOS_REVISABLES: readonly ScriptVersionStatus[] = ['received', 'in_review', 'approved'];
 
 const CLAVE_DE_IDEMPOTENCIA = /^[A-Za-z0-9_.:-]{8,200}$/u;
-
-const SECRETO_DE_DESARROLLO = 'desarrollo-inseguro-no-usar-en-produccion';
 
 type Consultor = pg.Pool | pg.PoolClient;
 type LectorDeEntorno = (nombre: string) => string | undefined;
@@ -1324,13 +1323,6 @@ export async function registrarRevisionHumana(
 }
 
 // ─────────────────────────── Análisis asistido ─────────────────────────────────
-
-function secretoDelNonce(env: LectorDeEntorno): string | undefined {
-  const configurado = (env('AGENT_NONCE_SECRET') ?? '').trim() || (env('SESSION_SECRET') ?? '').trim();
-  if (configurado.length >= 16) return configurado;
-  if (configurado === '' && (env('NODE_ENV') ?? '') !== 'production') return SECRETO_DE_DESARROLLO;
-  return undefined;
-}
 
 function proveedorDelEntorno(env: LectorDeEntorno): { provider: string; model: string } {
   const modelo = (env('AI_MODEL_EQUILIBRADO') ?? '').trim();

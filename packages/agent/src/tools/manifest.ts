@@ -202,9 +202,6 @@ export const MANIFIESTO_DE_DB: Readonly<Record<string, ClasificacionDeExport>> =
   syncGoogleSheetSource: W,
   getSyncRun: R,
   listSyncRuns: UI,
-  listSourceSnapshots: UI,
-  getSourceSnapshot: UI,
-  getSnapshotFragments: UI,
   cargarRejillaDeSnapshot: X, // recibe un cliente de BD, sin actor
 
   // ── influencer-import.ts ──

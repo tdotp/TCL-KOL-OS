@@ -15,7 +15,6 @@ import { closePool, query } from './client.ts';
 import { extraerCampos } from './extraction.ts';
 import { crearSheetDePrueba } from './kpi-test-support.ts';
 import { buscarEvidencia, buscarEvidenciaComoActor, buscarTextoEnFuentes } from './search.ts';
-import { getSnapshotFragments } from './source-sync.ts';
 import { getFragments, obtenerRepresentacionNormalizada, setSourceVisibility } from './sources.ts';
 import {
   type EscenarioDeOperacion,
@@ -111,11 +110,6 @@ describe('snapshot antiguo VIGENTE · lectura de fragmentos y representación (c
   it('obtenerRepresentacionNormalizada no devuelve el texto financiero', async () => {
     const r = await obtenerRepresentacionNormalizada(op.consultor, sourceId, {});
     sinFinanzas(r);
-  });
-
-  it('getSnapshotFragments (vigente y anterior) no devuelve el texto financiero', async () => {
-    sinFinanzas(await getSnapshotFragments(op.consultor, snapshotVigente));
-    sinFinanzas(await getSnapshotFragments(op.consultor, snapshotAnterior));
   });
 });
 
@@ -250,11 +244,9 @@ describe('snapshot NUEVO (con lista blanca) vigente y el antiguo ya no vigente',
     expect(JSON.stringify(b)).toContain('SENTINELA-NUEVO-LEGIBLE');
   });
 
-  it('el snapshot antiguo (no vigente) no entra por lectura, búsqueda ni lectura explícita de su snapshot', async () => {
+  it('el snapshot antiguo (no vigente) no entra por lectura ni búsqueda', async () => {
     sinFinanzas(await getFragments(op.consultor, sourceId));
     sinFinanzas(await obtenerRepresentacionNormalizada(op.consultor, sourceId, {}));
     sinFinanzas(await buscarTextoEnFuentes(op.consultor, { campaignId: op.campanaId, texto: FEE }));
-    sinFinanzas(await getSnapshotFragments(op.consultor, snapshotAnterior));
-    sinFinanzas(await getSnapshotFragments(op.consultor, snapshotVigente));
   });
 });

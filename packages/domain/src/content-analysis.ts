@@ -179,13 +179,27 @@ export type LectorDeEntorno = (nombre: string) => string | undefined;
 
 /**
  * Kill-switch de IA. Semántica EXACTA de `ia_activa()` del worker
- * (`services/ai-worker/app/modelo_turno.py`) y de `iaActiva` del runtime del
- * agente (`packages/agent/src/runtime/config.ts`): sin definir = apagado; solo
+ * (`services/ai-worker/app/modelo_turno.py`); el runtime del agente la reutiliza
+ * (`packages/agent/src/runtime/config.ts`): sin definir = apagado; solo
  * `1`, `true` o `yes` (sin distinguir mayúsculas ni espacios) lo encienden.
  * Hay una prueba de paridad textual contra el código Python.
  */
 export function iaActiva(env: LectorDeEntorno): boolean {
   return ['1', 'true', 'yes'].includes((env('AI_ENABLED') ?? 'false').trim().toLowerCase());
+}
+
+const SECRETO_DE_DESARROLLO = 'desarrollo-inseguro-no-usar-en-produccion';
+
+/**
+ * Secreto del nonce de los sobres (≥16 caracteres), o `undefined` si no hay uno utilizable.
+ * Fuera de producción, sin ningún secreto configurado, se usa uno de desarrollo; en producción
+ * (o con un secreto demasiado corto) no hay valor y el llamador debe fallar cerrado.
+ */
+export function secretoDelNonce(env: LectorDeEntorno): string | undefined {
+  const configurado = (env('AGENT_NONCE_SECRET') ?? '').trim() || (env('SESSION_SECRET') ?? '').trim();
+  if (configurado.length >= 16) return configurado;
+  if (configurado === '' && (env('NODE_ENV') ?? '') !== 'production') return SECRETO_DE_DESARROLLO;
+  return undefined;
 }
 
 // ─────────────────────────── 2. Prontitud, vigencia ────────────────────────────

@@ -21,6 +21,8 @@ import {
   CONTEXT_ASSEMBLER_VERSION,
   CONTEXT_BUDGET_VERSION,
   CONTEXT_POLICY_VERSION,
+  iaActiva,
+  secretoDelNonce,
   tierFor,
 } from '@tcl-kol-os/domain';
 import { type EnvReader, enteroDeEnv } from '../model/env.ts';
@@ -73,10 +75,8 @@ export function acotarLimites(
   };
 }
 
-/** Kill-switch (D8). Sin definir = apagado, igual que el worker. */
-export function iaActiva(env: EnvReader): boolean {
-  return ['1', 'true', 'yes'].includes((env('AI_ENABLED') ?? 'false').trim().toLowerCase());
-}
+/** Kill-switch (D8) y secreto del nonce: una sola implementación, en el dominio (paridad con el worker). */
+export { iaActiva, secretoDelNonce };
 
 /**
  * Configuración con la que se admite un run. Procedencia (verificable):
@@ -98,14 +98,4 @@ export function configuracionDeRun(env: EnvReader): AgentRunConfig {
     promptVersion: PROMPT_VERSION,
     contextVersion: `${CONTEXT_ASSEMBLER_VERSION}.${CONTEXT_BUDGET_VERSION}.${CONTEXT_POLICY_VERSION}`,
   };
-}
-
-const SECRETO_DE_DESARROLLO = 'desarrollo-inseguro-no-usar-en-produccion';
-
-/** Secreto del nonce de los sobres (≥16 caracteres), o `undefined` si no hay uno utilizable. */
-export function secretoDelNonce(env: EnvReader): string | undefined {
-  const configurado = (env('AGENT_NONCE_SECRET') ?? '').trim() || (env('SESSION_SECRET') ?? '').trim();
-  if (configurado.length >= 16) return configurado;
-  if (configurado === '' && (env('NODE_ENV') ?? '') !== 'production') return SECRETO_DE_DESARROLLO;
-  return undefined;
 }

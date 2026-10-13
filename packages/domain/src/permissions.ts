@@ -28,7 +28,6 @@ export type Action =
   | 'brief:request_review'
   | 'brief:approve_internal'
   | 'brief:translate'
-  | 'brief:export'
   | 'question:answer'
   // Sprint 4 (cierre): E6 y E7 completas necesitan distinguir cada acción de
   // escritura sobre el brief — antes solo existía `brief:edit` genérico.
@@ -122,7 +121,6 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'brief:request_review',
     'brief:approve_internal',
     'brief:translate',
-    'brief:export',
     'question:answer',
     'question:create',
     'question:discard',
@@ -179,7 +177,6 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'brief:request_review',
     'brief:approve_internal',
     'brief:translate',
-    'brief:export',
     'question:answer',
     'question:create',
     'question:discard',
@@ -230,7 +227,6 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     // No puede aprobar internamente: esa es la separación de responsabilidades
     // que hace que la revisión signifique algo (D0-07 §2).
     'brief:translate',
-    'brief:export',
     'question:answer',
     'question:create',
     'question:discard',
@@ -257,15 +253,7 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     'kpi:read',
     'kpi:target_manage',
   ],
-  analista: [
-    'campaign:read',
-    'source:read',
-    'brief:read',
-    'brief:export',
-    'comment:internal',
-    'audit:read',
-    'airun:read',
-  ],
+  analista: ['campaign:read', 'source:read', 'brief:read', 'comment:internal', 'audit:read', 'airun:read'],
   legal: ['campaign:read', 'source:read', 'brief:read', 'question:answer', 'comment:internal', 'audit:read'],
   // Usuario Operativo (V2 · Fase 1B). Solo entra y consulta el contexto del
   // proyecto: campaña, fuentes internas y brief. NO aprueba, no transiciona ni
@@ -302,7 +290,7 @@ const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
   // (Fase 9, DEC-050) y exporta esa misma proyección. No aprueba, no pide cambios y
   // no mueve ningún estado — esas decisiones son de SmartPR (corrección del
   // workflow cliente, `docs/product/CLIENT_WORKFLOW_CORRECTION.md`).
-  // Fase 9: se RETIRAN `campaign:read`, `brief:read` y `brief:export` (cerraban
+  // Fase 9: se RETIRAN `campaign:read` y `brief:read` (cerraban
   // lecturas legadas de borradores, de `modelo/costoUsd` y de entidades internas);
   // tampoco tiene `source:read` (los lectores legados devolvían hash, URL externa y fragmentos de fuentes
   // compartidas). Los documentos compartidos a propósito los lee la proyección TCL con `document:read_client`.

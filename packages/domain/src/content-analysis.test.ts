@@ -160,7 +160,7 @@ describe('iaActiva: paridad con el worker y con el runtime del agente', () => {
     expect(iaActiva(() => undefined)).toBe(false);
   });
 
-  it('paridad TEXTUAL: el mismo valor por defecto y el mismo conjunto en modelo_turno.py, config.py, runtime del agente y el dominio', () => {
+  it('paridad TEXTUAL: el mismo valor por defecto y el mismo conjunto en modelo_turno.py, config.py y el dominio (el runtime del agente reutiliza la del dominio)', () => {
     const python = [leer('services/ai-worker/app/modelo_turno.py'), leer('services/ai-worker/app/config.py')];
     const patronPython = /os\.environ\.get\("AI_ENABLED", "(\w+)"\)\.strip\(\)\.lower\(\) in \{([^}]*)\}/;
     const miembros = (cuerpo: string): string[] =>
@@ -173,10 +173,7 @@ describe('iaActiva: paridad con el worker y con el runtime del agente', () => {
     }
     const patronTs =
       /\[([^\]]*)\]\.includes\(\(env\('AI_ENABLED'\) \?\? '(\w+)'\)\.trim\(\)\.toLowerCase\(\)\)/;
-    for (const [origen, fuente] of [
-      ['agent', leer('packages/agent/src/runtime/config.ts')],
-      ['dominio', leer('packages/domain/src/content-analysis.ts')],
-    ] as const) {
+    for (const [origen, fuente] of [['dominio', leer('packages/domain/src/content-analysis.ts')]] as const) {
       const m = patronTs.exec(fuente);
       expect(m, `no se encontró la expresión de AI_ENABLED en ${origen}`).not.toBeNull();
       vistos.push({ origen, porDefecto: m![2]!, conjunto: miembros(m![1]!) });

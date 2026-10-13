@@ -1285,7 +1285,7 @@ describe('lecturas legadas del cliente: cerradas por capacidad', () => {
   });
 
   it('las capacidades que se retiraron son las que cierran la puerta (por capacidad, no por casualidad)', async () => {
-    for (const retirada of ['campaign:read', 'brief:read', 'brief:export'] as const) {
+    for (const retirada of ['campaign:read', 'brief:read'] as const) {
       expect(roleCan('cliente', retirada), retirada).toBe(false);
     }
     expect(codigo(await listCampaigns(tcl))).toBe('FORBIDDEN_ROLE');

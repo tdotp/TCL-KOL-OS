@@ -15,6 +15,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Result, User } from '@tcl-kol-os/domain';
 import { closePool, query } from './client.ts';
+import { localizadorDeFila } from './locators.ts';
 import { asegurarUsuarioDePrueba, eliminarCampanaDePrueba } from './test-utils.ts';
 import { findUserByEmail } from './users.ts';
 import { crearBriefManual } from './manual.ts';
@@ -26,14 +27,7 @@ import {
   obtenerRepresentacionNormalizada,
 } from './sources.ts';
 import { buscarTextoEnFuentes } from './search.ts';
-import {
-  getSourceSnapshot,
-  getSnapshotFragments,
-  getSyncRun,
-  listSourceSnapshots,
-  listSyncRuns,
-  syncGoogleSheetSource,
-} from './source-sync.ts';
+import { getSyncRun, listSyncRuns, syncGoogleSheetSource } from './source-sync.ts';
 import { GoogleSimulado, type PestanaDePrueba } from './google-test-utils.ts';
 import { hayWorkerLocal, procesarColaConWorker } from './worker-test-utils.ts';
 
@@ -54,6 +48,54 @@ const campanas: string[] = [];
 let hayWorker = false;
 let google: GoogleSimulado;
 let contador = 100;
+
+/** Lectores de PRUEBA de snapshots (SQL directo, sin autorización): en producción no hay lector de snapshots históricos. */
+interface SnapshotDePrueba {
+  readonly id: string;
+  readonly sequence: number;
+  readonly isCurrent: boolean;
+  readonly provider: string;
+  readonly contentHash: string;
+  readonly fragments: number;
+  readonly rows: number;
+  readonly structure: Record<string, unknown>;
+}
+
+const SELECT_SNAPSHOT_DE_PRUEBA = `
+  SELECT n.id, n.sequence, n.provider, n.content_hash AS "contentHash", n.structure,
+         (s.current_snapshot_id = n.id) AS "isCurrent",
+         (SELECT count(*)::int FROM source_fragments f WHERE f.snapshot_id = n.id) AS fragments,
+         (SELECT count(*)::int FROM source_snapshot_rows r WHERE r.snapshot_id = n.id) AS rows
+    FROM source_snapshots n
+    JOIN source_documents s ON s.id = n.source_id
+`;
+
+async function listSourceSnapshots(_actor: User, sourceId: string): Promise<SnapshotDePrueba[]> {
+  return query<SnapshotDePrueba>(
+    `${SELECT_SNAPSHOT_DE_PRUEBA} WHERE n.source_id = $1 ORDER BY n.sequence DESC`,
+    [sourceId],
+  );
+}
+
+async function getSourceSnapshot(_actor: User, snapshotId: string): Promise<SnapshotDePrueba> {
+  const [fila] = await query<SnapshotDePrueba>(`${SELECT_SNAPSHOT_DE_PRUEBA} WHERE n.id = $1`, [snapshotId]);
+  if (fila === undefined) throw new Error(`snapshot inexistente: ${snapshotId}`);
+  return fila;
+}
+
+async function getSnapshotFragments(_actor: User, snapshotId: string) {
+  const filas = await query<{
+    id: string;
+    ordinal: number;
+    locator: unknown;
+    text: string;
+    metadata: unknown;
+  }>(
+    `SELECT id, ordinal, locator, text, metadata FROM source_fragments WHERE snapshot_id = $1 ORDER BY ordinal`,
+    [snapshotId],
+  );
+  return filas.map((f) => ({ ...f, locator: localizadorDeFila({ locator: f.locator }) }));
+}
 
 function valor<T>(r: Result<T>): T {
   if (!r.ok) throw new Error(`${r.error.code}: ${r.error.message}`);
@@ -586,7 +628,7 @@ describe('sincronizar con el worker real (Google simulado)', () => {
     expect(salida.codigo).toBe(0);
     expect(run.status).toBe('completed');
 
-    const snapshots = valor(await listSourceSnapshots(admin, sourceId));
+    const snapshots = await listSourceSnapshots(admin, sourceId);
     expect(snapshots).toHaveLength(1);
     const [s1] = snapshots;
     expect(s1).toMatchObject({ sequence: 1, isCurrent: true, provider: 'google_sheets', rows: 2 });
@@ -594,11 +636,11 @@ describe('sincronizar con el worker real (Google simulado)', () => {
     expect(s1!.fragments).toBeGreaterThan(0);
     expect(run.snapshotId).toBe(s1!.id);
 
-    const detalle = valor(await getSourceSnapshot(admin, s1!.id));
+    const detalle = await getSourceSnapshot(admin, s1!.id);
     expect(detalle.structure).toMatchObject({ format: 'google_sheets', sheetCount: 1, title: 'Mi libro' });
     expect((detalle.structure['sheets'] as { gid: number }[])[0]!.gid).toBe(11);
 
-    const fragmentos = valor(await getSnapshotFragments(admin, s1!.id));
+    const fragmentos = await getSnapshotFragments(admin, s1!.id);
     expect(fragmentos[0]!.locator).toMatchObject({ kind: 'range', sheet: 'Datos' });
     expect(fragmentos[0]!.text).toContain('Nombre: Valentina Rojas');
 
@@ -627,12 +669,12 @@ describe('sincronizar con el worker real (Google simulado)', () => {
 
     expect(segunda.run.status).toBe('unchanged');
     expect(segunda.run.snapshotId).toBe(primera.run.snapshotId);
-    expect(valor(await listSourceSnapshots(admin, sourceId))).toHaveLength(1);
+    expect(await listSourceSnapshots(admin, sourceId)).toHaveLength(1);
     const [n] = await query<{ n: number }>(
       `SELECT count(*)::int AS n FROM source_fragments WHERE source_id = $1`,
       [sourceId],
     );
-    expect(n!.n).toBe(valor(await getSourceSnapshot(admin, primera.run.snapshotId!)).fragments);
+    expect(n!.n).toBe((await getSourceSnapshot(admin, primera.run.snapshotId!)).fragments);
     expect((await auditoria(sourceId)).map((e) => e.action)).toEqual(
       expect.arrayContaining(['source.sync_snapshot_created', 'source.sync_unchanged']),
     );
@@ -642,25 +684,25 @@ describe('sincronizar con el worker real (Google simulado)', () => {
     const { sourceId, libroId } = await nuevaFuente();
     await google.publicar(libroId, [pestanaCon('Primera versión')]);
     const uno = await sincronizar(sourceId);
-    const antes = valor(await getSnapshotFragments(admin, uno.run.snapshotId!));
-    const hashUno = valor(await getSourceSnapshot(admin, uno.run.snapshotId!)).contentHash;
+    const antes = await getSnapshotFragments(admin, uno.run.snapshotId!);
+    const hashUno = (await getSourceSnapshot(admin, uno.run.snapshotId!)).contentHash;
 
     await google.publicar(libroId, [pestanaCon('Segunda versión')]);
     const dos = await sincronizar(sourceId);
     expect(dos.run.status).toBe('completed');
     expect(dos.run.snapshotId).not.toBe(uno.run.snapshotId);
 
-    const lista = valor(await listSourceSnapshots(admin, sourceId));
+    const lista = await listSourceSnapshots(admin, sourceId);
     expect(lista.map((s) => [s.sequence, s.isCurrent])).toEqual([
       [2, true],
       [1, false],
     ]);
     // El snapshot 1 es exactamente el que era.
-    const despues = valor(await getSnapshotFragments(admin, uno.run.snapshotId!));
+    const despues = await getSnapshotFragments(admin, uno.run.snapshotId!);
     expect(despues).toEqual(antes);
-    expect(valor(await getSourceSnapshot(admin, uno.run.snapshotId!)).contentHash).toBe(hashUno);
+    expect((await getSourceSnapshot(admin, uno.run.snapshotId!)).contentHash).toBe(hashUno);
     expect(despues[0]!.text).toContain('Primera versión');
-    const vigente = valor(await getSnapshotFragments(admin, dos.run.snapshotId!));
+    const vigente = await getSnapshotFragments(admin, dos.run.snapshotId!);
     expect(vigente[0]!.text).toContain('Segunda versión');
   });
 
@@ -668,7 +710,7 @@ describe('sincronizar con el worker real (Google simulado)', () => {
     const { sourceId, libroId } = await nuevaFuente();
     await google.publicar(libroId, [pestanaCon('Contenido ORIGINAL')]);
     const uno = await sincronizar(sourceId);
-    const [frag] = valor(await getSnapshotFragments(admin, uno.run.snapshotId!));
+    const [frag] = await getSnapshotFragments(admin, uno.run.snapshotId!);
 
     const [ev] = await query<{ id: string; locator: unknown }>(
       `INSERT INTO evidence (brief_field_id, source_id, fragment_id, quote) VALUES ($1, $2, $3, 'cita') RETURNING id, locator`,
@@ -716,7 +758,7 @@ describe('sincronizar con el worker real (Google simulado)', () => {
     );
 
     const fragmentos = valor(await getFragments(admin, sourceId));
-    expect(fragmentos).toHaveLength(valor(await getSourceSnapshot(admin, dos.run.snapshotId!)).fragments);
+    expect(fragmentos).toHaveLength((await getSourceSnapshot(admin, dos.run.snapshotId!)).fragments);
     expect(fragmentos[0]!.text).toContain(marca2);
     const fuente = valor(await listSources(admin, campanaId)).find((s) => s.id === sourceId)!;
     expect(fuente.fragmentos).toBe(fragmentos.length);
@@ -748,7 +790,7 @@ describe('sincronizar con el worker real (Google simulado)', () => {
       [sourceId],
     );
     expect(fuente).toMatchObject({ status: 'procesado', current_snapshot_id: uno.run.snapshotId });
-    expect(valor(await listSourceSnapshots(admin, sourceId))).toHaveLength(1);
+    expect(await listSourceSnapshots(admin, sourceId)).toHaveLength(1);
     const falla = (await auditoria(sourceId)).find((e) => e.action === 'source.sync_failed')!;
     expect(falla).toMatchObject({ origin: 'system' });
     expect(falla.metadata).toMatchObject({ codigo: 'GOOGLE_FORBIDDEN' });
@@ -791,7 +833,7 @@ describe('sincronizar con el worker real (Google simulado)', () => {
         [primero.pedido.jobId],
       );
       expect(job).toMatchObject({ status: 'pendiente', intentos: 1, en_el_futuro: true });
-      expect(valor(await listSourceSnapshots(admin, sourceId))).toHaveLength(0);
+      expect(await listSourceSnapshots(admin, sourceId)).toHaveLength(0);
 
       // Pasado el backoff y con Google recuperado, el reintento termina la misma ejecución.
       await google.publicar(libroId, [pestanaCon('Tras el reintento')]);
@@ -856,7 +898,7 @@ describe('sincronizar con el worker real (Google simulado)', () => {
     await google.publicar(sinTab.libroId, [pestanaCon('X', 11)]);
     const r = await sincronizar(sinTab.sourceId);
     expect(r.run).toMatchObject({ status: 'failed', errorCode: 'GOOGLE_SHEET_TAB_NOT_FOUND' });
-    expect(valor(await listSourceSnapshots(admin, sinTab.sourceId))).toHaveLength(0);
+    expect(await listSourceSnapshots(admin, sinTab.sourceId)).toHaveLength(0);
   });
 
   si('el destino de la lectura sale del id registrado, no de la URL que pegó el usuario', async () => {
@@ -883,9 +925,9 @@ describe('sincronizar con el worker real (Google simulado)', () => {
     for (const texto of ['A', 'B', 'A']) {
       await google.publicar(libroId, [pestanaCon(texto)]);
       const r = await sincronizar(sourceId);
-      hashes.push(valor(await getSourceSnapshot(admin, r.run.snapshotId!)).contentHash);
+      hashes.push((await getSourceSnapshot(admin, r.run.snapshotId!)).contentHash);
     }
-    expect(valor(await listSourceSnapshots(admin, sourceId)).map((s) => s.sequence)).toEqual([3, 2, 1]);
+    expect((await listSourceSnapshots(admin, sourceId)).map((s) => s.sequence)).toEqual([3, 2, 1]);
     // Volver a un contenido anterior da el MISMO hash (determinista), pero es una lectura nueva.
     expect(hashes[0]).toBe(hashes[2]);
     expect(hashes[0]).not.toBe(hashes[1]);

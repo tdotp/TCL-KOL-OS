@@ -85,9 +85,12 @@ export interface ProductoDeCampana {
   readonly nombreProducto: string;
 }
 
-/** URL interna del worker. No se expone al navegador. */
+/** URL interna del worker (`AI_WORKER_URL ?? WORKER_URL`, como el resto). No se expone al navegador. */
 function urlDelWorker(): string {
-  return (process.env['AI_WORKER_URL'] ?? 'http://localhost:8000').replace(/\/+$/, '');
+  return (process.env['AI_WORKER_URL'] ?? process.env['WORKER_URL'] ?? 'http://localhost:8000').replace(
+    /\/+$/,
+    '',
+  );
 }
 
 /** Los productos válidos de la campaña, en la forma que espera el worker. */
@@ -471,8 +474,9 @@ async function ejecutarYPersistir(
     });
   } catch (error) {
     // El detalle técnico va al log, no a la pantalla (§11.6). Lo que llega al
-    // consultor es qué pasó y qué puede hacer.
-    console.error('[extraccion]', error);
+    // consultor es qué pasó y qué puede hacer. Solo el tipo del error: un error de pg puede
+    // traer valores en `detail`.
+    console.error('[extraccion]', error instanceof Error ? error.name : typeof error);
     await transicionarBrief('system', versionId, 'processing_failed', { correlation });
     return err({
       code: 'AI_EXTRACTION_FAILED',

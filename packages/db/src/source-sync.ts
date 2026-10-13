@@ -22,7 +22,6 @@ import {
   type Result,
   type SnapshotGrid,
   type SnapshotSheet,
-  type SourceLocator,
   type SyncRunStatus,
   type User,
   authorizeInternalResource,
@@ -33,9 +32,7 @@ import {
 import { recordAudit } from './audit.ts';
 import { getPool } from './client.ts';
 import { type ContextoDeAuditoria, NO_ENCONTRADO, auditoriaDe, exigirPersona } from './influencers.ts';
-import { localizadorDeFila } from './locators.ts';
 import { Abortar, transaccionConResultado } from './tx-result.ts';
-import { sqlFragmentoSinTextoHistorico } from './fragment-scope.ts';
 
 /** Una sincronización activa sin avanzar más de esto se considera abandonada. */
 const MINUTOS_PARA_ABANDONAR = 30;
@@ -53,35 +50,6 @@ export interface SyncRun {
   readonly requestedAt: string;
   readonly startedAt: string | undefined;
   readonly finishedAt: string | undefined;
-}
-
-export interface SourceSnapshotInfo {
-  readonly id: string;
-  readonly sourceId: string;
-  readonly sequence: number;
-  readonly provider: string;
-  readonly fetchedAt: string;
-  readonly contentHash: string;
-  readonly hashVersion: string;
-  readonly externalRevision: string | undefined;
-  readonly isCurrent: boolean;
-  readonly metadata: Record<string, unknown>;
-  readonly fragments: number;
-  readonly rows: number;
-}
-
-export interface SourceSnapshotDetail extends SourceSnapshotInfo {
-  /** Manifiesto normalizado (mismo contrato que el de XLSX/CSV). */
-  readonly structure: Record<string, unknown>;
-  readonly generator: string;
-}
-
-export interface SnapshotFragment {
-  readonly id: string;
-  readonly ordinal: number;
-  readonly locator: SourceLocator | undefined;
-  readonly text: string;
-  readonly metadata: Record<string, unknown>;
 }
 
 export interface SyncRequested {
@@ -123,51 +91,6 @@ function comoEjecucion(r: SyncRunRow): SyncRun {
     requestedAt: r.requested_at.toISOString(),
     startedAt: r.started_at?.toISOString(),
     finishedAt: r.finished_at?.toISOString(),
-  };
-}
-
-interface SnapshotRow {
-  readonly id: string;
-  readonly source_id: string;
-  readonly organization_id: string;
-  readonly sequence: number;
-  readonly provider: string;
-  readonly fetched_at: Date;
-  readonly content_hash: string;
-  readonly hash_version: string;
-  readonly external_revision: string | null;
-  readonly metadata: Record<string, unknown>;
-  readonly structure: Record<string, unknown>;
-  readonly generator: string;
-  readonly is_current: boolean;
-  readonly fragments: number;
-  readonly rows: number;
-}
-
-const SELECT_SNAPSHOT = `
-  SELECT n.id, n.source_id, n.organization_id, n.sequence, n.provider, n.fetched_at, n.content_hash,
-         n.hash_version, n.external_revision, n.metadata, n.structure, n.generator,
-         (s.current_snapshot_id = n.id) AS is_current,
-         (SELECT count(*)::int FROM source_fragments f WHERE f.snapshot_id = n.id) AS fragments,
-         (SELECT count(*)::int FROM source_snapshot_rows r WHERE r.snapshot_id = n.id) AS rows
-    FROM source_snapshots n
-    JOIN source_documents s ON s.id = n.source_id
-`;
-
-function comoSnapshot(r: SnapshotRow): SourceSnapshotInfo {
-  return {
-    id: r.id,
-    sourceId: r.source_id,
-    sequence: r.sequence,
-    provider: r.provider,
-    fetchedAt: r.fetched_at.toISOString(),
-    contentHash: r.content_hash,
-    hashVersion: r.hash_version,
-    externalRevision: r.external_revision ?? undefined,
-    isCurrent: r.is_current,
-    metadata: r.metadata,
-    fragments: r.fragments,
-    rows: r.rows,
   };
 }
 
@@ -327,70 +250,6 @@ export async function listSyncRuns(actor: User, sourceId: string, limite = 20): 
     [sourceId, Math.min(Math.max(Math.trunc(limite), 1), 100)],
   );
   return ok(rows.map(comoEjecucion));
-}
-
-export async function listSourceSnapshots(
-  actor: User,
-  sourceId: string,
-): Promise<Result<SourceSnapshotInfo[]>> {
-  const permitido = await autorizarLecturaInterna(actor, sourceId);
-  if (!permitido.ok) return permitido;
-  const { rows } = await getPool().query<SnapshotRow>(
-    `${SELECT_SNAPSHOT} WHERE n.source_id = $1 ORDER BY n.sequence DESC`,
-    [sourceId],
-  );
-  return ok(rows.map(comoSnapshot));
-}
-
-export async function getSourceSnapshot(
-  actor: User,
-  snapshotId: string,
-): Promise<Result<SourceSnapshotDetail>> {
-  const { rows } = await getPool().query<SnapshotRow>(`${SELECT_SNAPSHOT} WHERE n.id = $1`, [snapshotId]);
-  const fila = rows[0];
-  if (fila === undefined) return err(NO_ENCONTRADO);
-  const permitido = authorizeInternalResource(actor, 'source:read', fila.organization_id);
-  if (!permitido.ok) return permitido;
-  return ok({ ...comoSnapshot(fila), structure: fila.structure, generator: fila.generator });
-}
-
-/** Fragmentos de UN snapshot concreto (vigente o histórico), con su localizador. */
-export async function getSnapshotFragments(
-  actor: User,
-  snapshotId: string,
-  opciones: { readonly limite?: number; readonly desde?: number } = {},
-): Promise<Result<SnapshotFragment[]>> {
-  const { rows: snapshots } = await getPool().query<{ organization_id: string }>(
-    `SELECT organization_id FROM source_snapshots WHERE id = $1`,
-    [snapshotId],
-  );
-  if (snapshots[0] === undefined) return err(NO_ENCONTRADO);
-  const permitido = authorizeInternalResource(actor, 'source:read', snapshots[0].organization_id);
-  if (!permitido.ok) return permitido;
-
-  const limite = Math.min(Math.max(Math.trunc(opciones.limite ?? 200), 1), 1000);
-  const desde = Math.max(Math.trunc(opciones.desde ?? 0), 0);
-  const { rows } = await getPool().query<{
-    id: string;
-    ordinal: number;
-    locator: unknown;
-    text: string;
-    metadata: Record<string, unknown>;
-  }>(
-    `SELECT id, ordinal, locator, text, metadata FROM source_fragments
-      WHERE snapshot_id = $1 AND ordinal >= $2 AND ${sqlFragmentoSinTextoHistorico('source_fragments')}
-      ORDER BY ordinal LIMIT $3`,
-    [snapshotId, desde, limite],
-  );
-  return ok(
-    rows.map((f) => ({
-      id: f.id,
-      ordinal: f.ordinal,
-      locator: localizadorDeFila({ locator: f.locator }),
-      text: f.text,
-      metadata: f.metadata,
-    })),
-  );
 }
 
 /**
