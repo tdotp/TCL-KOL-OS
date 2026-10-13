@@ -754,6 +754,29 @@ posterior a aprobación». 15 de septiembre de 2026.
 
 ---
 
+### DEC-050 — Dashboard TCL de solo lectura: proyección positiva en el servidor, aislamiento del cliente, solo contenido aprobado, cero PII/finanzas y paridad UI–export
+
+- **Fecha:** 12 de octubre de 2026
+- **Estado:** **aprobada** — V2 · Fase 9
+- **Origen:** el workflow V2 §3 define a TCL como observador de solo lectura; el handoff F9 exige que TCL reciba únicamente información autorizada de sus campañas, sin finanzas, PII ni material interno, y que la fuga histórica de snapshots del Sheet (F8) no pueda reaparecer por Briefs o contenido derivado.
+- **Decisión:**
+  1. **Arquitectura:** dominio interno → **proyección TCL del servidor** (DTO cerrados, construidos campo por campo; sin `{...x}` + `delete`) → UI `/tcl` y export. TCL nunca recibe una entidad ni un read model interno «con menos campos». Cada campo debe justificar por qué TCL lo necesita. Código: `packages/domain/src/{tcl-projection,tcl-projection-operacion,tcl-text-safety,tcl-export}.ts`, `packages/db/src/tcl-projection.ts`, `apps/web/src/app/(app)/tcl/**`, `apps/web/src/app/api/tcl/**`.
+  2. **Capacidades específicas de cliente** (`campaign:read_client`, `content:read_approved_client`, `operations:read_summary_client`, `kpi:read_client`, `export:client`, `document:read_client`). Se **retiran** del cliente `campaign:read`, `brief:read`, `brief:export` y `source:read_shared`: los lectores legados (`versionesDelBrief`, `verCamposDeVersion`, `listSources`, `getSource`, `getFragments`…) lo deniegan por capacidad. Las rutas legadas `/campanas/**` redirigen al cliente a `/tcl` o dan 404 antes de ejecutar cargadores. Ningún rol gana `pii:read` ni `finance:read`.
+  3. **Aislamiento del cliente (sin migración):** el cliente V2 es TCL. Acceso = rol `cliente` + organización del actor de tipo `cliente` + capacidad + campaña `visibility IN ('tcl','compartida')` y no cancelada, todo en un guard único (`autorizarCampanaParaTcl`); cualquier fallo es el mismo 404. **Límite aceptado:** `campaigns` no lleva organización cliente; una campaña de otra agencia en `tcl|compartida` es visible para la organización cliente TCL por contrato (esa visibilidad es la compartición explícita). Un `client_organization_id` sería multi-cliente genérico: deuda declarada.
+  4. **Solo contenido aprobado:** la fila `approved` vigente de cada entregable; todo otro estado colapsa a `pendiente` sin rastro (versión, autor, historial, hallazgos, comentarios, análisis). El Brief es el aprobado vigente (`leerRector`) en una representación existente (EN solo si está vigente), solo claves del catálogo en allowlist (se excluyen presupuesto y fechas), sin evidencias ni procedencia.
+  5. **Frontera de fuentes:** los documentos compartidos exigen visibilidad `tcl|compartida` de la propia fuente (la campaña visible no la hereda); se excluyen `soporte_operativo`, guiones no aprobados y cualquier Sheet de influencers.
+  6. **Resumen operativo y KPI:** estados mínimos client-safe (`etapa`, producto recibido sí/no/parcial, guion aprobados/total; producción/publicación `no_disponible`), sin acuerdo, modo, logística fina ni dinero. KPI solo del bloque `public` con métrica+unidad compatibles; `other` e `internal` nunca. Cero consultas a pagos, facturas, PII, hallazgos, comentarios o `ai_runs` (prueba con espía del pool).
+  7. **Defensa de fuga histórica en la propia proyección:** (a) allowlist de claves; (b) `esTextoSeguroParaTcl` sobre todo texto libre (dinero en cifras y palabras, léxico comercial ES/EN, contacto, direcciones, normalización NFKC/homoglifos/separadores) con política **fail-closed: se omite el campo completo**; (c) se excluyen los campos cuya evidencia cite fragmentos históricos ilegibles, el Sheet de influencers (snapshot o archivo) o cualquier hoja de cálculo. Heurística conservadora: puede omitir texto legítimo.
+  8. **Export:** `GET /api/tcl/campanas/[id]/export?formato=csv|json` serializa la MISMA proyección (columnas ⊆ claves de DTO; EXPORT ⊆ UI), con neutralización de fórmulas, BOM, `nosniff` y `private, no-store`. Ningún export lee tablas.
+  9. **Sin agente TCL ni escrituras de cliente:** el Tool Registry devuelve 0 tools al cliente; el chat lo rechaza; ningún caso de uso interno acepta al cliente.
+  10. **Sin entidad `Publication`:** no existe el dominio; no se inventa ni se muestra (producción/publicación = `no_disponible`).
+- **Migraciones:** ninguna (F9 introdujo no schema migration; última sigue siendo `033`).
+- **Fuera de alcance:** Publication, escrituras o aprobación de cliente, agente TCL, pagos, PII, integraciones sociales, rediseño general, multi-cliente, limpieza (F10).
+- **Dónde vive:** ver punto 1; detalle en `docs/product/TCL_DASHBOARD_V2.md`.
+- **Responsable de aprobación:** Gerardo Calambás.
+
+---
+
 ## Decisiones pendientes que no bloquean MVP 0
 
 Quedan abiertas y sin efecto sobre el arranque, se resuelven durante la ejecución:

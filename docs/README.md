@@ -6,8 +6,8 @@
 
 1. [Workflow funcional V2](product/TCL_KOL_OS_V2_WORKFLOW_FUNCIONAL.md) — qué hace cada usuario (Cuenta, Operativo, TCL), qué ve y qué no. Fuente funcional aprobada; no se reinterpreta.
 2. [Estado técnico actual](project/V2_CURRENT_STATE.md) — rama, tag, migraciones, decisiones, roadmap, baseline de pruebas, entorno, deudas y reglas.
-3. [Handoff de la Fase 9](handoffs/HANDOFF-Fase-9.md) — **punto de partida de la F9** («Dashboard TCL», solo lectura): baseline, invariantes congeladas, lo que dejó la F8, y el marco oficial de la F9 (proyección positiva para TCL, deuda de seguridad heredada, estrategia austera de agentes, pruebas y QA). (El [handoff de la Fase 8](handoffs/HANDOFF-Fase-8.md) queda como histórico.)
-4. [Registro de decisiones](decisions/decision-log.md) — DEC-042 a DEC-049 gobiernan V2 (cliente de solo lectura, bilingüe, Influencer/CampaignInfluencer, fuentes y Sheets, chat y agente, contenido, operación y KPIs).
+3. [Handoff de la Fase 10](handoffs/HANDOFF-Fase-10.md) — **punto de partida de la F10**: estado técnico y deudas al cierre certificado de la F9 (no diseña la F10). Los handoffs de las [Fase 9](handoffs/HANDOFF-Fase-9.md) y [Fase 8](handoffs/HANDOFF-Fase-8.md) quedan como históricos.
+4. [Registro de decisiones](decisions/decision-log.md) — DEC-042 a DEC-050 gobiernan V2 (cliente de solo lectura, bilingüe, Influencer/CampaignInfluencer, fuentes y Sheets, chat y agente, contenido, operación y KPIs).
 5. [Política de ejecución con agentes](project/AGENT_EXECUTION_POLICY.md) — subagentes, modelo/esfuerzo, QA adversarial, Git y la regla anti-duplicación.
 
 ## Notas técnicas por área (V2)
@@ -23,6 +23,7 @@
 | Chat y agente de Cuenta | [CHAT_AGENT_V2](product/CHAT_AGENT_V2.md) | DEC-047 |
 | Contenido: entregables, guiones, revisión, aprobación | [CONTENT_V2](product/CONTENT_V2.md) | DEC-048 |
 | Operación y KPIs: acuerdos, logística, facturación/pagos (seguimiento), PII, KPIs | [OPERATIONS_KPI_V2](product/OPERATIONS_KPI_V2.md) | DEC-049 |
+| Dashboard TCL de solo lectura: proyección positiva, aislamiento, export | [TCL_DASHBOARD_V2](product/TCL_DASHBOARD_V2.md) | DEC-050 |
 
 ## Contexto y base (anteriores a V2; algunos describen el modelo previo)
 

@@ -1,6 +1,6 @@
 # TCL KOL OS V2 — Dashboard TCL de solo lectura (Fase 9, DEC-050)
 
-> Nota técnica. Arquitectura **congelada** al inicio de la F9; se actualiza con lo realmente construido al cierre.
+> Nota técnica de la Fase 9 (DEC-050). Arquitectura congelada al inicio y actualizada al cierre con lo realmente construido (§9).
 
 ## 1. Principio
 
@@ -53,3 +53,11 @@ Publicaciones: **no existe el dominio**; no se muestra ni se simula.
 ## 8. Fuera de alcance
 
 Entidad Publication, escrituras de cliente, agente/tools/conversaciones TCL, PII, finanzas, rediseño general.
+
+## 9. Lo construido y lo que cambió respecto al diseño
+
+- **API de servidor** (`@tcl-kol-os/db`, todas con el mismo `RESOURCE_NOT_FOUND` ante cualquier fallo): `listarCampanasParaTcl`, `obtenerDetalleTclDeCampana`, `obtenerInfluencersParaTcl`, `obtenerContenidoParaTcl`, `obtenerBriefParaTcl`, `obtenerOperacionParaTcl`, `obtenerKpisParaTcl`, `obtenerDocumentosParaTcl`, `obtenerProyeccionTclDeCampana`, `exportarCampanaParaTcl`. Guard único `autorizarCampanaParaTcl`.
+- **Cambios tras el QA adversarial:** la organización del actor debe ser de tipo `cliente`; `source:read_shared` se retira del cliente y se añade `document:read_client`; el texto seguro normaliza NFKC/homoglifos/separadores y amplía el léxico; el Brief excluye evidencia de cualquier hoja de cálculo; las acciones denegadas al cliente devuelven un mensaje genérico.
+- **UI:** server components sin formularios; sin `loading.tsx` (con streaming, `notFound()` respondía 200); los guards de las rutas legadas van en cada página (el layout y la página corren en paralelo).
+- **Pruebas:** `*tcl-projection*.test.ts` (domain y db), `qa-f9-*.test.ts` (QA adversarial), pruebas estáticas de aislamiento en web y E2E `tcl-dashboard.spec.ts` (TCL-01…07).
+- **Aceptado (P3):** `productoRecibido='parcial'` permite inferir que el compromiso de producto excede lo entregado (no revela fee/barter); la heurística de texto puede omitir texto legítimo (fail-closed); `next dev` serializa objetos de `pg` en el flight de RSC (no verificado en producción).

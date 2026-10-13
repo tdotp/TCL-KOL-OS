@@ -1,19 +1,19 @@
-# TCL KOL OS V2 — Estado técnico actual (cierre certificado de la Fase 8)
+# TCL KOL OS V2 — Estado técnico actual (cierre de la Fase 9)
 
 > Es un **estado técnico**, no un segundo workflow funcional. El workflow aprobado vive en
 > [`docs/product/TCL_KOL_OS_V2_WORKFLOW_FUNCIONAL.md`](../product/TCL_KOL_OS_V2_WORKFLOW_FUNCIONAL.md) y no se reinterpreta aquí.
 
 | | |
 |---|---|
-| **Fecha del checkpoint** | 7 de octubre de 2026 |
-| **Rama de desarrollo** | `v2` (nunca `main`); el siguiente trabajo (F9) parte de `git switch v2 && git pull --ff-only` |
-| **Tag** | `v2-f7-complete` → `a4a8dd5` (intacto) y **`v2-f8-complete` → `91e2aad9c850f313dc25171cdf43ef3a0cdfba22`** (cierre certificado de la F8, ver §4). Los commits de `v2` posteriores a un tag son solo documentación de handoff: **los tags no se mueven** |
-| **Último commit de CÓDIGO** | `7afdab7` (cierre de la Fase 8: los fragmentos de snapshots históricos del Sheet no se leen). Los posteriores son solo herramientas (script del gate, ESLint) y documentación |
+| **Fecha del checkpoint** | 12 de octubre de 2026 |
+| **Rama de desarrollo** | `v2` (nunca `main`); el siguiente trabajo (F10) parte de `git switch v2 && git pull --ff-only` |
+| **Tag** | **`v2-f9-complete`** (cierre certificado de la F9; el commit exacto lo indica `git rev-parse v2-f9-complete^{}`), `v2-f7-complete` → `a4a8dd5` (intacto) y **`v2-f8-complete` → `91e2aad9c850f313dc25171cdf43ef3a0cdfba22`** (cierre certificado de la F8, ver §4). Los commits de `v2` posteriores a un tag son solo documentación de handoff: **los tags no se mueven** |
+| **Último commit de CÓDIGO** | el de la F9 anterior al tag `v2-f9-complete` (`git log v2-f8-complete..v2-f9-complete`); baseline de F8: `7afdab7` |
 | **Baseline de código previo a V2** | `3dd9da2` (DEC-042) |
 | **`origin/main`** | `2452283` («Rediseño v3»): lo que estaba publicado antes de V2. **No se toca** |
-| **Última migración** | `033_endurecimiento_operacion.sql` (siguiente: **034**) |
-| **Última decisión** | **DEC-049** (siguiente: **DEC-050**) |
-| **Siguiente fase** | **F9 — Dashboard TCL, solo lectura** (no iniciada, no diseñada; se retoma en una sesión local) |
+| **Última migración** | `033_endurecimiento_operacion.sql` (siguiente: **034**; **F9 no introdujo migración**) |
+| **Última decisión** | **DEC-050** (siguiente: **DEC-051**) |
+| **Siguiente fase** | **F10 — limpieza, deprecación y endurecimiento final de V2** (no iniciada, no diseñada) |
 
 ## 1. Roadmap
 
@@ -28,14 +28,14 @@
 | 6 · 6.1 | Chat y agente de Cuenta (runtime híbrido, 25 tools, HITL extendido) y endurecimiento en la base | ✅ | DEC-047 · [`CHAT_AGENT_V2`](../product/CHAT_AGENT_V2.md) |
 | 7 | Contenido: entregables, guiones versionados, revisión contra el Brief, aprobación humana, 11 tools | ✅ | DEC-048 · [`CONTENT_V2`](../product/CONTENT_V2.md) |
 | 8 | Operación + KPIs: acuerdos, logística, facturación/pagos como seguimiento, PII separada, KPIs, workspace de Operativo, 6 tools | ✅ | DEC-049 · [`OPERATIONS_KPI_V2`](../product/OPERATIONS_KPI_V2.md) |
-| **9** | **Dashboard TCL (solo lectura)** | ➡️ siguiente | marco oficial en [`HANDOFF-Fase-9`](../handoffs/HANDOFF-Fase-9.md) §6 (proyección positiva para TCL, deuda de seguridad heredada, plan austero) |
-| 10 | Limpieza, deprecación y endurecimiento final de V2 (legacy, rutas, roles, docs históricas) | pendiente | no se diseña todavía |
+| 9 | Dashboard TCL de solo lectura: proyección positiva en el servidor, capacidades de cliente, solo contenido aprobado, export con paridad | ✅ | DEC-050 · [`TCL_DASHBOARD_V2`](../product/TCL_DASHBOARD_V2.md) |
+| **10** | **Limpieza, deprecación y endurecimiento final de V2 (legacy, rutas, roles, docs históricas)** | ➡️ siguiente | no se diseña todavía; ver [`HANDOFF-Fase-10`](../handoffs/HANDOFF-Fase-10.md) |
 
 ## 2. Arquitectura principal (resumen; el detalle está en las DEC y notas técnicas)
 
 Monorepo: `apps/web` (Next.js 15 + React 19), `apps/e2e` (Playwright), `packages/domain` (reglas puras), `packages/db` (Postgres: repositorios y casos de uso), `packages/agent` (registro de tools y runtime del agente de Cuenta; 42 tools), `services/ai-worker` (Python/FastAPI: parsing, Google Sheets, extracción, endpoints de modelo `/modelo/turno` y `/modelo/analisis`). Idioma de UI y docs: español.
 
-- **Actores:** Cuenta SmartPR (`admin`/`director`/`consultor`) construye y decide; Operativo SmartPR ejecuta y registra (F8: acuerdos, logística, seguimiento de facturación y pagos, KPIs reales, PII de entrega); TCL (`cliente`) observa en solo lectura y hoy no recibe nada de operación.
+- **Actores:** Cuenta SmartPR (`admin`/`director`/`consultor`) construye y decide; Operativo SmartPR ejecuta y registra (F8: acuerdos, logística, seguimiento de facturación y pagos, KPIs reales, PII de entrega); TCL (`cliente`) observa en solo lectura el dashboard `/tcl` (F9): solo proyecciones del servidor con allowlist, sin finanzas ni PII.
 - **Capas:** el dominio y la base DECIDEN (permisos, tenant, estados, versionado, HITL, provenance); el runtime del agente solo ORQUESTA; las tools son adaptadores finos de casos de uso; el worker hace llamadas de modelo sin estado y sin BD.
 - **Aislamiento por organización** impuesto en la base con claves foráneas compuestas; `audit_events` append-only con `origin = ui | chat | system` y `correlation`.
 - **Provenance:** `source_documents` es LA entidad de fuente (original preservado por hash), `SourceLocator`, evidencia que hereda el localizador, snapshots inmutables de Google Sheets.
@@ -73,6 +73,25 @@ Certificado en local con el gate canónico [`scripts/f8-verificacion.sh`](../../
 
 Pruebas con fallo **intermitente conocido bajo carga o en bases de pruebas acumuladas** (pasan aisladas o en una base fresca): `packages/agent/src/qa/qa-hitl.test.ts` (H2), `packages/db/src/qa-f7-estres.test.ts` y `qa-f7-alcance.test.ts` (C, timeout al escanear `audit_events`). El gate espera una `tclkolos_test` recién creada. Un E2E completo bajo carga alta puede dar timeouts de login (30 s) en el arranque en frío de `next dev`; repetir el archivo aislado con la máquina en calma.
 
+## 4b. Cierre de la Fase 9 (Dashboard TCL, DEC-050)
+
+Gate canónico [`scripts/f9-verificacion.sh`](../../scripts/f9-verificacion.sh) (sin pasos de migración: **F9 introdujo no schema migration**; no hay upgrade 033→033) sobre una `tclkolos_test` recién creada, migrada (001→033) y sembrada:
+
+| Suite | Resultado |
+|---|---|
+| `packages/domain` | **1015 / 1015** (base F8: 823) |
+| `packages/db` | **1975 / 1975** (base: 1885) |
+| `packages/agent` | **596 / 596** (base: 591) |
+| `apps/web` (vitest) | **144 / 144** (base: 121) |
+| Worker Python | **799 passed** |
+| lint · typecheck · build · ruff · mypy | verdes |
+| Prettier sobre lo tocado | verde (tras formatear `apps/e2e/tests/operacion-acceso.spec.ts`) |
+| E2E oficial completo | **85 / 85** (78 de F0–F8 + 7 de F9) en la segunda corrida completa (21,2 min). La primera, con la máquina a carga ~14, falló 17 tests por timeouts de arranque en frío/chat (3,9 h) y no se certificó; no hubo fallos de aserción de seguridad |
+
+**QA adversarial independiente** (20 ataques como cliente TCL, con barrido de más de 300 exports de `@tcl-kol-os/db`): 0 P0; 2 P1, 3 P2 y varios P3, **todos los P1/P2 corregidos** y fijados en `qa-f9-*.test.ts`. Detalle en DEC-050 y [`TCL_DASHBOARD_V2`](../product/TCL_DASHBOARD_V2.md) §9.
+
+**Mutaciones críticas** (script efímero del cierre; patrón mutar → prueba dirigida → restaurar): las 10 áreas quedan detectadas (fuga financiera por secciones, claves PII, contenido solo aprobado, fuente interna, paridad del export, tipo de organización, denegación de escrituras). **Tres de las mutaciones originales sobrevivieron por enmascaramiento de defensas independientes** (visibilidad: SQL + `isTclVisible`; rol: `role==='cliente'` + `roleCan`; fuga histórica: guarda de fragmento histórico + filtro del Sheet) y se sustituyeron por mutaciones equivalentes que anulan ambas capas, que sí se detectan. No es «10/10 originales».
+
 ## 5. Cómo ejecutar en local (lecciones del entorno)
 
 ```bash
@@ -101,6 +120,8 @@ Datos sintéticos sembrados: usuarios `gerardo@smartpr.co` (admin), `director@sm
 ## 6. Deudas conocidas (heredadas y de la Fase 8)
 
 - **F8 (operación):** cripto-borrado y política de retención de PII (DEC-013) sin implementar; rotación de claves sin procedimiento; originales de evidencia sin cifrar en almacenamiento (mitigado: `sensible`, internos, sin extracción); snapshots del Sheet creados antes de la corrección del P0 conservan `fee/canje/condiciones` en el texto de sus fragmentos (inmutables): ya NO se leen por ningún camino (ver §4), pero siguen en la base; para recuperar el texto hay que re-sincronizar el Sheet, y quien necesite borrarlos físicamente debe hacerlo con un procedimiento explícito; los Briefs extraídos ANTES del P0 podrían contener texto derivado de esos fragmentos (auditarlos en una base con datos reales); pagos en cuotas/parciales no modelados; un acuerdo cancelado bloquea uno nuevo en la participación; idempotencia de versiones de acuerdo y de guardado de PII por contenido; KPI por CSV/Sheets/APIs sociales diferidos; sin topes por sujeto de eventos, documentos y mediciones; sin `retractarEvidencia` en la UI ni descarga de originales; oráculo por hash en `uploadSource`; archivos huérfanos en disco si una transacción aborta; el nav muestra «Editar» al Operativo (el servidor lo niega); `kpi_target_register` con grounding conservador.
+
+- **F9 (dashboard TCL):** sin multi-cliente (`campaigns` no lleva organización cliente; una campaña de otra agencia en `tcl|compartida` es visible para la organización cliente TCL por contrato); sin entidad `Publication` (producción/publicación = «no disponible»); el filtro de texto libre del Brief es una heurística fail-closed (puede omitir texto legítimo; no sustituye la auditoría de Briefs extraídos antes del P0); canal lateral aceptado: «producto recibido: parcial» implica compromiso mayor que lo entregado; las secciones de la proyección se leen sin transacción única (sin snapshot entre UI y export); `next dev` serializa objetos de `pg` en el flight de RSC (verificado solo en desarrollo, no en `next start`); sin CSP/`X-Frame-Options`/`Referrer-Policy` en `/tcl`; HEAD sobre el export ejecuta la proyección completa, sin límite de uso; `listOrganizations()` y `listProducts()` no reciben actor; `source:read_shared` quedó como acción sin ningún rol; el cliente ya no tiene `campaign:read` ni `brief:read` (las pantallas legadas redirigen a `/tcl`).
 
 - **Smoke real contra el proveedor de modelo NO ejecutado** (tool calling del chat con `tool_choice`/`require_parameters` y `/modelo/analisis` con JSON mode): todo lo cubierto usa proveedor falso. Con el modo todo-o-nada del análisis, un modelo real podría dar tasa alta de salidas inválidas.
 - **Gateway del worker sin autenticación** (secreto compartido pendiente). `after()` no es durable (cubierto por un barrido perezoso). Sin límite de tasa por usuario, sin kill-switch por organización, `/extraccion` sin kill-switch (`AI_ENABLED` solo aplica al chat y a los endpoints de modelo). Sin streaming ni resumen de conversación.
