@@ -14,6 +14,13 @@ const inter = Inter({
   display: 'swap',
 });
 
+/**
+ * La CSP de producción exige un nonce por respuesta (`src/middleware.ts`): una página prerrenderizada en el build no
+ * puede llevarlo y sus scripts se bloquearían. Todas las rutas ya son dinámicas (sesión, base de datos); esto lo hace
+ * explícito también para `/_not-found`.
+ */
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'TCL KOL OS',
   description: 'Plataforma interna de SmartPR para coordinar campañas KOL de TCL',

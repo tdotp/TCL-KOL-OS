@@ -14,7 +14,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { iaActiva, secretoDelNonce, type Role, type User, err, ok } from '@tcl-kol-os/domain';
-import { CABECERAS_DE_SEGURIDAD } from '../../security-headers.mjs';
+import { CABECERAS_ESTATICAS, construirCsp } from '../../security-headers.mjs';
 import type * as ModuloSesion from './session.ts';
 import { origenPermitidoEstricto } from './origen.ts';
 import { destinoTclDeRutaLegada } from './tcl-rutas.ts';
@@ -118,8 +118,12 @@ describe('QA F10 · (18) rutas legadas: el cliente se desvía ANTES de cualquier
     }
   });
 
-  it('el layout autenticado solo comprueba sesión; la página es quien desvía (y no hay middleware que lo contradiga)', () => {
-    expect(readdirSync(join(SRC)).filter((n) => /^middleware\./u.test(n))).toEqual([]);
+  it('el layout autenticado solo comprueba sesión; la página es quien desvía (el único middleware solo fija cabeceras)', () => {
+    // Release Readiness · Bloque 1: `middleware.ts` existe SOLO para la CSP con nonce y HSTS. No autoriza, no redirige,
+    // no reescribe y no lee sesión ni base de datos: la autorización sigue en las páginas y en los casos de uso.
+    expect(readdirSync(join(SRC)).filter((n) => /^middleware\./u.test(n))).toEqual(['middleware.ts']);
+    const mw = readFileSync(join(SRC, 'middleware.ts'), 'utf8');
+    expect(mw).not.toMatch(/\.redirect\(|\.rewrite\(|session|@tcl-kol-os|cookies/iu);
     const layout = readFileSync(join(SRC, 'app/(app)/layout.tsx'), 'utf8');
     expect(layout).not.toMatch(/@tcl-kol-os\/db/u);
   });
@@ -354,38 +358,44 @@ describe('QA F10 · (17) export TCL', () => {
 // ─────────────────────────── EXTRA: cabeceras y origen ─────────────────────────
 
 describe('QA F10 · EXTRA · cabeceras de seguridad', () => {
-  const por = (k: string): string | undefined => CABECERAS_DE_SEGURIDAD.find((c) => c.key === k)?.value;
+  const por = (k: string): string | undefined => CABECERAS_ESTATICAS.find((c) => c.key === k)?.value;
+  // Release Readiness · Bloque 1: la CSP depende de la respuesta (nonce, HTTPS); aquí la de PRODUCCIÓN.
+  const cspProduccion = (): string => construirCsp({ nonce: 'NONCE', produccion: true, https: false });
 
-  it('nosniff, DENY, referrer estricto, permisos mínimos y CSP sin directivas permisivas', () => {
+  it('nosniff, DENY, referrer estricto y permisos mínimos (estáticos) y CSP sin directivas permisivas', () => {
     expect(por('X-Content-Type-Options')).toBe('nosniff');
     expect(por('X-Frame-Options')).toBe('DENY');
     expect(por('Referrer-Policy')).toBe('strict-origin-when-cross-origin');
     expect(por('Permissions-Policy')).toBe('camera=(), microphone=(), geolocation=()');
-    const csp = por('Content-Security-Policy')!;
+    const csp = cspProduccion();
     expect(csp).toContain("frame-ancestors 'none'");
     expect(csp).toContain("object-src 'none'");
     expect(csp).toContain("base-uri 'self'");
     expect(csp).toContain("form-action 'self'");
-    expect(csp).not.toMatch(/unsafe-|\*|data:|http:/u);
+    // `style-src-attr 'unsafe-inline'` es la única excepción (atributos style del servidor; no admiten nonce).
+    expect(csp.replace("style-src-attr 'unsafe-inline'", '')).not.toMatch(/unsafe-|\*|http:/u);
   });
 
-  it('se aplican a TODAS las rutas (también /api y /tcl) por next.config', () => {
+  it('se aplican a TODAS las rutas (también /api y /tcl) por next.config; CSP y HSTS por middleware', () => {
     const t = readFileSync(join(SRC, '../next.config.mjs'), 'utf8');
     expect(t).toMatch(/source:\s*'\/\(\.\*\)'/u);
-    expect(t).toContain('CABECERAS_DE_SEGURIDAD');
+    expect(t).toContain('CABECERAS_ESTATICAS');
     expect(t).toMatch(/poweredByHeader:\s*false/u);
+    const mw = readFileSync(join(SRC, 'middleware.ts'), 'utf8');
+    expect(mw).toContain('cabecerasDeDocumento');
+    // Un solo mecanismo de CSP: next.config no la repite.
+    expect(t).not.toMatch(/Content-Security-Policy/u);
   });
 
-  it('el CSP coincide en la clave exacta y no hay claves duplicadas', () => {
-    const claves = CABECERAS_DE_SEGURIDAD.map((c) => c.key.toLowerCase());
+  it('no hay claves duplicadas', () => {
+    const claves = CABECERAS_ESTATICAS.map((c) => c.key.toLowerCase());
     expect(new Set(claves).size).toBe(claves.length);
   });
 
-  // QA-F10-04 (abierto, P3): sin `Strict-Transport-Security` ni `script-src`/`default-src`: no hay defensa en
-  // profundidad frente a XSS ni degradación a HTTP (declarado en `security-headers.mjs`; sin cerrar).
-  it.fails('QA-F10-04 abierto · hay HSTS y una política de scripts', () => {
-    expect(por('Strict-Transport-Security')).toBeDefined();
-    expect(por('Content-Security-Policy')).toMatch(/script-src|default-src/u);
+  // QA-F10-04 (cerrado en Release Readiness · Bloque 1): HSTS (config, solo HTTPS en producción) y política de scripts.
+  it('QA-F10-04 cerrado · hay política de scripts con nonce y HSTS configurable (ver security-headers.test.ts)', () => {
+    expect(cspProduccion()).toMatch(/script-src 'self' 'nonce-NONCE'/u);
+    expect(cspProduccion()).toMatch(/default-src 'none'/u);
   });
 });
 
